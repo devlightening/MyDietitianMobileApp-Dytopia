@@ -1,10 +1,12 @@
+using MediatR;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace MyDietitianMobileApp.Application.Handlers;
 
-public class ListAccessKeysByDietitianQueryHandler : IListAccessKeysByDietitianHandler
+public class ListAccessKeysByDietitianQueryHandler 
+    : IRequestHandler<ListAccessKeysByDietitianQuery, ListAccessKeysByDietitianResult>
 {
     private readonly AppDbContext _context;
 
@@ -13,9 +15,11 @@ public class ListAccessKeysByDietitianQueryHandler : IListAccessKeysByDietitianH
         _context = context;
     }
 
-    public ListAccessKeysByDietitianResult Handle(ListAccessKeysByDietitianQuery query)
+    public async Task<ListAccessKeysByDietitianResult> Handle(
+        ListAccessKeysByDietitianQuery query, 
+        CancellationToken cancellationToken)
     {
-        var accessKeys = _context.AccessKeys
+        var accessKeys = await _context.AccessKeys
             .Where(ak => ak.DietitianId == query.DietitianId)
             .Select(ak => new AccessKeyDto
             {
@@ -27,7 +31,7 @@ public class ListAccessKeysByDietitianQueryHandler : IListAccessKeysByDietitianH
                 EndDate = ak.EndDate,
                 IsActive = ak.IsActive
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         return new ListAccessKeysByDietitianResult(accessKeys);
     }

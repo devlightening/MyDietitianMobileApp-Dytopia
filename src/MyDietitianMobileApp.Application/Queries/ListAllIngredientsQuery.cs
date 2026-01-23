@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace MyDietitianMobileApp.Application.Queries
 {
-    public class ListAllIngredientsQuery
+    public class ListAllIngredientsQuery : IRequest<ListAllIngredientsResult>
     {
         // No parameters - list all ingredients for admin
     }
@@ -24,11 +26,6 @@ namespace MyDietitianMobileApp.Application.Queries
         {
             Ingredients = ingredients;
         }
-    }
-
-    public interface IListAllIngredientsHandler
-    {
-        ListAllIngredientsResult Handle(ListAllIngredientsQuery query);
     }
 }
 

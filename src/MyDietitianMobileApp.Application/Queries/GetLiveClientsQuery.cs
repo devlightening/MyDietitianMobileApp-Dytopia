@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace MyDietitianMobileApp.Application.Queries
 {
-    public class GetLiveClientsQuery
+    public class GetLiveClientsQuery : IRequest<GetLiveClientsResult>
     {
         public Guid DietitianId { get; }
 
@@ -28,11 +30,6 @@ namespace MyDietitianMobileApp.Application.Queries
         {
             ActiveClients = activeClients;
         }
-    }
-
-    public interface IGetLiveClientsHandler
-    {
-        Task<GetLiveClientsResult> HandleAsync(GetLiveClientsQuery query);
     }
 }
 

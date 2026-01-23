@@ -1,9 +1,11 @@
+using MediatR;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Repositories;
 
 namespace MyDietitianMobileApp.Application.Handlers
 {
-    public class SearchIngredientsQueryHandler : ISearchIngredientsHandler
+    public class SearchIngredientsQueryHandler 
+        : IRequestHandler<SearchIngredientsQuery, SearchIngredientsResult>
     {
         private readonly IIngredientRepository _ingredientRepository;
 
@@ -12,7 +14,9 @@ namespace MyDietitianMobileApp.Application.Handlers
             _ingredientRepository = ingredientRepository;
         }
 
-        public SearchIngredientsResult Handle(SearchIngredientsQuery query)
+        public async Task<SearchIngredientsResult> Handle(
+            SearchIngredientsQuery query, 
+            CancellationToken cancellationToken)
         {
             var ingredients = _ingredientRepository.Search(query.SearchTerm, query.MaxResults);
 
@@ -23,7 +27,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                 Aliases = i.Aliases
             });
 
-            return new SearchIngredientsResult(dtos);
+            return await Task.FromResult(new SearchIngredientsResult(dtos));
         }
     }
 }

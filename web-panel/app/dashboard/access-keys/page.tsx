@@ -1,4 +1,4 @@
-"use client"
+'use client';
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useState } from 'react'
@@ -11,7 +11,7 @@ import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 
 function fetchAccessKeys() {
-  return api.get('/api/access-keys').then(res => res.data.accessKeys)
+  return api.get('/api/dietitian/access-keys').then(res => res.data.accessKeys)
 }
 
 export default function AccessKeysPage() {
@@ -61,19 +61,20 @@ export default function AccessKeysPage() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/dietitian/access-keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          clientId: formData.clientPublicUserId,
-          startDate: formData.startDate,
-          endDate: formData.endDate
-        })
+      // DEBUG: Verify JWT exists
+      const token = localStorage.getItem('accessToken');
+      console.log('🔑 JWT Token:', token ? `${token.substring(0, 20)}...` : 'MISSING');
+
+      const response = await api.post('/api/dietitian/access-keys', {
+        clientId: formData.clientPublicUserId,
+        startDate: formData.startDate,
+        endDate: formData.endDate
       });
 
-      if (!response.ok) {
-        const error = await response.json();
+      console.log('✅ Request sent with Authorization header');
+
+      if (!response.data.success) {
+        const error = response.data.error;
         throw new Error(error.message || 'Key oluşturulamadı');
       }
 
@@ -81,7 +82,7 @@ export default function AccessKeysPage() {
       setFormData({ clientPublicUserId: '', startDate: '', endDate: '' });
       refetch();
     } catch (error: any) {
-      alert(error.message);
+      alert(error.message || 'Key oluşturulamadı');
     } finally {
       setLoading(false);
     }

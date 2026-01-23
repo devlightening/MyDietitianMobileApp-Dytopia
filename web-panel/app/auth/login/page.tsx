@@ -30,6 +30,14 @@ export default function DietitianLoginPage() {
         const msg = await res.text();
         throw new Error(msg || 'E-posta veya şifre hatalı.');
       }
+      const data = await res.json();
+
+      // Store in localStorage for client-side axios interceptor
+      localStorage.setItem("accessToken", data.token);
+
+      // Store in cookie for ServerGuard
+      document.cookie = `access_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+
       window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err?.message || 'E-posta veya şifre hatalı.');

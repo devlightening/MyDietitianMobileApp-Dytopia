@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
 
 const api = axios.create({
+  baseURL: 'https://localhost:7154',  // HTTPS required for Secure cookies
   withCredentials: true,
 });
 
@@ -10,29 +11,26 @@ export interface ApiError {
   message: string;
 }
 
+// Request interceptor - Cookie-only auth (no header injection)
+// JWT token is sent via HttpOnly cookie automatically with withCredentials: true
 api.interceptors.request.use(config => {
-  if (typeof window !== 'undefined') {
-    // Removed localStorage token usage
-  }
+  // No Authorization header needed - backend reads from cookie
   return config;
 });
 
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError<any>) => {
-    // Handle 401 - redirect to login
-    if (typeof window !== 'undefined' && error.response?.status === 401) {
-      window.location.href = '/auth/login';
-      return Promise.reject(error);
-    }
+    const status = error.response?.status;
 
     // Extract error information from backend response
     const apiError: ApiError = {
-      status: error.response?.status ?? 500,
-      code: error.response?.data?.error ?? 'UNKNOWN_ERROR',
+      status: status ?? 500,
+      code: error.response?.data?.code ?? 'UNKNOWN_ERROR',
       message: error.response?.data?.message ?? error.message ?? 'An unexpected error occurred',
     };
 
+    // No navigation logic here - let pages/guards handle auth
     return Promise.reject(apiError);
   }
 );

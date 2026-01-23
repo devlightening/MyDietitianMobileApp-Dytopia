@@ -1,18 +1,24 @@
+using MediatR;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MyDietitianMobileApp.Application.Queries
 {
-    public class ListRecipesByActiveDietitianQueryHandler : IListRecipesByActiveDietitianHandler
+    public class ListRecipesByActiveDietitianQueryHandler 
+        : IRequestHandler<ListRecipesByActiveDietitianQuery, ListRecipesByActiveDietitianResult>
     {
         private readonly IRecipeRepository _recipeRepository;
         public ListRecipesByActiveDietitianQueryHandler(IRecipeRepository recipeRepository)
         {
             _recipeRepository = recipeRepository;
         }
-        public ListRecipesByActiveDietitianResult Handle(ListRecipesByActiveDietitianQuery query)
+        public async Task<ListRecipesByActiveDietitianResult> Handle(
+            ListRecipesByActiveDietitianQuery query, 
+            CancellationToken cancellationToken)
         {
             var recipes = _recipeRepository.ListByDietitianId(query.DietitianId);
             var result = new List<RecipeDto>();
@@ -25,7 +31,7 @@ namespace MyDietitianMobileApp.Application.Queries
                     Description = recipe.Description
                 });
             }
-            return new ListRecipesByActiveDietitianResult(result);
+            return await Task.FromResult(new ListRecipesByActiveDietitianResult(result));
         }
     }
 }

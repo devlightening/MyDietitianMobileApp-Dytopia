@@ -17,8 +17,9 @@ public static class JwtTokenGenerator
     {
         var claims = new[]
         {
-            new Claim("sub", userId),
-            new Claim("role", role),
+            // JWT STANDARD CLAIM - Required for User.FindFirst("sub")
+            new Claim(JwtRegisteredClaimNames.Sub, userId),
+            new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 

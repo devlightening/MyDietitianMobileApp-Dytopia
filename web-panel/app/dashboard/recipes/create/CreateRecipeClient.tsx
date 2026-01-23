@@ -20,10 +20,10 @@ interface RecipeIngredient {
   isProhibited: boolean;
 }
 
-function RecipeIngredientsInput({ 
-  value, 
-  onChange 
-}: { 
+function RecipeIngredientsInput({
+  value,
+  onChange
+}: {
   value: RecipeIngredient[];
   onChange: (ingredients: RecipeIngredient[]) => void;
 }) {
@@ -151,7 +151,7 @@ export default function CreateRecipeClient() {
   const tCommon = useTranslations('common');
   const router = useRouter();
   const queryClient = useQueryClient();
-  
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
@@ -174,7 +174,7 @@ export default function CreateRecipeClient() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate: All ingredients must be selected
     const hasUnselectedIngredients = ingredients.some(ing => !ing.ingredientId);
     if (hasUnselectedIngredients) {
@@ -186,7 +186,7 @@ export default function CreateRecipeClient() {
     const mandatoryIngredientIds = ingredients
       .filter(ing => ing.isMandatory && ing.ingredientId)
       .map(ing => ing.ingredientId);
-    
+
     const optionalIngredientIds = ingredients
       .filter(ing => !ing.isMandatory && !ing.isProhibited && ing.ingredientId)
       .map(ing => ing.ingredientId);
@@ -204,11 +204,11 @@ export default function CreateRecipeClient() {
     });
   };
 
-  const canSubmit = name.trim() && 
-                    description.trim() && 
-                    ingredients.length > 0 && 
-                    ingredients.every(ing => ing.ingredientId) &&
-                    !mutation.isPending;
+  const canSubmit = name.trim() &&
+    description.trim() &&
+    ingredients.length > 0 &&
+    ingredients.every(ing => ing.ingredientId) &&
+    !mutation.isPending;
 
   return (
     <div className="space-y-8">
@@ -254,4 +254,3 @@ export default function CreateRecipeClient() {
     </div>
   );
 }
-

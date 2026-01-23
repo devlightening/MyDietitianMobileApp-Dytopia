@@ -1,21 +1,37 @@
-"use client";
+'use client'
 
-import { Sidebar } from './Sidebar';
-import { Topbar } from './Topbar';
-import { ReactNode } from 'react';
+import { Sidebar } from './Sidebar'
+import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext'
 
-export function AppLayout({ children }: { children: ReactNode }) {
+function AppLayoutContent({ children }: { children: React.ReactNode }) {
+  const { isLocked } = useSidebar()
+
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+    <div className="h-screen flex overflow-hidden bg-background">
+      {/* Sidebar - Fixed position, transitions smoothly */}
       <Sidebar />
-      <div className="flex-1 flex flex-col ml-64 overflow-hidden">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto bg-background">
-          <div className="max-w-7xl mx-auto p-6 md:p-8">
-            {children}
-          </div>
+
+      {/* Main Content Area - Margin adjusts based on lock state */}
+      <div
+        className="flex-1 flex flex-col overflow-hidden transition-all duration-200 ease-in-out"
+        style={{
+          marginLeft: isLocked ? '240px' : '64px'
+        }}
+      >
+        {/* Page Content - Scrollable */}
+        <main className="flex-1 overflow-y-auto p-8">
+          {children}
         </main>
       </div>
     </div>
-  );
+  )
 }
+
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarProvider>
+      <AppLayoutContent>{children}</AppLayoutContent>
+    </SidebarProvider>
+  )
+}
+

@@ -1,8 +1,9 @@
+using MediatR;
 using MyDietitianMobileApp.Domain.Entities;
 
 namespace MyDietitianMobileApp.Application.Queries
 {
-    public class SearchIngredientsQuery
+    public class SearchIngredientsQuery : IRequest<SearchIngredientsResult>
     {
         public string SearchTerm { get; }
         public int MaxResults { get; }
@@ -29,11 +30,6 @@ namespace MyDietitianMobileApp.Application.Queries
         {
             Ingredients = ingredients;
         }
-    }
-
-    public interface ISearchIngredientsHandler
-    {
-        SearchIngredientsResult Handle(SearchIngredientsQuery query);
     }
 }
 

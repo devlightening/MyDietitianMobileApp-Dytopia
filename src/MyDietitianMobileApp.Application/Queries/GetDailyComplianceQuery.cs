@@ -1,8 +1,9 @@
+using MediatR;
 using MyDietitianMobileApp.Domain.Entities;
 
 namespace MyDietitianMobileApp.Application.Queries
 {
-    public class GetDailyComplianceQuery
+    public class GetDailyComplianceQuery : IRequest<GetDailyComplianceResult>
     {
         public Guid DietitianId { get; }
         public Guid ClientId { get; }
@@ -60,9 +61,5 @@ namespace MyDietitianMobileApp.Application.Queries
         }
     }
 
-    public interface IGetDailyComplianceHandler
-    {
-        Task<GetDailyComplianceResult> HandleAsync(GetDailyComplianceQuery query);
-    }
 }
 

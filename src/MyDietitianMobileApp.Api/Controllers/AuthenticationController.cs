@@ -42,8 +42,17 @@ public class AuthenticationController : ControllerBase
         if (user == null)
             return Unauthorized(new { message = "Invalid credentials" });
 
-        if (!_hasher.VerifyPassword(user.PasswordHash, request.Password))
-            return Unauthorized(new { message = "Invalid credentials" });
+        // Handle legacy password hashes that aren't Identity-compatible
+        try
+        {
+            if (!_hasher.VerifyPassword(user.PasswordHash, request.Password))
+                return Unauthorized(new { message = "Invalid credentials" });
+        }
+        catch (FormatException)
+        {
+            // Legacy hash format - user needs password reset
+            return Unauthorized(new { message = "Invalid credentials. Please contact admin for password reset." });
+        }
 
         var dietitian = await _appDb.Dietitians.FindAsync(user.LinkedDietitianId);
         if (dietitian == null || !dietitian.IsActive)
@@ -66,8 +75,10 @@ public class AuthenticationController : ControllerBase
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = !HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment(),
-            SameSite = SameSiteMode.Lax,
+            // CRITICAL: SameSite=None REQUIRES Secure=true
+            // Use HTTPS endpoint (https://localhost:7154) for this to work
+            Secure = true,
+            SameSite = SameSiteMode.None,
             Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
             Path = "/"
         };
@@ -88,8 +99,16 @@ public class AuthenticationController : ControllerBase
         if (user == null)
             return Unauthorized(new { message = "Invalid credentials" });
 
-        if (!_hasher.VerifyPassword(user.PasswordHash, request.Password))
-            return Unauthorized(new { message = "Invalid credentials" });
+        // Handle legacy password hashes
+        try
+        {
+            if (!_hasher.VerifyPassword(user.PasswordHash, request.Password))
+                return Unauthorized(new { message = "Invalid credentials" });
+        }
+        catch (FormatException)
+        {
+            return Unauthorized(new { message = "Invalid credentials. Please contact admin for password reset." });
+        }
 
         var jwtSecret = _config["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret missing");
         var jwtIssuer = _config["Jwt:Issuer"] ?? "MyDietitian.Api";
@@ -108,8 +127,9 @@ public class AuthenticationController : ControllerBase
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = !HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment(),
-            SameSite = SameSiteMode.Lax,
+            // CRITICAL: SameSite=None REQUIRES Secure=true
+            Secure = true,
+            SameSite = SameSiteMode.None,
             Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
             Path = "/"
         };
@@ -124,16 +144,18 @@ public class AuthenticationController : ControllerBase
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        var env = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        // Overwrite cookie with empty value instead of Delete
+        // This ensures SameSite=None cookies are properly cleared
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = !env.IsDevelopment(),
-            SameSite = SameSiteMode.Lax,
-            Expires = DateTime.UtcNow.AddDays(-1),
-            Path = "/"
+            Path = "/",
+            SameSite = SameSiteMode.None,
+            Secure = true,  // MUST match login cookie settings
+            Expires = DateTime.UtcNow.AddDays(-1)
         };
-        Response.Cookies.Delete("access_token", cookieOptions);
+        
+        Response.Cookies.Append("access_token", "", cookieOptions);
         return Ok(new { ok = true });
     }
 }

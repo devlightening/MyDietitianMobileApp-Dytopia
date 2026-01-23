@@ -84,10 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(response.token);
 
       const payload = decodeJWT(response.token);
+      // FREE-FIRST: Always start as free user
       setUser({
         publicUserId: payload.publicUserId || '',
-        isPremium: payload.isPremium === 'true',
-        activeDietitianId: payload.activeDietitianId || null,
+        isPremium: false, // ALWAYS false on login - premium via activation only
+        activeDietitianId: null,
         gender: payload.gender as Gender,
         birthDate: payload.birthDate,
         age: payload.age ? parseInt(payload.age) : undefined,

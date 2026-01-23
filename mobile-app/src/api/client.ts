@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 // HTTP for local development - iOS allows this for local networks
-const API_BASE_URL = 'http://172.20.10.4:5000';
+const API_BASE_URL = 'http://192.168.1.39:5000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

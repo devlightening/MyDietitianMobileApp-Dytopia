@@ -71,26 +71,4 @@ public class ClientAuthenticationController : ControllerBase
             isPremium = false
         });
     }
-
-    /// <summary>
-    /// Activate premium
-    /// </summary>
-    [HttpPost("~/api/client/activate-premium")]
-    [Authorize("Client")]
-    public async Task<IActionResult> ActivatePremium([FromBody] ActivatePremiumCommand command)
-    {
-        var result = await _mediator.Send(command);
-        
-        if (!result.Success)
-            return BadRequest(new { message = result.Message });
-
-        return Ok(new
-        {
-            message = result.Message,
-            dietitianId = result.DietitianId,
-            dietitianName = result.DietitianName,
-            programStartDate = result.ProgramStartDate,
-            programEndDate = result.ProgramEndDate
-        });
-    }
 }

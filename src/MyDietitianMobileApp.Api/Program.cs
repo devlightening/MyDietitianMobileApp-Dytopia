@@ -1,19 +1,29 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
-using MyDietitianMobileApp.Domain.Interfaces;
-using MyDietitianMobileApp.Infrastructure.Persistence;
-using MyDietitianMobileApp.Infrastructure.Repositories;
-using System.Security.Claims;
-using System.Text;
-using MediatR;
+using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Handlers;
+using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Services;
+using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
-using MyDietitianMobileApp.Application.Commands;
-using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Api.Middleware;
+using Npgsql;
+using System.Text;
+using System.Threading.Tasks;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
+using MediatR;
+using MyDietitianMobileApp.Domain.Interfaces;
+using MyDietitianMobileApp.Infrastructure.Repositories;
+using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,30 +43,30 @@ builder.Services.AddEndpointsApiExplorer();
 // ====================
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
     {
         Title = "MyDietitian API",
         Version = "v1",
         Description = "Professional Dietitian-Client Management Platform"
     });
 
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme (Example: 'Bearer 12345abcdef')",
         Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
         Scheme = "Bearer"
     });
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
                 {
-                    Type = ReferenceType.SecurityScheme,
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
                     Id = "Bearer"
                 }
             },
@@ -69,36 +79,27 @@ builder.Services.AddSwaggerGen(c =>
 // DATABASE CONTEXTS
 // ====================
 var appDbConnection = builder.Configuration.GetConnectionString("AppDb") 
-    ?? throw new InvalidOperationException("AppDb connection string missing");
-var authDbConnection = builder.Configuration.GetConnectionString("AuthDb") 
-    ?? throw new InvalidOperationException("AuthDb connection string missing");
+    ?? throw new InvalidOperationException("Connection string 'AppDb' missing");
+var authDbConnection = builder.Configuration.GetConnectionString("AuthDb")
+    ?? throw new InvalidOperationException("Connection string 'AuthDb' missing");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(appDbConnection, npgsqlOptions => npgsqlOptions.CommandTimeout(30))
+    options.UseNpgsql(appDbConnection)
         .EnableSensitiveDataLogging(builder.Environment.IsDevelopment()));
 
 builder.Services.AddDbContext<AuthDbContext>(options =>
-    options.UseNpgsql(authDbConnection, npgsqlOptions => npgsqlOptions.CommandTimeout(30))
+    options.UseNpgsql(authDbConnection)
         .EnableSensitiveDataLogging(builder.Environment.IsDevelopment()));
 
 // ====================
-// MEDIATR (CQRS)
-// ====================
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(RegisterClientCommandHandler).Assembly));
-
-// ====================
-// DOMAIN SERVICES
+// SERVICES
 // ====================
 builder.Services.AddScoped<PasswordHasherService>();
 builder.Services.AddScoped<IHealthCalculationService, HealthCalculationService>();
-builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
 builder.Services.AddScoped<IAlternativeMealDecisionService, AlternativeMealDecisionService>();
-
-// ====================
-// REPOSITORIES
-// ====================
-builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
+builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IDietitianRepository, DietitianRepository>();
 builder.Services.AddScoped<IClientRepository, ClientRepository>();
@@ -109,65 +110,64 @@ builder.Services.AddScoped<IClientRepository, ClientRepository>();
 builder.Services.AddHttpContextAccessor();
 
 // ====================
+// MediatR (CQRS)
+// ====================
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(CreateRecipeCommand).Assembly));
+
+// ====================
+// CORS
+// ====================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "http://127.0.0.1:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
+// ====================
 // JWT AUTHENTICATION
 // ====================
-var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("JWT Secret missing");
+var jwtSecret = builder.Configuration["Jwt:SecretKey"] 
+    ?? throw new InvalidOperationException("JWT Secret missing");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MyDietitian.Api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MyDietitian.Mobile";
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.SaveToken = true;
-    options.RequireHttpsMetadata = false;
-    options.TokenValidationParameters = new TokenValidationParameters
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtIssuer,
-        ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-        RoleClaimType = "role"
-    };
-
-    options.Events = new JwtBearerEvents
-    {
-        OnMessageReceived = context =>
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            context.Token = context.Request.Cookies["access_token"];
-            return Task.CompletedTask;
-        }
-    };
-});
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            NameClaimType = JwtRegisteredClaimNames.Sub,
+            RoleClaimType = ClaimTypes.Role
+        };
 
-//====================
-// AUTHORIZATION POLICIES
-// ====================
-builder.Services.AddAuthorization();
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (context.Request.Cookies.TryGetValue("access_token", out var token))
+                    context.Token = token;
+                return Task.CompletedTask;
+            }
+        };
+    });
+
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("RequireClientRole", policy => policy.RequireRole("Client"));
-    options.AddPolicy("RequireDietitianRole", policy => policy.RequireRole("Dietitian"));
-    
-    options.AddPolicy("Client", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("role", "Client");
-    });
-    
-    options.AddPolicy("Dietitian", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("role", "Dietitian");
-    });
-    
+    options.AddPolicy("Dietitian", policy => policy.RequireRole("Dietitian"));
+    options.AddPolicy("Client", policy => policy.RequireRole("Client"));
     options.AddPolicy("Admin", policy =>
     {
         policy.RequireAuthenticatedUser();
@@ -175,50 +175,30 @@ builder.Services.AddAuthorization(options =>
     });
 });
 
-// ====================
-// CORS
-// ====================
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.WithOrigins("http://localhost:3000")
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
-    });
-});
-
 var app = builder.Build();
 
 // ====================
-// DATABASE VERIFICATION
+// DATABASE CONNECTIVITY CHECK
 // ====================
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    
-    try
-    {
-        var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await appDb.Database.CanConnectAsync();
-        logger.LogInformation("✓ Successfully connected to PostgreSQL database (AppDbContext)");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "✗ Failed to connect to AppDbContext");
-    }
 
     try
     {
+        var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (await appDb.Database.CanConnectAsync())
+            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AppDbContext)");
+
         var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-        await authDb.Database.CanConnectAsync();
-        logger.LogInformation("✓ Successfully connected to PostgreSQL database (AuthDbContext)");
+        if (await authDb.Database.CanConnectAsync())
+            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AuthDbContext)");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "✗ Failed to connect to AuthDbContext");
+        logger.LogError(ex, "❌ Database connection failed");
+        throw;
     }
 }
 
@@ -231,9 +211,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
+// ====================
+// MAP CONTROLLERS
+// ====================
 app.MapControllers();
 
 app.Run();

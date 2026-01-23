@@ -7,11 +7,15 @@ export function isAuthenticatedServer(): boolean {
 
 // Client: perform logout by calling backend to clear HttpOnly cookie
 export async function logout(): Promise<void> {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const url = base ? `${base}/api/auth/logout` : '/api/auth/logout';
+  const api = (await import('./api')).default;
   try {
-    await fetch(url, { method: 'POST', credentials: 'include' });
-  } catch {
-    // swallow
+    // Call backend logout endpoint with credentials to clear cookie
+    await api.post('/api/auth/logout', {});
+    // Redirect to login page
+    window.location.href = '/auth/login';
+  } catch (error) {
+    console.error('Logout failed:', error);
+    // Force redirect anyway
+    window.location.href = '/auth/login';
   }
 }

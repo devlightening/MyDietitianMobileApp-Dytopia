@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -19,6 +19,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           variant === 'primary' && 'bg-primary text-primary-foreground hover:bg-primary/90',
           variant === 'secondary' && 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
           variant === 'danger' && 'bg-danger text-danger-foreground hover:bg-danger/90',
+          variant === 'ghost' && 'bg-transparent hover:bg-accent hover:text-accent-foreground',
           (disabled || loading) && 'opacity-60 cursor-not-allowed',
           className
         )}

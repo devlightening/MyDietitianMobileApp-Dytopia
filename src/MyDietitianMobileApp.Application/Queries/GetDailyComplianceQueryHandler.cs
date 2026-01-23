@@ -1,3 +1,4 @@
+using MediatR;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Domain.Entities;
@@ -6,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MyDietitianMobileApp.Application.Handlers
 {
-    public class GetDailyComplianceQueryHandler : IGetDailyComplianceHandler
+    public class GetDailyComplianceQueryHandler 
+        : IRequestHandler<GetDailyComplianceQuery, GetDailyComplianceResult>
     {
         private readonly AppDbContext _context;
         private readonly IComplianceCalculationService _calculationService;
@@ -19,7 +21,9 @@ namespace MyDietitianMobileApp.Application.Handlers
             _calculationService = calculationService;
         }
 
-        public async Task<GetDailyComplianceResult> HandleAsync(GetDailyComplianceQuery query)
+        public async Task<GetDailyComplianceResult> Handle(
+            GetDailyComplianceQuery query, 
+            CancellationToken cancellationToken)
         {
             // Verify dietitian owns this client
             var client = await _context.Clients

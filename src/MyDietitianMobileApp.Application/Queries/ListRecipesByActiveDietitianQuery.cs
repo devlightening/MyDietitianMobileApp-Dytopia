@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace MyDietitianMobileApp.Application.Queries
 {
-    public class ListRecipesByActiveDietitianQuery
+    public class ListRecipesByActiveDietitianQuery : IRequest<ListRecipesByActiveDietitianResult>
     {
         public Guid DietitianId { get; }
         public ListRecipesByActiveDietitianQuery(Guid dietitianId)
@@ -21,9 +23,5 @@ namespace MyDietitianMobileApp.Application.Queries
         {
             Recipes = recipes;
         }
-    }
-    public interface IListRecipesByActiveDietitianHandler
-    {
-        ListRecipesByActiveDietitianResult Handle(ListRecipesByActiveDietitianQuery query);
     }
 }

@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace MyDietitianMobileApp.Application.Queries;
 
-public class ListAccessKeysByDietitianQuery
+public class ListAccessKeysByDietitianQuery : IRequest<ListAccessKeysByDietitianResult>
 {
     public Guid DietitianId { get; }
     public ListAccessKeysByDietitianQuery(Guid dietitianId)
@@ -27,10 +29,5 @@ public class ListAccessKeysByDietitianResult
     {
         AccessKeys = accessKeys;
     }
-}
-
-public interface IListAccessKeysByDietitianHandler
-{
-    ListAccessKeysByDietitianResult Handle(ListAccessKeysByDietitianQuery query);
 }
 

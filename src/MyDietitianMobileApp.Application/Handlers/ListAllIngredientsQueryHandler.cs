@@ -1,10 +1,12 @@
+using MediatR;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Repositories;
 using System.Linq;
 
 namespace MyDietitianMobileApp.Application.Handlers
 {
-    public class ListAllIngredientsQueryHandler : IListAllIngredientsHandler
+    public class ListAllIngredientsQueryHandler 
+        : IRequestHandler<ListAllIngredientsQuery, ListAllIngredientsResult>
     {
         private readonly IIngredientRepository _ingredientRepository;
 
@@ -13,7 +15,9 @@ namespace MyDietitianMobileApp.Application.Handlers
             _ingredientRepository = ingredientRepository;
         }
 
-        public ListAllIngredientsResult Handle(ListAllIngredientsQuery query)
+        public async Task<ListAllIngredientsResult> Handle(
+            ListAllIngredientsQuery query, 
+            CancellationToken cancellationToken)
         {
             var ingredients = _ingredientRepository.GetAll();
 
@@ -25,7 +29,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                 IsActive = i.IsActive
             });
 
-            return new ListAllIngredientsResult(dtos);
+            return await Task.FromResult(new ListAllIngredientsResult(dtos));
         }
     }
 }

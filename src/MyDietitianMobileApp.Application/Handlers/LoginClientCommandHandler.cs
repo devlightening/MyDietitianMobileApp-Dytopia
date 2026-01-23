@@ -42,13 +42,25 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
             };
         }
 
-        // Verify password
-        if (!_passwordHasher.VerifyPassword(request.Password, userAccount.PasswordHash))
+        // Verify password with proper error handling
+        try
         {
+            if (!_passwordHasher.VerifyPassword(userAccount.PasswordHash, request.Password))
+            {
+                return new LoginClientResult
+                {
+                    Success = false,
+                    Message = "Email veya şifre hatalı"
+                };
+            }
+        }
+        catch (FormatException)
+        {
+            // Legacy password hash - incompatible with Identity hasher
             return new LoginClientResult
             {
                 Success = false,
-                Message = "Email veya şifre hatalı"
+                Message = "Geçersiz kimlik bilgileri. Şifrenizi sıfırlayın."
             };
         }
 
