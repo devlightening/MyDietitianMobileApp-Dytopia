@@ -56,7 +56,7 @@ export default function CheckIngredientsScreen() {
         clientAvailableIngredients: selectedIngredients.map(i => i.id),
       });
 
-      navigation.navigate('AlternativeResult' as never, {
+      navigation.navigate('AlternativeResult' as never, { // Routes.Premium.AlternativeResult
         decision: result,
         recipeName,
       } as never);

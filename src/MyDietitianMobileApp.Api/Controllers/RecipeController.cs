@@ -8,6 +8,7 @@ using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using System.Security.Claims;
+using MyDietitianMobileApp.Api.Extensions;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -37,8 +38,7 @@ public class RecipeController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> CreateRecipe([FromBody] CreateRecipeRequest request)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
@@ -69,8 +69,7 @@ public class RecipeController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> ListRecipes()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
@@ -89,8 +88,7 @@ public class RecipeController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> MatchRecipes([FromBody] List<Guid> clientIngredientIds)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var query = new MatchRecipesQuery(clientIngredientIds);

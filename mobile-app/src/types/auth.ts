@@ -19,7 +19,9 @@ export interface LoginRequest {
 
 export interface AuthResponse {
   token: string;
+  expiresAtUtc: string;
   role: string;
+  userId: string;
   clientId?: string;
   publicUserId: string;
   isPremium: boolean;

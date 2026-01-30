@@ -6,16 +6,16 @@ export function isAuthenticatedServer(): boolean {
 }
 
 // Client: perform logout by calling backend to clear HttpOnly cookie
-export async function logout(): Promise<void> {
+// Returns true if logout was successful, false otherwise
+// Components should handle redirect using router.replace() and router.refresh()
+export async function logout(): Promise<boolean> {
   const api = (await import('./api')).default;
   try {
     // Call backend logout endpoint with credentials to clear cookie
     await api.post('/api/auth/logout', {});
-    // Redirect to login page
-    window.location.href = '/auth/login';
+    return true;
   } catch (error) {
     console.error('Logout failed:', error);
-    // Force redirect anyway
-    window.location.href = '/auth/login';
+    return false;
   }
 }

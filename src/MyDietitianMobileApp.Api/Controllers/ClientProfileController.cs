@@ -6,6 +6,7 @@ using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Interfaces;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Api.Extensions;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -37,7 +38,7 @@ public class ClientProfileController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetProfile()
     {
-        var userId = User.FindFirst("sub")?.Value;
+        var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -67,7 +68,7 @@ public class ClientProfileController : ControllerBase
     [HttpPost("measurements")]
     public async Task<IActionResult> AddMeasurement([FromBody] AddUserMeasurementRequest request)
     {
-        var userId = User.FindFirst("sub")?.Value;
+        var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -109,7 +110,7 @@ public class ClientProfileController : ControllerBase
     [HttpGet("measurements")]
     public async Task<IActionResult> GetMeasurements([FromQuery] int? lastNDays)
     {
-        var userId = User.FindFirst("sub")?.Value;
+        var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 

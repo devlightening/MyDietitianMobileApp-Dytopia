@@ -7,7 +7,7 @@ import { colors, spacing } from '../theme';
 export default function PremiumActivationScreen() {
   const [accessKey, setAccessKey] = useState('');
   const [loading, setLoading] = useState(false);
-  const { activatePremium } = useAuth();
+  const { activatePremium, refreshUserState } = useAuth();
   const navigation = useNavigation();
 
   async function handleActivate() {
@@ -21,6 +21,13 @@ export default function PremiumActivationScreen() {
       const result = await activatePremium(accessKey);
 
       if (result.success) {
+        // 🔥 Refresh user state to get updated premium status
+        // This will trigger root navigator to switch to PremiumStack
+        await refreshUserState();
+        
+        // Close modal
+        navigation.goBack();
+        
         Alert.alert(
           '🎉 Premium Aktif!',
           `${result.dietitianName} ile çalışmaya başladınız. ${result.message}`,
@@ -28,7 +35,8 @@ export default function PremiumActivationScreen() {
             {
               text: 'Harika!',
               onPress: () => {
-                // Navigation will happen automatically when AuthContext updates
+                // Root navigator will automatically switch to PremiumStack
+                // when isPremium becomes true (already done via refreshUserState)
               },
             },
           ]

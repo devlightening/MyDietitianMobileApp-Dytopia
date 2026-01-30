@@ -6,6 +6,7 @@ using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using System.Security.Claims;
+using MyDietitianMobileApp.Api.Extensions;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -19,11 +20,13 @@ public class DietPlanController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly AuthDbContext _authDb;
+    private readonly AppDbContext _appDb;
 
-    public DietPlanController(IMediator mediator, AuthDbContext authDb)
+    public DietPlanController(IMediator mediator, AuthDbContext authDb, AppDbContext appDb)
     {
         _mediator = mediator;
         _authDb = authDb;
+        _appDb = appDb;
     }
 
     /// <summary>
@@ -33,8 +36,7 @@ public class DietPlanController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> CreateDietPlan([FromBody] CreateDietPlanCommand command)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
@@ -60,8 +62,7 @@ public class DietPlanController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> GetDietPlan(Guid clientId)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
@@ -83,8 +84,7 @@ public class DietPlanController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> DecideAlternative([FromBody] DecideAlternativeMealQuery query)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
@@ -102,7 +102,7 @@ public class DietPlanController : ControllerBase
     }
 
     /// <summary>
-    /// Get today's plan for mobile client
+    /// Get today's plan for mobile client (Premium only)
     /// </summary>
     [HttpGet("today")]
     [Authorize("Client")]
@@ -110,13 +110,77 @@ public class DietPlanController : ControllerBase
     {
         try
         {
+            var userId = User.GetUserId();
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { 
+                    message = "JWT token eksik",
+                    code = "AUTH_REQUIRED"
+                });
+
+            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+            if (user == null)
+                return Unauthorized(new { 
+                    message = "Kullanıcı bulunamadı",
+                    code = "AUTH_REQUIRED"
+                });
+
+            var client = await _appDb.Clients.FindAsync(user.LinkedClientId);
+            if (client == null)
+                return NotFound(new { 
+                    message = "Client kaydı bulunamadı",
+                    code = "CLIENT_NOT_FOUND"
+                });
+
+            // Check premium status
+            var activeLink = await _appDb.DietitianClientLinks
+                .FirstOrDefaultAsync(l => l.ClientId == client.Id && l.IsActive);
+
+            bool isPremium = false;
+            if (client.ActiveDietitianId.HasValue && activeLink != null)
+            {
+                var now = DateTime.UtcNow;
+                if (client.ProgramEndDate == null || client.ProgramEndDate > now)
+                {
+                    isPremium = true;
+                }
+            }
+
+            if (!isPremium)
+            {
+                return StatusCode(403, new { 
+                    code = "PREMIUM_REQUIRED",
+                    message = "Bu özellik premium üyelik gerektirir"
+                });
+            }
+
+            // Get today's plan
             var query = new GetTodayPlanQuery();
             var result = await _mediator.Send(query);
+            
+            // If no plan exists, return 404
+            if (result == null)
+            {
+                return NotFound(new { 
+                    message = "Bugün için plan bulunamadı",
+                    code = "PLAN_NOT_FOUND"
+                });
+            }
+
             return Ok(result);
         }
         catch (UnauthorizedAccessException)
         {
-            return Unauthorized();
+            return Unauthorized(new { 
+                message = "Yetkilendirme hatası",
+                code = "AUTH_REQUIRED"
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { 
+                message = "Plan alınırken bir hata oluştu",
+                code = "INTERNAL_ERROR"
+            });
         }
     }
 }

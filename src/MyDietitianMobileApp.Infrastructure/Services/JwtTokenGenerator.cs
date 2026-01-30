@@ -15,10 +15,12 @@ public static class JwtTokenGenerator
         string audience,
         int expiresMinutes)
     {
-        var claims = new[]
+        var claims = new List<Claim>
         {
             // JWT STANDARD CLAIM - Required for User.FindFirst("sub")
             new Claim(JwtRegisteredClaimNames.Sub, userId),
+            // Backward compatibility: also include NameIdentifier
+            new Claim(ClaimTypes.NameIdentifier, userId),
             new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };

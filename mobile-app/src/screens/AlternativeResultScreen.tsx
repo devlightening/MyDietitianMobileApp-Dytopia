@@ -29,7 +29,7 @@ export default function AlternativeResultScreen() {
 
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate('Today' as never)}
+          onPress={() => navigation.navigate('Today' as never)} // Routes.Premium.Today
         >
           <Text style={styles.backText}>Planıma Dön</Text>
         </TouchableOpacity>

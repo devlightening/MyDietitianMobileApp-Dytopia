@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Infrastructure.Persistence;
@@ -17,17 +18,20 @@ public class AuthenticationController : ControllerBase
     private readonly AppDbContext _appDb;
     private readonly PasswordHasherService _hasher;
     private readonly IConfiguration _config;
+    private readonly IWebHostEnvironment _env;
 
     public AuthenticationController(
         AuthDbContext authDb,
         AppDbContext appDb,
         PasswordHasherService hasher,
-        IConfiguration config)
+        IConfiguration config,
+        IWebHostEnvironment env)
     {
         _authDb = authDb;
         _appDb = appDb;
         _hasher = hasher;
         _config = config;
+        _env = env;
     }
 
     /// <summary>
@@ -72,13 +76,15 @@ public class AuthenticationController : ControllerBase
             expiresMinutes
         );
 
+        // Environment-aware cookie configuration
+        // Development: Use Lax (works with same-origin requests, no HTTPS required)
+        // Production: Use None + Secure (required for cross-origin requests)
+        var isDevelopment = _env.IsDevelopment();
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            // CRITICAL: SameSite=None REQUIRES Secure=true
-            // Use HTTPS endpoint (https://localhost:7154) for this to work
-            Secure = true,
-            SameSite = SameSiteMode.None,
+            Secure = !isDevelopment, // Only require HTTPS in production
+            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None,
             Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
             Path = "/"
         };
@@ -124,12 +130,13 @@ public class AuthenticationController : ControllerBase
             expiresMinutes
         );
 
+        // Environment-aware cookie configuration (same as dietitian login)
+        var isDevelopment = _env.IsDevelopment();
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            // CRITICAL: SameSite=None REQUIRES Secure=true
-            Secure = true,
-            SameSite = SameSiteMode.None,
+            Secure = !isDevelopment,
+            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None,
             Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
             Path = "/"
         };
@@ -144,18 +151,24 @@ public class AuthenticationController : ControllerBase
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        // Overwrite cookie with empty value instead of Delete
-        // This ensures SameSite=None cookies are properly cleared
+        // Delete cookie using same Path/SameSite/Secure options as login
+        // Use both Delete and overwrite with expired cookie for maximum reliability
+        var isDevelopment = _env.IsDevelopment();
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
             Path = "/",
-            SameSite = SameSiteMode.None,
-            Secure = true,  // MUST match login cookie settings
-            Expires = DateTime.UtcNow.AddDays(-1)
+            Secure = !isDevelopment, // MUST match login cookie settings
+            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None // MUST match login
         };
         
+        // First, try to delete the cookie
+        Response.Cookies.Delete("access_token", cookieOptions);
+        
+        // Then, overwrite with expired cookie (Unix epoch) to ensure it's cleared
+        cookieOptions.Expires = DateTimeOffset.UnixEpoch.UtcDateTime;
         Response.Cookies.Append("access_token", "", cookieOptions);
+        
         return Ok(new { ok = true });
     }
 }

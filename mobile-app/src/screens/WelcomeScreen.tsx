@@ -18,14 +18,14 @@ export default function WelcomeScreen() {
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.navigate('Register' as never)}
+            onPress={() => navigation.navigate('Register' as never)} // Routes.Auth.Register
           >
             <Text style={styles.primaryButtonText}>Email ile Kayıt Ol</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => navigation.navigate('Login' as never)}
+            onPress={() => navigation.navigate('Login' as never)} // Routes.Auth.Login
           >
             <Text style={styles.secondaryButtonText}>Giriş Yap</Text>
           </TouchableOpacity>

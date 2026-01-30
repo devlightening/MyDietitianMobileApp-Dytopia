@@ -140,6 +140,9 @@ var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MyDietitian.Mobile";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // CRITICAL: Disable inbound claim mapping to prevent "sub" from being remapped to "nameidentifier"
+        options.MapInboundClaims = false;
+        
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -172,6 +175,14 @@ builder.Services.AddAuthorization(options =>
     {
         policy.RequireAuthenticatedUser();
         policy.RequireClaim(ClaimTypes.Role, "Admin");
+    });
+    
+    // Premium client policy - requires authenticated client with active premium subscription
+    options.AddPolicy("RequirePremiumClient", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole("Client");
+        // Premium check is done in controller/middleware by querying client state
     });
 });
 

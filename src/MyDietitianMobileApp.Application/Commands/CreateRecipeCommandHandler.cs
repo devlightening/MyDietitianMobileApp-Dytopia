@@ -42,8 +42,8 @@ namespace MyDietitianMobileApp.Application.Commands
                 throw new Exception("An ingredient cannot be both mandatory and prohibited.");
             }
 
-            // Create recipe
-            var recipe = new Recipe(Guid.NewGuid(), request.DietitianId, request.Name, request.Description);
+            // Create recipe (not public - dietitian-specific)
+            var recipe = new Recipe(Guid.NewGuid(), request.DietitianId, request.Name, request.Description, isPublic: false);
             
             foreach (var ing in request.Ingredients)
             {

@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../auth/AuthContext';
 import { colors, spacing } from '../theme';
+import { Routes } from '../navigation/routes';
 import * as Clipboard from 'expo-clipboard';
 
 export default function FreeHomeScreen() {
@@ -41,11 +42,47 @@ export default function FreeHomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.welcomeTitle}>🌟 Hoş Geldiniz!</Text>
         <Text style={styles.welcomeText}>
-          MyDietitian hesabınız oluşturuldu. Premium özelliklerden faydalanmak için diyetisyeninizden aldığınız access key ile aktivasyon yapabilirsiniz.
+          MyDietitian hesabınız oluşturuldu. Ücretsiz özellikleri kullanabilir veya premium özelliklerden faydalanmak için diyetisyeninizden aldığınız access key ile aktivasyon yapabilirsiniz.
         </Text>
+
+        <TouchableOpacity
+          style={styles.activateButton}
+          onPress={() => {
+            // Navigate to modal - accessible from any stack
+            navigation.getParent()?.navigate(Routes.Modal.ActivatePremium as never);
+          }}
+        >
+          <Text style={styles.activateButtonText}>Premium'a Geç →</Text>
+        </TouchableOpacity>
+
+        <View style={styles.featuresGrid}>
+          <TouchableOpacity
+            style={styles.featureCard}
+            onPress={() => {
+              // TODO: Navigate to Public Recipes when implemented
+              Alert.alert('Yakında', 'Public Recipes özelliği yakında eklenecek');
+            }}
+          >
+            <Text style={styles.featureIcon}>📚</Text>
+            <Text style={styles.featureCardTitle}>Public Recipes</Text>
+            <Text style={styles.featureCardText}>Ücretsiz tarifler</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.featureCard}
+            onPress={() => {
+              // TODO: Navigate to Measurements when implemented
+              Alert.alert('Yakında', 'Measurements özelliği yakında eklenecek');
+            }}
+          >
+            <Text style={styles.featureIcon}>📊</Text>
+            <Text style={styles.featureCardTitle}>Measurements</Text>
+            <Text style={styles.featureCardText}>Ölçüm takibi</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.featureBox}>
           <Text style={styles.featureTitle}>✨ Premium Özellikleri</Text>
@@ -55,19 +92,12 @@ export default function FreeHomeScreen() {
           <Text style={styles.featureItem}>📈 İlerleme ve streak takibi</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.activateButton}
-          onPress={() => navigation.navigate('ActivatePremium' as never)}
-        >
-          <Text style={styles.activateButtonText}>Premium'a Geç →</Text>
-        </TouchableOpacity>
-
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
             💡 Diyetisyen ile çalışmıyorsanız, size uygun bir diyetisyen bulmak için iletişime geçebilirsiniz.
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -197,5 +227,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0c4a6e',
     lineHeight: 20,
+  },
+  featuresGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  featureCard: {
+    width: '48%',
+    backgroundColor: colors.card,
+    padding: spacing.md,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  featureIcon: {
+    fontSize: 32,
+    marginBottom: spacing.sm,
+  },
+  featureCardTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  featureCardText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 });

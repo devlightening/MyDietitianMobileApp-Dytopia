@@ -3,7 +3,7 @@ using MyDietitianMobileApp.Domain.Entities;
 
 namespace MyDietitianMobileApp.Application.Queries;
 
-public class GetTodayPlanQuery : IRequest<GetTodayPlanResult>
+public class GetTodayPlanQuery : IRequest<GetTodayPlanResult?>
 {
     // ClientId will be extracted from JWT claims in the handler
 }

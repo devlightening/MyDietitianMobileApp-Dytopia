@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Application.Commands;
@@ -7,6 +8,8 @@ using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Interfaces;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Api.Extensions;
+using System.Security.Claims;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -23,19 +26,22 @@ public class DietitianManagementController : ControllerBase
     private readonly AppDbContext _appDb;
     private readonly IUserRepository _userRepo;
     private readonly ILogger<DietitianManagementController> _logger;
+    private readonly IWebHostEnvironment _env;
 
     public DietitianManagementController(
         IMediator mediator,
         AuthDbContext authDb,
         AppDbContext appDb,
         IUserRepository userRepo,
-        ILogger<DietitianManagementController> logger)
+        ILogger<DietitianManagementController> logger,
+        IWebHostEnvironment env)
     {
         _mediator = mediator;
         _authDb = authDb;
         _appDb = appDb;
         _userRepo = userRepo;
         _logger = logger;
+        _env = env;
     }
 
     /// <summary>
@@ -44,7 +50,7 @@ public class DietitianManagementController : ControllerBase
     [HttpGet("clients")]
     public async Task<IActionResult> GetClients()
     {
-        var userId = User.FindFirst("sub")?.Value;
+        var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -68,7 +74,7 @@ public class DietitianManagementController : ControllerBase
     [HttpGet("clients/{publicUserId}/measurements")]
     public async Task<IActionResult> GetClientMeasurements(string publicUserId)
     {
-        var userId = User.FindFirst("sub")?.Value;
+        var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -104,7 +110,7 @@ public class DietitianManagementController : ControllerBase
     [HttpGet("access-keys")]
     public async Task<IActionResult> GetAccessKeys()
     {
-        var userId = User.FindFirst("sub")?.Value;
+        var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized(new { message = "JWT token eksik" });
 
@@ -154,11 +160,18 @@ public class DietitianManagementController : ControllerBase
             var claims = User.Claims.Select(c => $"{c.Type}={c.Value}").ToList();
             _logger.LogInformation("POST access-keys: User claims: {Claims}", string.Join(", ", claims));
 
-            var userId = User.FindFirst("sub")?.Value;
-            if (string.IsNullOrEmpty(userId))
+            // Robust userId resolution with fallback
+            var userId = User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub) 
+                ?? User.FindFirstValue("sub") 
+                ?? User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrWhiteSpace(userId))
             {
-                _logger.LogWarning("POST access-keys: 'sub' claim not found in token");
-                return Unauthorized(new { message = "JWT token eksik veya geçersiz (sub claim missing)" });
+                _logger.LogWarning("POST access-keys: User ID claim not found in token");
+                return Unauthorized(new { 
+                    code = "AUTH_MISSING_USERID", 
+                    message = "JWT user id claim missing" 
+                });
             }
 
             var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
@@ -197,8 +210,20 @@ public class DietitianManagementController : ControllerBase
                 return BadRequest(new { message = "Geçersiz tarih formatı" });
             }
 
-            if (endDate <= startDate)
-                return BadRequest(new { message = "Bitiş tarihi başlangıç tarihinden sonra olmalı" });
+            // Normalize dates to UTC (Npgsql requires DateTimeKind.Utc)
+            // Use .Date to get midnight, then specify UTC kind
+            var startUtc = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
+            var endUtc = DateTime.SpecifyKind(endDate.Date, DateTimeKind.Utc);
+
+            // Server-side validation: endUtc must be after startUtc
+            if (endUtc < startUtc)
+            {
+                return BadRequest(new 
+                { 
+                    code = "ACCESSKEY_INVALID_DATE_RANGE",
+                    message = "Bitiş tarihi başlangıç tarihinden sonra olmalı" 
+                });
+            }
 
             // Check for existing active key (idempotent)
             var existingKey = await _appDb.AccessKeys
@@ -227,22 +252,35 @@ public class DietitianManagementController : ControllerBase
                 keyValue,
                 user.LinkedDietitianId.Value,
                 clientEntity.Id,
-                startDate,
-                endDate,
+                startUtc,  // Use UTC-normalized date
+                endUtc,    // Use UTC-normalized date
                 true
             );
 
             _appDb.AccessKeys.Add(accessKey);
 
-            // FAZ 3: Create permanent binding
-            var bindCommand = new BindClientToDietitianCommand
-            {
-                DietitianId = user.LinkedDietitianId.Value,
-                ClientId = clientEntity.Id,
-                PublicUserId = request.ClientId
-            };
+            // FAZ 3: Create permanent binding (only if link doesn't already exist)
+            // Check if an active link already exists for this (ClientId, DietitianId) pair
+            var existingLink = await _appDb.DietitianClientLinks
+                .FirstOrDefaultAsync(l => 
+                    l.ClientId == clientEntity.Id && 
+                    l.DietitianId == user.LinkedDietitianId.Value && 
+                    l.IsActive);
 
-            await _mediator.Send(bindCommand);
+            if (existingLink == null)
+            {
+                // Only create link if it doesn't exist
+                var bindCommand = new BindClientToDietitianCommand
+                {
+                    DietitianId = user.LinkedDietitianId.Value,
+                    ClientId = clientEntity.Id,
+                    PublicUserId = request.ClientId
+                };
+
+                await _mediator.Send(bindCommand);
+            }
+            // If link exists, no need to update - it's already bound correctly
+
             await _appDb.SaveChangesAsync();
 
             return Ok(new
@@ -252,6 +290,21 @@ public class DietitianManagementController : ControllerBase
                 clientId = request.ClientId,
                 startDate = accessKey.StartDate.ToString("yyyy-MM-dd"),
                 endDate = accessKey.EndDate.ToString("yyyy-MM-dd")
+            });
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+        {
+            _logger.LogError(dbEx, "Database update failed during access key creation for client {ClientId}", request.ClientId);
+            
+            // Extract inner exception message for development
+            var innerMessage = dbEx.InnerException?.Message ?? dbEx.Message;
+            var detail = _env.IsDevelopment() ? innerMessage : null;
+
+            return StatusCode(500, new 
+            { 
+                code = "DB_SAVE_FAILED",
+                message = "Veritabanı kayıt hatası. Lütfen tekrar deneyin.",
+                detail = detail
             });
         }
         catch (Exception ex)

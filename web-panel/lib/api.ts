@@ -1,7 +1,10 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
 
+// Use same-origin API calls via Next.js rewrites
+// Next.js rewrites /api/* to backend, making requests same-origin
+// This eliminates cookie policy issues (SameSite/Secure) in development
 const api = axios.create({
-  baseURL: 'https://localhost:7154',  // HTTPS required for Secure cookies
+  baseURL: '', // Empty baseURL = same-origin (Next.js rewrites handle routing)
   withCredentials: true,
 });
 

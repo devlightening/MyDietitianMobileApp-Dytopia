@@ -7,6 +7,7 @@ using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using System.Security.Claims;
+using MyDietitianMobileApp.Api.Extensions;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -34,8 +35,7 @@ public class ComplianceController : ControllerBase
     [Authorize("Client")]
     public async Task<IActionResult> MarkCompliance([FromBody] MarkComplianceRequest request)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Client");
@@ -83,8 +83,7 @@ public class ComplianceController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> GetDailyCompliance([FromQuery] Guid clientId, [FromQuery] DateOnly? date)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");
@@ -112,8 +111,7 @@ public class ComplianceController : ControllerBase
     [Authorize("Dietitian")]
     public async Task<IActionResult> GetLiveClients()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        if (!User.TryGetUserIdAsGuid(out var userId))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId && u.Role == "Dietitian");

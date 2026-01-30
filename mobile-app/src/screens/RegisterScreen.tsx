@@ -166,7 +166,7 @@ export default function RegisterScreen() {
 
           <TouchableOpacity
             style={styles.linkButton}
-            onPress={() => navigation.navigate('Login' as never)}
+            onPress={() => navigation.navigate('Login' as never)} // Routes.Auth.Login
             disabled={loading}
           >
             <Text style={styles.linkText}>

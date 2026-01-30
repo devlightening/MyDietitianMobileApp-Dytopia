@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { registerClient as registerClientAPI, loginClient as loginClientAPI, activatePremium as activatePremiumAPI } from '../api/auth';
+import { getClientState } from '../api/client-state';
 import { Gender } from '../types/auth';
 
 interface User {
@@ -16,11 +17,13 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isStateLoaded: boolean; // True when /api/client/me has completed
   isPremium: boolean;
   register: (email: string, password: string, fullName: string, gender: Gender, birthDate: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   activatePremium: (accessKey: string) => Promise<{ success: boolean; message: string; dietitianName?: string }>;
   logout: () => Promise<void>;
+  refreshUserState: () => Promise<void>; // Expose refresh function
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -29,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
 
   useEffect(() => {
     loadToken();
@@ -39,20 +43,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedToken = await SecureStore.getItemAsync('access_token');
       if (storedToken) {
         setToken(storedToken);
+        // Load user state from server to get accurate premium status
+        await refreshUserState();
+      } else {
+        setIsStateLoaded(true); // No token, state is "loaded" (no user)
+      }
+    } catch (error) {
+      console.error('Failed to load token:', error);
+      setIsStateLoaded(true); // Mark as loaded even on error
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function refreshUserState() {
+    try {
+      const state = await getClientState();
+      setUser({
+        publicUserId: state.publicUserId,
+        isPremium: state.isPremium,
+        activeDietitianId: state.activeDietitianId,
+        gender: undefined, // Not returned by /api/client/me
+        birthDate: undefined, // Not returned by /api/client/me
+        age: undefined, // Not returned by /api/client/me
+      });
+      setIsStateLoaded(true);
+    } catch (error) {
+      console.error('Failed to refresh user state:', error);
+      // Fallback to JWT if server call fails
+      const storedToken = await SecureStore.getItemAsync('access_token');
+      if (storedToken) {
         const payload = decodeJWT(storedToken);
         setUser({
           publicUserId: payload.publicUserId || '',
-          isPremium: payload.isPremium === 'true',
-          activeDietitianId: payload.activeDietitianId || null,
+          isPremium: false, // Default to free if we can't verify
+          activeDietitianId: null,
           gender: payload.gender as Gender,
           birthDate: payload.birthDate,
           age: payload.age ? parseInt(payload.age) : undefined,
         });
       }
-    } catch (error) {
-      console.error('Failed to load token:', error);
-    } finally {
-      setIsLoading(false);
+      setIsStateLoaded(true); // Still mark as loaded even on error
     }
   }
 
@@ -62,15 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await SecureStore.setItemAsync('access_token', response.token);
       setToken(response.token);
 
-      const payload = decodeJWT(response.token);
-      setUser({
-        publicUserId: payload.publicUserId || response.publicUserId || '',
-        isPremium: payload.isPremium === 'true',
-        activeDietitianId: payload.activeDietitianId || null,
-        gender: payload.gender as Gender,
-        birthDate: payload.birthDate,
-        age: payload.age ? parseInt(payload.age) : undefined,
-      });
+      // FREE-FIRST: Load state from server to get accurate premium status
+      // New users are always free
+      await refreshUserState();
     } catch (error: any) {
       // Rethrow for caller to handle
       throw error;
@@ -83,16 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await SecureStore.setItemAsync('access_token', response.token);
       setToken(response.token);
 
-      const payload = decodeJWT(response.token);
-      // FREE-FIRST: Always start as free user
-      setUser({
-        publicUserId: payload.publicUserId || '',
-        isPremium: false, // ALWAYS false on login - premium via activation only
-        activeDietitianId: null,
-        gender: payload.gender as Gender,
-        birthDate: payload.birthDate,
-        age: payload.age ? parseInt(payload.age) : undefined,
-      });
+      // FREE-FIRST: Load state from server to get accurate premium status
+      // This ensures we get the correct isPremium value from the backend
+      await refreshUserState();
     } catch (error: any) {
       // Rethrow for caller to handle
       throw error;
@@ -103,8 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await activatePremiumAPI({ accessKey });
 
-      // Refresh token to get updated claims
-      await loadToken();
+      // Refresh user state from server to get updated premium status
+      await refreshUserState();
 
       return {
         success: true,
@@ -147,11 +165,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!token,
         isLoading,
+        isStateLoaded,
         isPremium: user?.isPremium ?? false,
         register,
         login,
         activatePremium,
         logout,
+        refreshUserState,
       }}
     >
       {children}

@@ -7,9 +7,10 @@ export default function LogoutButton() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const handleLogout = async () => {
-    await logout()
     queryClient.clear()
-    router.push("/auth/login")
+    await logout()
+    router.replace('/auth/login')
+    router.refresh()
   }
   return (
     <button className="text-sm text-primary hover:underline font-medium ml-4 transition-colors" onClick={handleLogout}>

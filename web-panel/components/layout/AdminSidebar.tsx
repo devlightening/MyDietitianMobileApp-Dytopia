@@ -23,9 +23,10 @@ export function AdminSidebar({ collapsed = false }: { collapsed?: boolean }) {
   const tAdmin = useTranslations('admin.ingredients');
 
   const handleLogout = async () => {
-    await logout();
     queryClient.clear();
-    router.push("/admin/login");
+    await logout();
+    router.replace("/admin/login");
+    router.refresh();
   };
 
   return (

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Api.Extensions;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -33,7 +34,7 @@ public class ClientController : ControllerBase
     {
         try
         {
-            var userId = User.FindFirst("sub")?.Value;
+            var userId = User.GetUserId();
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized(new { message = "JWT token eksik veya geçersiz" });
 

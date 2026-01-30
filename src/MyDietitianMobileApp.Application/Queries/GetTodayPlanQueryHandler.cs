@@ -3,28 +3,45 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using System.Security.Claims;
 
 namespace MyDietitianMobileApp.Application.Queries;
 
-public class GetTodayPlanQueryHandler : IRequestHandler<GetTodayPlanQuery, GetTodayPlanResult>
+public class GetTodayPlanQueryHandler : IRequestHandler<GetTodayPlanQuery, GetTodayPlanResult?>
 {
     private readonly AppDbContext _context;
+    private readonly AuthDbContext _authDb;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public GetTodayPlanQueryHandler(AppDbContext context, IHttpContextAccessor httpContextAccessor)
+    public GetTodayPlanQueryHandler(
+        AppDbContext context, 
+        AuthDbContext authDb,
+        IHttpContextAccessor httpContextAccessor)
     {
         _context = context;
+        _authDb = authDb;
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public async Task<GetTodayPlanResult> Handle(GetTodayPlanQuery request, CancellationToken cancellationToken)
+    public async Task<GetTodayPlanResult?> Handle(GetTodayPlanQuery request, CancellationToken cancellationToken)
     {
-        // Extract ClientId from JWT claims
-        var clientIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst("ClientId")?.Value;
-        if (string.IsNullOrEmpty(clientIdClaim) || !Guid.TryParse(clientIdClaim, out var clientId))
+        // Extract userId from JWT claims
+        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? _httpContextAccessor.HttpContext?.User.FindFirst("sub")?.Value;
+        
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
-            throw new UnauthorizedAccessException("Client ID not found in token");
+            throw new UnauthorizedAccessException("User ID not found in token");
         }
+
+        // Get user and client
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user == null || !user.LinkedClientId.HasValue)
+        {
+            throw new UnauthorizedAccessException("Client not found for user");
+        }
+
+        var clientId = user.LinkedClientId.Value;
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -37,24 +54,16 @@ public class GetTodayPlanQueryHandler : IRequestHandler<GetTodayPlanQuery, GetTo
 
         if (plan == null)
         {
-            // No active plan
-            return new GetTodayPlanResult
-            {
-                Date = today,
-                Meals = new List<TodayMealDto>()
-            };
+            // No active plan - return null so controller can return 404
+            return null!;
         }
 
         var todayDay = plan.Days.FirstOrDefault();
 
         if (todayDay == null)
         {
-            // Plan exists but no meals for today
-            return new GetTodayPlanResult
-            {
-                Date = today,
-                Meals = new List<TodayMealDto>()
-            };
+            // Plan exists but no meals for today - return null so controller can return 404
+            return null;
         }
 
         // Get recipe names for planned meals

@@ -39,9 +39,10 @@ export function Sidebar() {
   const { isLocked, isHovered, isOpen, toggleLock, setHovered } = useSidebar();
 
   const handleLogout = async () => {
-    await logout();
     queryClient.clear();
-    // logout() already redirects to /auth/login
+    await logout();
+    router.replace('/auth/login');
+    router.refresh();
   };
 
   const handleMouseEnter = () => {
