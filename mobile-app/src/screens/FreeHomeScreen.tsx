@@ -7,7 +7,7 @@ import { Routes } from '../navigation/routes';
 import * as Clipboard from 'expo-clipboard';
 
 export default function FreeHomeScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, resetAppData } = useAuth();
   const navigation = useNavigation();
 
   async function copyUserId() {
@@ -37,9 +37,38 @@ export default function FreeHomeScreen() {
             </View>
           )}
         </View>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logoutText}>Çıkış</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {__DEV__ && resetAppData && (
+            <TouchableOpacity 
+              onPress={async () => {
+                Alert.alert(
+                  'Reset App Data (DEV)',
+                  'Tüm auth verilerini silip uygulamayı yeniden başlatacaksınız. Devam edilsin mi?',
+                  [
+                    { text: 'İptal', style: 'cancel' },
+                    {
+                      text: 'Reset',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await resetAppData();
+                        } catch (error) {
+                          Alert.alert('Hata', 'Reset başarısız oldu');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              style={styles.resetButton}
+            >
+              <Text style={styles.resetButtonText}>🔄 Reset (DEV)</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={logout}>
+            <Text style={styles.logoutText}>Çıkış</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -162,6 +191,22 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.xs,
     fontStyle: 'italic',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  resetButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: '#ff6b6b',
+    borderRadius: 6,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   logoutText: {
     color: colors.error,
