@@ -24,6 +24,7 @@ interface AuthContextType {
   activatePremium: (accessKey: string) => Promise<{ success: boolean; message: string; dietitianName?: string }>;
   logout: () => Promise<void>;
   refreshUserState: () => Promise<void>; // Expose refresh function
+  resetAppData?: () => Promise<void>; // Dev only: reset all app data
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,57 +34,114 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
+  const didInitialRefresh = React.useRef(false);
 
   useEffect(() => {
     loadToken();
   }, []);
 
+  /**
+   * Bootstrap auth: Single source of truth for authentication state
+   * - Token yoksa: isAuthenticated=false, user=null, isStateLoaded=true
+   * - Token varsa: token set et, mutlaka refreshUserState() çağır, sonra isAuthenticated=true
+   */
   async function loadToken() {
     try {
       const storedToken = await SecureStore.getItemAsync('access_token');
-      if (storedToken) {
-        setToken(storedToken);
-        // Load user state from server to get accurate premium status
-        await refreshUserState();
-      } else {
-        setIsStateLoaded(true); // No token, state is "loaded" (no user)
+
+      if (!storedToken) {
+        // No token: user is not authenticated
+        setToken(null);
+        setUser(null);
+        setIsStateLoaded(true);
+        setIsLoading(false);
+        return;
       }
+
+      // Token exists: set token and fetch fresh state from server
+      setToken(storedToken);
+
+      // 🔥 CRITICAL: Always fetch fresh state from /api/client/me
+      // This is the single source of truth for isPremium
+      // Use ref guard to prevent multiple calls
+      if (!didInitialRefresh.current) {
+        didInitialRefresh.current = true;
+        try {
+          await refreshUserState();
+        } catch (error: any) {
+          // If refresh fails with 401, token is invalid - clear it
+          if (error?.response?.status === 401 || error?.status === 401) {
+            console.warn('Token invalid (401), clearing auth state');
+            await SecureStore.deleteItemAsync('access_token');
+            setToken(null);
+            setUser(null);
+            setIsStateLoaded(true);
+            setIsLoading(false);
+            return;
+          }
+
+          // Other errors (timeout, network): continue in offline mode
+          console.warn('API unreachable, continuing in offline mode:', error.message || error);
+          setUser(null); // Don't use stale user data
+          setIsStateLoaded(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Success: state loaded from server
+      setIsStateLoaded(true);
     } catch (error) {
       console.error('Failed to load token:', error);
+      setToken(null);
+      setUser(null);
       setIsStateLoaded(true); // Mark as loaded even on error
     } finally {
       setIsLoading(false);
     }
   }
 
+  /**
+   * Refresh user state from /api/client/me
+   * This is the SINGLE SOURCE OF TRUTH for isPremium
+   * - Always overwrites existing user state
+   * - 401 response triggers automatic logout
+   * - Never falls back to JWT for isPremium (security)
+   */
   async function refreshUserState() {
     try {
       const state = await getClientState();
+
+      // 🔥 FORCE overwrite user state with server response
+      // This ensures isPremium is always accurate
       setUser({
         publicUserId: state.publicUserId,
-        isPremium: state.isPremium,
+        isPremium: state.isPremium, // 🔥 Single source of truth
         activeDietitianId: state.activeDietitianId,
         gender: undefined, // Not returned by /api/client/me
         birthDate: undefined, // Not returned by /api/client/me
         age: undefined, // Not returned by /api/client/me
       });
+
       setIsStateLoaded(true);
-    } catch (error) {
-      console.error('Failed to refresh user state:', error);
-      // Fallback to JWT if server call fails
-      const storedToken = await SecureStore.getItemAsync('access_token');
-      if (storedToken) {
-        const payload = decodeJWT(storedToken);
-        setUser({
-          publicUserId: payload.publicUserId || '',
-          isPremium: false, // Default to free if we can't verify
-          activeDietitianId: null,
-          gender: payload.gender as Gender,
-          birthDate: payload.birthDate,
-          age: payload.age ? parseInt(payload.age) : undefined,
-        });
+    } catch (error: any) {
+      // 401 = token invalid, clear auth state
+      if (error?.response?.status === 401 || error?.status === 401) {
+        console.warn('401 from /api/client/me, clearing auth state');
+        await SecureStore.deleteItemAsync('access_token');
+        setToken(null);
+        setUser(null);
+        setIsStateLoaded(true);
+        return;
       }
-      setIsStateLoaded(true); // Still mark as loaded even on error
+
+      // Other errors (timeout, network): warn but don't crash
+      console.warn('Failed to refresh user state:', error.message || error);
+
+      // Don't use stale data, clear user
+      // This prevents "premium" state from persisting when server is down
+      setUser(null);
+      setIsStateLoaded(true);
     }
   }
 
@@ -112,6 +170,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This ensures we get the correct isPremium value from the backend
       await refreshUserState();
     } catch (error: any) {
+      // Self-healing: If network error, try to fix baseURL and retry once
+      if (__DEV__ && error.code === 'ERR_NETWORK') {
+        console.log('🔧 Network error detected, attempting self-heal...');
+
+        try {
+          // Import helpers
+          const { setApiBaseUrl } = await import('../api/client');
+
+          // Get packager IP
+          let Constants: any = null;
+          try { Constants = require('expo-constants'); } catch { }
+
+          const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest?.debuggerHost;
+          if (hostUri) {
+            const packagerIp = hostUri.split(':')[0];
+            const healedUrl = `http://${packagerIp}:5000`;
+
+            console.log('🔧 Attempting to heal baseURL to:', healedUrl);
+            setApiBaseUrl(healedUrl);
+
+            // Retry login once
+            console.log('🔧 Retrying login with healed baseURL...');
+            const retryResponse = await loginClientAPI({ email, password });
+            await SecureStore.setItemAsync('access_token', retryResponse.token);
+            setToken(retryResponse.token);
+            await refreshUserState();
+
+            console.log('✅ Self-heal successful! Login completed.');
+            return; // Success!
+          }
+        } catch (retryError: any) {
+          console.log('❌ Self-heal failed:', retryError.message);
+          // Fall through to throw original error
+        }
+      }
+
       // Rethrow for caller to handle
       throw error;
     }
@@ -138,9 +232,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await SecureStore.deleteItemAsync('access_token');
+    // ✅ Instant UI update - clear state first
     setToken(null);
     setUser(null);
+    setIsStateLoaded(true); // ✅ token yok => state loaded sayılmalı
+
+    // Clear React Query cache to prevent stale data
+    try {
+      const { queryClient } = await import('../queries/queryClient');
+      queryClient.clear();
+    } catch (err) {
+      console.warn('Failed to clear query cache:', err);
+    }
+
+    // ✅ storage cleanup (doesn't block UI)
+    try {
+      await SecureStore.deleteItemAsync('access_token');
+    } catch (e) {
+      console.warn('Failed to delete token from SecureStore:', e);
+    }
+  }
+
+  // Dev only: Reset app data
+  async function resetAppData() {
+    if (!__DEV__) {
+      throw new Error('resetAppData is only available in development');
+    }
+    const { resetAppData: resetUtil } = await import('../utils/dev');
+    await resetUtil();
   }
 
   function decodeJWT(token: string): any {
@@ -172,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         activatePremium,
         logout,
         refreshUserState,
+        resetAppData: __DEV__ ? resetAppData : undefined,
       }}
     >
       {children}

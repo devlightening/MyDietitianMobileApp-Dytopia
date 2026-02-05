@@ -11,6 +11,15 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<Ingredient> Ingredients { get; set; }
         public DbSet<AccessKey> AccessKeys { get; set; }
         
+        // FAZ 3: Permanent Binding & Measurements
+        public DbSet<DietitianClientLink> DietitianClientLinks { get; set; }
+        public DbSet<UserMeasurement> UserMeasurements { get; set; }
+
+        // Meal Plan System (API-PLAN-01)
+        public DbSet<MealPlan> MealPlans { get; set; }
+        public DbSet<PlanMealItem> PlanMealItems { get; set; }
+        public DbSet<MealCompletion> MealCompletions { get; set; }
+        
         // Compliance tracking entities
         public DbSet<DietPlan> DietPlans { get; set; }
         public DbSet<DietPlanDay> DietPlanDays { get; set; }
@@ -20,23 +29,194 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ComplianceScoreConfig> ComplianceScoreConfigs { get; set; }
         public DbSet<MealCompliance> MealCompliances { get; set; }
 
-        // FAZ 3: Permanent Binding & Measurements
-        public DbSet<DietitianClientLink> DietitianClientLinks { get; set; }
-        public DbSet<UserMeasurement> UserMeasurements { get; set; }
-
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
+            // Client configuration
+            modelBuilder.Entity<Client>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.FullName).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Email).HasMaxLength(255);
+                
+                entity.HasIndex(e => e.ActiveDietitianId);
+            });
+
+            // Dietitian configuration
+            modelBuilder.Entity<Dietitian>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.FullName).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.ClinicName).HasMaxLength(200);
+            });
+
+            // DietitianClientLink configuration
+            modelBuilder.Entity<DietitianClientLink>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.DietitianId, e.ClientId });
+                entity.HasIndex(e => e.IsActive);
+            });
+
+            // Recipe configuration
+            modelBuilder.Entity<Recipe>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.HasIndex(e => e.DietitianId);
+            });
+
+            // UserMeasurement configuration
+            modelBuilder.Entity<UserMeasurement>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ClientId, e.CreatedAt });
+            });
+
             // Multi-tenant filtering: DietitianId on relevant entities
-            modelBuilder.Entity<Client>()
-                .HasIndex(c => c.ActiveDietitianId);
-            modelBuilder.Entity<Recipe>()
-                .HasIndex(r => r.DietitianId);
+            // modelBuilder.Entity<Client>() // Replaced by more comprehensive config above
+            //     .HasIndex(c => c.ActiveDietitianId);
+            // modelBuilder.Entity<Recipe>() // Replaced by more comprehensive config above
+            //     .HasIndex(r => r.DietitianId);
             modelBuilder.Entity<AccessKey>()
                 .HasIndex(a => new { a.DietitianId, a.ClientId });
+
+            // ===== MEAL PLAN SYSTEM (API-PLAN-01) =====
+            
+            // MealPlan configuration
+            modelBuilder.Entity<MealPlan>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.Date)
+                    .IsRequired()
+                    .HasColumnType("date"); // Store as date only
+                
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+                
+                entity.Property(e => e.CreatedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+                
+                entity.Property(e => e.UpdatedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+                
+                // Indexes for performance
+                entity.HasIndex(e => new { e.ClientId, e.Date })
+                    .HasDatabaseName("IX_MealPlans_ClientId_Date");
+                
+                entity.HasIndex(e => e.Status)
+                    .HasDatabaseName("IX_MealPlans_Status");
+                
+                // Relationships
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.HasOne(e => e.Creator)
+                    .WithMany()
+                    .HasForeignKey(e => e.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasMany(e => e.Items)
+                    .WithOne(i => i.Plan)
+                    .HasForeignKey(i => i.PlanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // PlanMealItem configuration
+            modelBuilder.Entity<PlanMealItem>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.Time)
+                    .IsRequired()
+                    .HasColumnType("time");
+                
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.Note)
+                    .HasMaxLength(1000);
+                
+                entity.Property(e => e.ProteinGrams)
+                    .HasPrecision(5, 1);
+                
+                entity.Property(e => e.CarbsGrams)
+                    .HasPrecision(5, 1);
+                
+                entity.Property(e => e.FatGrams)
+                    .HasPrecision(5, 1);
+                
+                entity.Property(e => e.CreatedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+                
+                // Indexes
+                entity.HasIndex(e => e.PlanId)
+                    .HasDatabaseName("IX_PlanMealItems_PlanId");
+                
+                entity.HasIndex(e => e.Time)
+                    .HasDatabaseName("IX_PlanMealItems_Time");
+                
+                // Relationships
+                entity.HasOne(e => e.Plan)
+                    .WithMany(p => p.Items)
+                    .HasForeignKey(e => e.PlanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.HasOne(e => e.Completion)
+                    .WithOne(c => c.PlanMealItem)
+                    .HasForeignKey<MealCompletion>(c => c.PlanMealItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // MealCompletion configuration
+            modelBuilder.Entity<MealCompletion>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.CompletedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+                
+                entity.Property(e => e.Source)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+                
+                // Unique constraint: one completion per meal item per client
+                entity.HasIndex(e => new { e.ClientId, e.PlanMealItemId })
+                    .IsUnique()
+                    .HasDatabaseName("UQ_MealCompletions_Client_MealItem");
+                
+                // Indexes
+                entity.HasIndex(e => e.ClientId)
+                    .HasDatabaseName("IX_MealCompletions_ClientId");
+                
+                entity.HasIndex(e => e.PlanMealItemId)
+                    .HasDatabaseName("IX_MealCompletions_PlanMealItemId");
+                
+                // Relationships
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.HasOne(e => e.PlanMealItem)
+                    .WithOne(i => i.Completion)
+                    .HasForeignKey<MealCompletion>(e => e.PlanMealItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             // ============================================
             // Compliance Tracking Configuration

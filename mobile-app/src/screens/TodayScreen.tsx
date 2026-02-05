@@ -17,12 +17,12 @@ export default function TodayScreen() {
   const isPremium = user?.isPremium === true;
   
   // Query always called, but request only enabled when premium and state loaded
-  // 🔥 Double guard: enabled check + defensive guard in getTodayPlan
+  // 🔥 Triple guard: enabled check + defensive guard in getTodayPlan + stack check
   const planQuery = useQuery({
     queryKey: ['todayPlan'],
     queryFn: () => getTodayPlan(user || undefined), // Pass user for defensive guard
     retry: false, // Don't auto-retry, handle errors manually
-    enabled: isStateLoaded && isPremium, // 🔥 Free iken request yok
+    enabled: isStateLoaded && isPremium && !!user, // 🔥 Free iken request yok
   });
 
   const { data, isLoading, error, refetch } = planQuery;

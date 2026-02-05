@@ -6,6 +6,9 @@ import { colors, spacing } from '../theme';
 import { API_BASE_URL } from '../config/api';
 import axios from 'axios';
 
+let Device: any = null;
+try { Device = require('expo-device'); } catch { }
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,28 +39,29 @@ export default function LoginScreen() {
   async function testConnectivity() {
     setTestingConnectivity(true);
     const startTime = Date.now();
-    
-    // Check if baseURL is localhost on physical device
+
+    // Check if baseURL is localhost on PHYSICAL device (not simulator)
+    const isPhysicalDevice = Device?.isDevice === true;
     const isLocalhost = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1');
-    if (isLocalhost) {
+    if (isPhysicalDevice && isLocalhost) {
       setShowFixModal(true);
       setTestingConnectivity(false);
       return;
     }
-    
+
     try {
       const response = await axios.get(`${API_BASE_URL}/api/health`, {
         timeout: 5000,
       });
       const duration = Date.now() - startTime;
-      
+
       const result = {
         success: true,
         baseURL: API_BASE_URL,
         duration,
       };
       setTestResult(result);
-      
+
       Alert.alert(
         '✅ Bağlantı Testi Başarılı',
         `Base URL: ${API_BASE_URL}\n` +
@@ -67,12 +71,12 @@ export default function LoginScreen() {
       );
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      
+
       // Determine error type
       let errorType: 'timeout' | 'network' | 'http' | 'unknown' = 'unknown';
       let statusCode: number | undefined;
       let message = error.message || 'Bilinmeyen hata';
-      
+
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         errorType = 'timeout';
         message = 'Bağlantı zaman aşımı (5 saniye)';
@@ -84,7 +88,7 @@ export default function LoginScreen() {
         statusCode = error.response.status;
         message = `HTTP ${statusCode}: ${error.response.statusText || 'Sunucu hatası'}`;
       }
-      
+
       const result = {
         success: false,
         baseURL: API_BASE_URL,
@@ -94,7 +98,7 @@ export default function LoginScreen() {
         message,
       };
       setTestResult(result);
-      
+
       // Build detailed error message
       let errorDetails = `Base URL: ${API_BASE_URL}\n`;
       errorDetails += `Süre: ${duration}ms\n`;
@@ -103,7 +107,7 @@ export default function LoginScreen() {
         errorDetails += `HTTP Durum: ${statusCode}\n`;
       }
       errorDetails += `Mesaj: ${message}\n\n`;
-      
+
       if (errorType === 'timeout') {
         errorDetails += 'Kontrol edin:\n';
         errorDetails += '• Backend çalışıyor mu?\n';
@@ -117,7 +121,7 @@ export default function LoginScreen() {
       } else if (errorType === 'http') {
         errorDetails += `Sunucu yanıt verdi ancak hata döndü (${statusCode})`;
       }
-      
+
       Alert.alert('❌ Bağlantı Testi Başarısız', errorDetails);
     } finally {
       setTestingConnectivity(false);
@@ -289,7 +293,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.sage,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
@@ -309,7 +313,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.sage,
     padding: spacing.md,
     borderRadius: 8,
     alignItems: 'center',
@@ -332,7 +336,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   linkTextBold: {
-    color: colors.primary,
+    color: colors.sage,
     fontWeight: '600',
   },
   testButton: {
@@ -364,7 +368,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.sage,
     marginBottom: spacing.md,
   },
   modalText: {
@@ -389,7 +393,7 @@ const styles = StyleSheet.create({
   modalCode: {
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    color: colors.primary,
+    color: colors.sage,
     backgroundColor: colors.background,
     padding: spacing.xs,
     borderRadius: 4,
@@ -397,7 +401,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   modalButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.sage,
     padding: spacing.md,
     borderRadius: 8,
     alignItems: 'center',

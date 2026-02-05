@@ -101,7 +101,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   activeButton: {
-    borderColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.sage,
   },
   disabledButton: {
     opacity: 0.5,

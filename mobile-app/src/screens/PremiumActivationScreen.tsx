@@ -1,174 +1,112 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../auth/AuthContext';
-import { colors, spacing } from '../theme';
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../auth/AuthContext";
+import { colors, radii, shadows, spacing } from "../theme";
 
 export default function PremiumActivationScreen() {
-  const [accessKey, setAccessKey] = useState('');
+  const nav = useNavigation();
+  const { activatePremium } = useAuth();
+
+  const [key, setKey] = useState("");
   const [loading, setLoading] = useState(false);
-  const { activatePremium, refreshUserState } = useAuth();
-  const navigation = useNavigation();
+  const [msg, setMsg] = useState<string | null>(null);
 
-  async function handleActivate() {
-    if (!accessKey.trim()) {
-      Alert.alert('Hata', 'Lütfen access key girin');
-      return;
-    }
-
+  async function onActivate() {
     setLoading(true);
+    setMsg(null);
     try {
-      const result = await activatePremium(accessKey);
-
-      if (result.success) {
-        // 🔥 Refresh user state to get updated premium status
-        // This will trigger root navigator to switch to PremiumStack
-        await refreshUserState();
-        
-        // Close modal
-        navigation.goBack();
-        
-        Alert.alert(
-          '🎉 Premium Aktif!',
-          `${result.dietitianName} ile çalışmaya başladınız. ${result.message}`,
-          [
-            {
-              text: 'Harika!',
-              onPress: () => {
-                // Root navigator will automatically switch to PremiumStack
-                // when isPremium becomes true (already done via refreshUserState)
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Aktivasyon Başarısız', result.message);
+      const res = await activatePremium(key.trim());
+      setMsg(res.message);
+      if (res.success) {
+        setTimeout(() => (nav as any).goBack(), 500);
       }
-    } catch (error: any) {
-      Alert.alert('Hata', 'Aktivasyon sırasında bir sorun oluştu');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.backText}>← Geri</Text>
-      </TouchableOpacity>
-
-      <View style={styles.content}>
-        <Text style={styles.title}>🔑 Premium Aktivasyonu</Text>
-        <Text style={styles.subtitle}>
-          Diyetisyeninizden aldığınız access key'i girerek premium özelliklerini aktif edin
+    <View style={styles.root}>
+      <View style={[styles.card, shadows.soft]}>
+        <Text style={styles.title}>Premium Activation</Text>
+        <Text style={styles.sub}>
+          Diyetisyeninin verdiği Access Key ile premium’u aç. Bu ekran asla “zorla” gelmez — sen isteyince açılır.
         </Text>
 
         <TextInput
-          style={styles.input}
-          placeholder="Access Key (örn: MD-XXXX-YYYY)"
-          value={accessKey}
-          onChangeText={setAccessKey}
+          value={key}
+          onChangeText={setKey}
+          placeholder="Enter access key"
+          placeholderTextColor={colors.subtle}
+          style={[styles.input, shadows.subtle]}
           autoCapitalize="characters"
-          editable={!loading}
         />
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleActivate}
-          disabled={loading}
+          style={[styles.btn, shadows.soft]}
+          onPress={onActivate}
+          disabled={loading || key.trim().length < 4}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Aktif ediliyor...' : 'Aktif Et'}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color={colors.text} />
+          ) : (
+            <Text style={styles.btnText}>Activate</Text>
+          )}
         </TouchableOpacity>
 
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>💡 Bilgi</Text>
-          <Text style={styles.infoText}>
-            • Access key diyetisyeniniz tarafından oluşturulur{'\n'}
-            • Key'iniz süresiz mi yoksa belirli bir süre için mi geçerli, diyetisyeniniz bilgilendirir{'\n'}
-            • Aktivasyon sonrası hemen diyet planınıza erişebilirsiniz
-          </Text>
-        </View>
+        {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+
+        <TouchableOpacity style={styles.close} onPress={() => (nav as any).goBack()}>
+          <Text style={styles.closeText}>Close</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  backButton: {
-    padding: spacing.lg,
-    paddingTop: spacing.xl + 20,
-  },
-  backText: {
-    fontSize: 16,
-    color: colors.primary,
-  },
-  content: {
-    flex: 1,
+    backgroundColor: colors.oat,
+    justifyContent: "center",
     padding: spacing.lg,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: spacing.sm,
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
   },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textMuted,
-    marginBottom: spacing.xl,
-    lineHeight: 22,
-  },
+  title: { fontSize: 18, fontWeight: "900", color: colors.text },
+  sub: { marginTop: 10, fontSize: 12, color: colors.muted, fontWeight: "700", lineHeight: 18 },
+
   input: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 16,
-    marginBottom: spacing.lg,
-    backgroundColor: colors.card,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  button: {
-    backgroundColor: colors.primary,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  infoBox: {
-    backgroundColor: colors.card,
-    padding: spacing.md,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    fontWeight: "800",
     color: colors.text,
-    marginBottom: spacing.sm,
   },
-  infoText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    lineHeight: 20,
+
+  btn: {
+    marginTop: spacing.lg,
+    borderRadius: radii.xl,
+    paddingVertical: 16,
+    alignItems: "center",
+    backgroundColor: "rgba(244,211,94,0.40)",
+    borderWidth: 1,
+    borderColor: "rgba(244,211,94,0.55)",
   },
+  btnText: { color: colors.text, fontWeight: "900", letterSpacing: 0.6 },
+
+  msg: { marginTop: spacing.md, color: colors.muted, fontWeight: "800" },
+
+  close: { marginTop: spacing.lg, alignItems: "center" },
+  closeText: { color: colors.muted, fontWeight: "900" },
 });

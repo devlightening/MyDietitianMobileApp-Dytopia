@@ -14,8 +14,10 @@ export default ({ config }: ConfigContext) => {
   // Log in build time (will appear when running expo start)
   if (apiBaseUrl) {
     console.log('[app.config.ts] EXPO_PUBLIC_API_BASE_URL found:', apiBaseUrl);
+    console.log('[app.config.ts] Final resolved base URL:', apiBaseUrl);
   } else {
     console.warn('[app.config.ts] EXPO_PUBLIC_API_BASE_URL not set - will use fallback or expo.extra');
+    console.log('[app.config.ts] Final resolved base URL: (not set - will use fallback)');
   }
 
   return {

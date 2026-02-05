@@ -1,3 +1,4 @@
 {
-  "/dashboard/access-keys/page": "app/dashboard/access-keys/page.js"
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/clients/page": "app/dashboard/clients/page.js"
 }

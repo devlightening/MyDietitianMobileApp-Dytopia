@@ -35,7 +35,9 @@ builder.WebHost.UseUrls("http://0.0.0.0:5000", "https://0.0.0.0:7154");
 // ====================
 // CONTROLLERS & API
 // ====================
-builder.Services.AddControllers();
+// AG-DASH-FIX-15: Ensure all controllers are discovered
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(MyDietitianMobileApp.Api.Controllers.DashboardController).Assembly);
 builder.Services.AddEndpointsApiExplorer();
 
 // ====================
@@ -231,5 +233,54 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 // MAP CONTROLLERS
 // ====================
 app.MapControllers();
+
+// ====================
+// DEBUG ENDPOINTS (DEV ONLY)
+// ====================
+if (app.Environment.IsDevelopment())
+{
+    // AG-DASH-FIX-13: Build info to verify correct backend instance
+    app.MapGet("/debug/build", () =>
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        var version = assembly.GetName().Version?.ToString() ?? "unknown";
+        var buildTime = System.IO.File.GetLastWriteTimeUtc(assembly.Location);
+        
+        return Results.Ok(new
+        {
+            service = "MyDietitian API",
+            version,
+            buildTime = buildTime.ToString("yyyy-MM-dd HH:mm:ss UTC"),
+            environment = app.Environment.EnvironmentName,
+            utc = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")
+        });
+    }).AllowAnonymous();
+
+    // AG-DASH-FIX-14: List all registered endpoints
+    app.MapGet("/debug/endpoints", (IEnumerable<Microsoft.AspNetCore.Routing.EndpointDataSource> sources) =>
+    {
+        var endpoints = sources
+            .SelectMany(s => s.Endpoints)
+            .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+            .Select(e => new
+            {
+                pattern = e.RoutePattern.RawText,
+                methods = e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods.ToArray() ?? new[] { "ANY" },
+                name = e.DisplayName,
+                requiresAuth = e.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>() != null
+            })
+            .OrderBy(e => e.pattern)
+            .ToList();
+
+        var dashboardEndpoints = endpoints.Where(e => e.pattern?.Contains("dashboard", StringComparison.OrdinalIgnoreCase) == true).ToList();
+
+        return Results.Ok(new
+        {
+            count = endpoints.Count,
+            dashboardEndpoints,
+            allEndpoints = endpoints
+        });
+    }).AllowAnonymous();
+}
 
 app.Run();

@@ -17,13 +17,21 @@ export const Routes = {
     CheckIngredients: 'CheckIngredients',
     AlternativeResult: 'AlternativeResult',
   },
+  App: {
+    Shell: 'Shell',
+    CheckIngredients: 'CheckIngredients',
+    AlternativeResult: 'AlternativeResult',
+    ProfileMeasurements: 'ProfileMeasurements',
+  },
   Modal: {
     ActivatePremium: 'ModalActivatePremium',
   },
 } as const;
 
 // Type helper for route names
-export type RouteName = 
+export type RouteName =
   | typeof Routes.Auth[keyof typeof Routes.Auth]
   | typeof Routes.Free[keyof typeof Routes.Free]
-  | typeof Routes.Premium[keyof typeof Routes.Premium];
+  | typeof Routes.Premium[keyof typeof Routes.Premium]
+  | typeof Routes.App[keyof typeof Routes.App];
+

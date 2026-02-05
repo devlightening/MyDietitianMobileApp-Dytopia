@@ -68,7 +68,7 @@ cp .env.example .env
 Open `mobile-app/.env` and replace `YOUR_LAN_IP` with your actual LAN IP address:
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://192.168.1.40:5000
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.37:5000
 ```
 
 **Note:** The `.env` file is gitignored and will not be committed. Each developer should create their own `.env` file.
@@ -81,12 +81,12 @@ EXPO_PUBLIC_API_BASE_URL=http://192.168.1.40:5000
 **Step 3:** Edit `.env` and set your LAN IP:
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://192.168.1.100:5000
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.37:5000
 ```
 
 **⚠️ IMPORTANT:** 
 - On physical devices, `localhost` points to the phone itself, NOT your PC
-- You MUST use your PC's LAN IP address (e.g., `192.168.1.100`)
+- You MUST use your PC's LAN IP address (e.g., `192.168.1.37`)
 - `localhost` is ONLY allowed on iOS Simulator or Android Emulator
 
 **Step 3:** Restart Expo with cache clear:
@@ -104,10 +104,10 @@ After the app starts, check the console logs. You should see:
 
 ```
 === API Configuration ===
-Resolved API_BASE_URL: http://192.168.1.40:5000
+Resolved API_BASE_URL: http://192.168.1.37:5000
 Source: process.env.EXPO_PUBLIC_API_BASE_URL
-EXPO_PUBLIC_API_BASE_URL: http://192.168.1.40:5000
-expoConfig.extra.apiBaseUrl: http://192.168.1.40:5000
+EXPO_PUBLIC_API_BASE_URL: http://192.168.1.37:5000
+expoConfig.extra.apiBaseUrl: http://192.168.1.37:5000
 Is Physical Device: true
 Platform: ios
 Execution Environment: bare
@@ -156,9 +156,9 @@ dotnet run
 **Expected console output:**
 ```
 === API Configuration ===
-API_BASE_URL: http://192.168.1.100:5000
-EXPO_PUBLIC_API_BASE_URL: http://192.168.1.100:5000
-expoConfig.extra.apiBaseUrl: http://192.168.1.100:5000
+API_BASE_URL: http://192.168.1.37:5000
+EXPO_PUBLIC_API_BASE_URL: http://192.168.1.37:5000
+expoConfig.extra.apiBaseUrl: http://192.168.1.37:5000
 Is Physical Device: true
 Platform: ios
 ========================

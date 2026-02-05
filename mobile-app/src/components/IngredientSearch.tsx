@@ -1,85 +1,64 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator
-} from 'react-native';
-import { searchIngredients } from '../api/alternative';
-import type { Ingredient } from '../types/alternative';
-import { colors, spacing } from '../theme';
+import React, { useState } from "react";
+import { View, TextInput, ScrollView, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { colors, radii, spacing, shadows } from "../theme";
+import { searchIngredients } from "../api/alternative";
+import type { Ingredient } from "../types/alternative";
 
-interface IngredientSearchProps {
-  onSelect: (ingredient: Ingredient) => void;
-}
-
-export default function IngredientSearch({ onSelect }: IngredientSearchProps) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Ingredient[]>([]);
+export default function IngredientSearch({ onSelect }: { onSelect: (i: Ingredient) => void }) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(false);
 
-  async function handleSearch(text: string) {
-    setQuery(text);
-
-    if (text.length < 2) {
-      setResults([]);
+  async function onChange(text: string) {
+    setQ(text);
+    if (text.trim().length < 2) {
+      setItems([]);
       return;
     }
-
     setLoading(true);
-    try {
-      const ingredients = await searchIngredients(text);
-      setResults(ingredients);
-    } catch (error) {
-      console.error('Search failed:', error);
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleSelect(ingredient: Ingredient) {
-    onSelect(ingredient);
-    setQuery('');
-    setResults([]);
+    const res = await searchIngredients(text.trim());
+    setItems(res);
+    setLoading(false);
   }
 
   return (
-    <View style={styles.container}>
+    <View>
       <TextInput
-        style={styles.input}
-        placeholder="Malzeme ara (örn: domates, tavuk...)"
-        value={query}
-        onChangeText={handleSearch}
-        autoCapitalize="none"
-        autoCorrect={false}
+        value={q}
+        onChangeText={onChange}
+        placeholder="Search ingredient (egg, yogurt, tuna...)"
+        placeholderTextColor={colors.subtle}
+        style={[styles.input, shadows.subtle]}
       />
 
       {loading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={colors.primary} />
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="small" color={colors.sage} />
         </View>
       )}
 
-      {results.length > 0 && (
-        <View style={styles.resultsContainer}>
-          <FlatList
-            data={results}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
+      {items.length > 0 && (
+        <View style={[styles.results, shadows.subtle]}>
+          <ScrollView
+            style={styles.resultsList}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+          >
+            {items.map((item) => (
               <TouchableOpacity
-                style={styles.resultItem}
-                onPress={() => handleSelect(item)}
+                key={item.id}
+                style={styles.resultRow}
+                onPress={() => {
+                  onSelect(item);
+                  setQ("");
+                  setItems([]);
+                }}
               >
+                <View style={styles.dot} />
                 <Text style={styles.resultText}>{item.canonicalName}</Text>
               </TouchableOpacity>
-            )}
-            style={styles.resultsList}
-            nestedScrollEnabled
-          />
+            ))}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -87,39 +66,38 @@ export default function IngredientSearch({ onSelect }: IngredientSearchProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
   input: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 16,
-    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: "700",
   },
-  loadingContainer: {
-    padding: spacing.sm,
-    alignItems: 'center',
-  },
-  resultsContainer: {
-    maxHeight: 200,
+  loadingRow: { paddingTop: spacing.sm, alignItems: "center" },
+  results: {
     marginTop: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.card,
+    overflow: "hidden",
+    maxHeight: 220,
   },
   resultsList: {
-    maxHeight: 200,
+    maxHeight: 220,
   },
-  resultItem: {
-    padding: spacing.md,
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  resultText: {
-    fontSize: 16,
-    color: colors.text,
-  },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,140,97,0.65)", marginRight: 10 },
+  resultText: { fontSize: 14, color: colors.text, fontWeight: "800" },
 });
