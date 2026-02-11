@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Application.DTOs;
+using MyDietitianMobileApp.Domain.Services;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -14,15 +15,18 @@ public class DashboardController : ControllerBase
 {
     private readonly AppDbContext _appDb;
     private readonly AuthDbContext _authDb;
+    private readonly IPremiumStatusService _premiumStatusService;
     private readonly ILogger<DashboardController> _logger;
 
     public DashboardController(
         AppDbContext appDb,
         AuthDbContext authDb,
+        IPremiumStatusService premiumStatusService,
         ILogger<DashboardController> logger)
     {
         _appDb = appDb;
         _authDb = authDb;
+        _premiumStatusService = premiumStatusService;
         _logger = logger;
     }
 
@@ -36,10 +40,10 @@ public class DashboardController : ControllerBase
         try
         {
             var userId = User.GetUserId();
-            if (string.IsNullOrEmpty(userId))
+            if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
                 return Unauthorized(new { message = "JWT token eksik" });
 
-            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userGuid);
             if (user == null)
                 return Unauthorized(new { message = "Kullanıcı bulunamadı" });
 
@@ -47,24 +51,15 @@ public class DashboardController : ControllerBase
             if (client == null)
                 return NotFound(new { message = "Client kaydı bulunamadı" });
 
-            // Determine premium status
-            var activeLink = await _appDb.DietitianClientLinks
-                .FirstOrDefaultAsync(l => l.ClientId == client.Id && l.IsActive);
+            var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userGuid);
 
-            bool isPremium = false;
+            bool isPremium = premiumStatus.IsPremium;
             string? clinicName = null;
 
-            if (client.ActiveDietitianId.HasValue && activeLink != null)
+            if (isPremium && premiumStatus.ActiveDietitianId.HasValue)
             {
-                var now = DateTime.UtcNow;
-                if (client.ProgramEndDate == null || client.ProgramEndDate > now)
-                {
-                    isPremium = true;
-                    
-                    // Get clinic name from Dietitian table
-                    var dietitian = await _appDb.Dietitians.FindAsync(client.ActiveDietitianId.Value);
-                    clinicName = dietitian?.ClinicName ?? dietitian?.FullName;
-                }
+                var dietitian = await _appDb.Dietitians.FindAsync(premiumStatus.ActiveDietitianId.Value);
+                clinicName = dietitian?.ClinicName ?? dietitian?.FullName;
             }
 
             // Build dashboard DTO
@@ -81,22 +76,83 @@ public class DashboardController : ControllerBase
             {
                 dashboard.ClinicName = clinicName;
 
-                // TODO: Get next meal from actual diet plan
-                // For now, return mock data
-                dashboard.NextMeal = new NextMealDTO
-                {
-                    Time = "15:00",
-                    Title = "Apple & Walnuts",
-                    Note = "You're on track today"
-                };
+                // Get today's published meal plan
+                var today = DateTime.UtcNow.Date;
+                var todayPlan = await _appDb.MealPlans
+                    .Where(p => p.ClientId == client.Id && p.Date.Date == today && p.Status == Domain.Entities.MealPlanStatus.Published)
+                    .Include(p => p.Items)
+                    .ThenInclude(i => i.Completion)
+                    .FirstOrDefaultAsync();
 
-                // TODO: Calculate summary from actual data
+                if (todayPlan != null)
+                {
+                    var now = DateTime.UtcNow.TimeOfDay;
+                    var items = todayPlan.Items.OrderBy(i => i.Time).ToList();
+                    
+                    // Calculate compliance percent for today
+                    if (items.Any())
+                    {
+                        var completedCount = items.Count(i => i.Completion != null);
+                        dashboard.CompliancePercent = (int)Math.Round((double)completedCount / items.Count * 100);
+                    }
+
+                    // Find next meal (first incomplete meal after current time)
+                    var nextMealItem = items
+                        .Where(i => i.Time > now && i.Completion == null)
+                        .OrderBy(i => i.Time)
+                        .FirstOrDefault();
+
+                    if (nextMealItem != null)
+                    {
+                        dashboard.NextMeal = new NextMealDTO
+                        {
+                            Time = nextMealItem.Time.ToString(@"hh\:mm"),
+                            Title = nextMealItem.Title,
+                            Note = nextMealItem.Note
+                        };
+                    }
+                    else
+                    {
+                        // All meals completed or past
+                        var allCompleted = items.All(i => i.Completion != null);
+                        if (allCompleted && items.Any())
+                        {
+                            dashboard.NextMeal = new NextMealDTO
+                            {
+                                Time = "",
+                                Title = "Tüm öğünler tamamlandı! 🎉",
+                                Note = "Harika bir gün geçirdiniz"
+                            };
+                        }
+                    }
+
+                    // Update today status based on compliance
+                    if (dashboard.CompliancePercent >= 80)
+                        dashboard.TodayStatus = "excellent";
+                    else if (dashboard.CompliancePercent >= 50)
+                        dashboard.TodayStatus = "on-track";
+                    else
+                        dashboard.TodayStatus = "needs-attention";
+                }
+                else
+                {
+                    // No plan for today
+                    dashboard.NextMeal = new NextMealDTO
+                    {
+                        Time = "",
+                        Title = "Bugün için plan yok",
+                        Note = "Diyetisyeninizle iletişime geçin"
+                    };
+                }
+
+                // Calculate summary from actual data
+                // TODO: Implement streak, calories, water, steps tracking
                 dashboard.Summary = new DashboardSummaryDTO
                 {
-                    Streak = 7,
-                    CaloriesToday = 1450,
-                    WaterGlasses = 6,
-                    Steps = 8500
+                    Streak = 0, // TODO: Calculate from historical compliance
+                    CaloriesToday = todayPlan?.Items.Where(i => i.Completion != null).Sum(i => i.Calories ?? 0) ?? 0,
+                    WaterGlasses = 0, // TODO: Implement water tracking
+                    Steps = 0 // TODO: Implement steps tracking
                 };
             }
             else

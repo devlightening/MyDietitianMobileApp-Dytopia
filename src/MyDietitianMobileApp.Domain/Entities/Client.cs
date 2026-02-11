@@ -44,7 +44,7 @@ namespace MyDietitianMobileApp.Domain.Entities
         
         private static int CalculateAge(DateOnly birthDate)
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var age = today.Year - birthDate.Year;
             if (birthDate > today.AddYears(-age)) age--;
             return age;
@@ -66,6 +66,17 @@ namespace MyDietitianMobileApp.Domain.Entities
             PremiumActivatedAt = DateTime.UtcNow;
             ProgramStartDate = startDate;
             ProgramEndDate = endDate;
+        }
+
+        public void RevokePremium(DateTime revokedAtUtc)
+        {
+            // Keep historical dates for reporting, but clear active dietitian context
+            ActiveDietitianId = null;
+            // If program was open-ended or in the future, mark it as ended now
+            if (ProgramEndDate == null || ProgramEndDate > revokedAtUtc)
+            {
+                ProgramEndDate = revokedAtUtc;
+            }
         }
 
         public void AddAccessKey(AccessKey key)

@@ -13,6 +13,7 @@ namespace MyDietitianMobileApp.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/dev")]
+[ApiExplorerSettings(IgnoreApi = true)]
 public class DevController : ControllerBase
 {
     private readonly AppDbContext _appDb;

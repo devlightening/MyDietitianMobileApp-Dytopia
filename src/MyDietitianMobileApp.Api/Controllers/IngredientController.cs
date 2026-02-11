@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
+using MyDietitianMobileApp.Api.Problems;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -19,17 +20,35 @@ public class IngredientController : ControllerBase
     }
 
     /// <summary>
-    /// Search ingredients (public)
+    /// Search ingredients with pagination (public, searches canonicalName and aliases)
     /// </summary>
     [HttpGet("ingredients/search")]
-    public async Task<IActionResult> SearchIngredients([FromQuery] string q)
+    [AllowAnonymous]
+    public async Task<IActionResult> SearchIngredients(
+        [FromQuery] string? q = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
-        if (string.IsNullOrWhiteSpace(q))
-            return Ok(new { ingredients = Array.Empty<object>() });
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
 
-        var query = new MyDietitianMobileApp.Application.Queries.SearchIngredientsQuery(q.Trim(), maxResults: 20);
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return Ok(new { page, pageSize, total = 0, ingredients = Array.Empty<object>() });
+        }
+
+        var query = new MyDietitianMobileApp.Application.Queries.SearchIngredientsQuery(q.Trim(), maxResults: pageSize);
         var result = (MyDietitianMobileApp.Application.Queries.SearchIngredientsResult)await _mediator.Send(query);
-        return Ok(new { ingredients = result.Ingredients });
+        
+        // Note: SearchIngredientsQuery currently doesn't support pagination internally,
+        // so we'll return all results with pagination metadata
+        var total = result.Ingredients.Count();
+        var ingredients = result.Ingredients
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return Ok(new { page, pageSize, total, ingredients });
     }
 
     /// <summary>

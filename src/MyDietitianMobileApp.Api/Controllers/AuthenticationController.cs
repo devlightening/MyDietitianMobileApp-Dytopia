@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Infrastructure.Services;
@@ -35,9 +36,11 @@ public class AuthenticationController : ControllerBase
     }
 
     /// <summary>
-    /// Dietitian login
+    /// Dietitian login (legacy route, use /api/dietitian/login instead)
     /// </summary>
     [HttpPost("dietitian/login")]
+    [EnableRateLimiting("auth")]
+    [ApiExplorerSettings(IgnoreApi = true)] // Hidden from Swagger (use /api/dietitian/login instead)
     public async Task<IActionResult> DietitianLogin([FromBody] DietitianLoginRequest request)
     {
         var user = await _authDb.UserAccounts
@@ -97,6 +100,7 @@ public class AuthenticationController : ControllerBase
     /// Admin login
     /// </summary>
     [HttpPost("admin/login")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> AdminLogin([FromBody] AdminLoginRequest request)
     {
         var user = await _authDb.UserAccounts

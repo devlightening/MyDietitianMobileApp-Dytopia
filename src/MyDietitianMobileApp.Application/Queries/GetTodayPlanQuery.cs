@@ -5,7 +5,12 @@ namespace MyDietitianMobileApp.Application.Queries;
 
 public class GetTodayPlanQuery : IRequest<GetTodayPlanResult?>
 {
-    // ClientId will be extracted from JWT claims in the handler
+    public Guid ClientId { get; }
+
+    public GetTodayPlanQuery(Guid clientId)
+    {
+        ClientId = clientId;
+    }
 }
 
 public class GetTodayPlanResult

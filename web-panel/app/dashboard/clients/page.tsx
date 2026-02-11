@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
 
 interface ClientSummary {
-  publicUserId: string
+  id: string // GUID for routing
+  publicUserId: string // AccessKey code for display
   fullName: string
   isActive: boolean
   lastLoginAt?: string
@@ -45,8 +46,8 @@ export default function ClientsPage() {
         <div className="grid gap-4">
           {clients.map((client) => (
             <Link
-              key={client.publicUserId}
-              href={`/dashboard/clients/${client.publicUserId}`}
+              key={client.id}
+              href={`/dashboard/clients/${client.id}`}
             >
               <Card className="p-6 hover:shadow-lg transition cursor-pointer">
                 <div className="flex items-center justify-between">
@@ -63,7 +64,7 @@ export default function ClientsPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     {client.isActive ? (
-                      <Badge variant="success">Aktif</Badge>
+                      <Badge variant="default">Aktif</Badge>
                     ) : (
                       <Badge variant="secondary">Pasif</Badge>
                     )}

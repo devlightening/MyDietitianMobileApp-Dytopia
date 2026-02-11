@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Interfaces;
+using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Extensions;
 
@@ -21,15 +22,18 @@ public class ClientProfileController : ControllerBase
     private readonly IMediator _mediator;
     private readonly AuthDbContext _authDb;
     private readonly AppDbContext _appDb;
+    private readonly IPremiumStatusService _premiumStatusService;
 
     public ClientProfileController(
         IMediator mediator,
         AuthDbContext authDb,
-        AppDbContext appDb)
+        AppDbContext appDb,
+        IPremiumStatusService premiumStatusService)
     {
         _mediator = mediator;
         _authDb = authDb;
         _appDb = appDb;
+        _premiumStatusService = premiumStatusService;
     }
 
     /// <summary>
@@ -39,11 +43,11 @@ public class ClientProfileController : ControllerBase
     public async Task<IActionResult> GetProfile()
     {
         var userId = User.GetUserId();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
             return Unauthorized();
 
         var user = await _authDb.UserAccounts
-            .FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+            .FirstOrDefaultAsync(u => u.Id == userGuid);
 
         if (user == null)
             return NotFound();
@@ -52,12 +56,14 @@ public class ClientProfileController : ControllerBase
             ? await _appDb.Clients.FindAsync(user.LinkedClientId.Value)
             : null;
 
+        var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userGuid);
+
         return Ok(new
         {
             fullName = client?.FullName ?? user.Email,
             email = user.Email,
             publicUserId = user.PublicUserId,
-            isPremium = client?.ActiveDietitianId != null,
+            isPremium = premiumStatus.IsPremium,
             createdAt = user.Id.ToString()
         });
     }

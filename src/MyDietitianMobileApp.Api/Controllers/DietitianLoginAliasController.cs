@@ -94,5 +94,3 @@ public class DietitianLoginAliasController : ControllerBase
         return Ok(new { ok = true });
     }
 }
-
-public record DietitianLoginRequest(string Email, string Password);

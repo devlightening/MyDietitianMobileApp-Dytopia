@@ -23,7 +23,7 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                 table: "Clients",
                 type: "timestamp with time zone",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
             migrationBuilder.AddColumn<string>(
                 name: "Email",

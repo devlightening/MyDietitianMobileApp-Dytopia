@@ -5,6 +5,7 @@ using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using MyDietitianMobileApp.Application.Services;
 
 namespace MyDietitianMobileApp.Application.Handlers;
 
@@ -29,6 +30,20 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
 
     public async Task<RegisterClientResult> Handle(RegisterClientCommand request, CancellationToken cancellationToken)
     {
+        // Normalize and validate email domain (allowlist from configuration)
+        var emailCheck = EmailPolicy.ValidateAllowedDomain(request.Email ?? string.Empty, _config);
+        request.Email = emailCheck.NormalizedEmail;
+
+        if (!emailCheck.IsAllowed)
+        {
+            return new RegisterClientResult
+            {
+                Success = false,
+                ErrorCode = emailCheck.ErrorCode,
+                Message = emailCheck.ErrorMessage ?? "Email doğrulaması başarısız."
+            };
+        }
+
         // Check if email already exists
         var existingUser = await _authContext.UserAccounts
             .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
@@ -38,7 +53,8 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
             return new RegisterClientResult
             {
                 Success = false,
-                Message = "Bu email adresi zaten kullanılıyor"
+                ErrorCode = "REGISTRATION_NOT_ALLOWED",
+                Message = "Bu email ile kayıt olunamıyor."
             };
         }
 
@@ -81,8 +97,8 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
         await _authContext.SaveChangesAsync(cancellationToken);
         await _appContext.SaveChangesAsync(cancellationToken);
 
-        // Generate JWT with PublicUserId
-        var token = GenerateJwtToken(userId, clientId, client, publicUserId, null);
+        // Generate JWT with minimal identity claims
+        var token = GenerateJwtToken(userId, clientId, publicUserId);
 
         return new RegisterClientResult
         {
@@ -95,7 +111,7 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
         };
     }
 
-    private string GenerateJwtToken(Guid userId, Guid clientId, Client client, string publicUserId, Guid? activeDietitianId)
+    private string GenerateJwtToken(Guid userId, Guid clientId, string publicUserId)
     {
         var secret = _config["Jwt:SecretKey"];
         var issuer = _config["Jwt:Issuer"];
@@ -115,24 +131,12 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
         var claims = new List<System.Security.Claims.Claim>
         {
             new("sub", userId.ToString()),
+            // Role claims (double-write for robustness)
             new("role", "Client"),
+            new(System.Security.Claims.ClaimTypes.Role, "Client"),
             new("clientId", clientId.ToString()),
-            new("publicUserId", publicUserId),
-            new("isPremium", (activeDietitianId.HasValue).ToString().ToLower())
+            new("publicUserId", publicUserId)
         };
-
-        // Add profile claims if client provided
-        if (client != null)
-        {
-            claims.Add(new("gender", client.Gender.ToString()));
-            claims.Add(new("birthDate", client.BirthDate.ToString("yyyy-MM-dd")));
-            claims.Add(new("age", client.Age.ToString()));
-        }
-
-        if (activeDietitianId.HasValue)
-        {
-            claims.Add(new("activeDietitianId", activeDietitianId.Value.ToString()));
-        }
 
         var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
         {

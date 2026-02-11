@@ -13,7 +13,7 @@ using MyDietitianMobileApp.Api.Extensions;
 namespace MyDietitianMobileApp.Api.Controllers;
 
 /// <summary>
-/// Manages recipes: creation, listing, and matching
+/// Manages recipes: creation and listing
 /// </summary>
 [Authorize]
 [ApiController]
@@ -78,22 +78,6 @@ public class RecipeController : ControllerBase
 
         var query = new ListRecipesByActiveDietitianQuery(user.LinkedDietitianId.Value);
         var result = await _mediator.Send(query);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Match recipes against client ingredients
-    /// </summary>
-    [HttpPost("match")]
-    [Authorize("Dietitian")]
-    public async Task<IActionResult> MatchRecipes([FromBody] List<Guid> clientIngredientIds)
-    {
-        if (!User.TryGetUserIdAsGuid(out var userId))
-            return Unauthorized();
-
-        var query = new MatchRecipesQuery(clientIngredientIds);
-        var result = await _mediator.Send(query);
-
         return Ok(result);
     }
 }

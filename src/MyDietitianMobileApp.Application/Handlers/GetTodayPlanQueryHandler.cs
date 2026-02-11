@@ -11,45 +11,30 @@ public class GetTodayPlanQueryHandler : IRequestHandler<GetTodayPlanQuery, GetTo
 {
     private readonly AppDbContext _context;
     private readonly AuthDbContext _authDb;
-    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public GetTodayPlanQueryHandler(
         AppDbContext context, 
-        AuthDbContext authDb,
-        IHttpContextAccessor httpContextAccessor)
+        AuthDbContext authDb)
     {
         _context = context;
         _authDb = authDb;
-        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<GetTodayPlanResult?> Handle(GetTodayPlanQuery request, CancellationToken cancellationToken)
     {
-        // Extract userId from JWT claims
-        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? _httpContextAccessor.HttpContext?.User.FindFirst("sub")?.Value;
-        
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            throw new UnauthorizedAccessException("User ID not found in token");
-        }
+        // ClientId is resolved in API layer (DietPlanController) from AuthDb.UserAccounts.LinkedClientId
+        var clientId = request.ClientId;
 
-        // Get user and client
-        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user == null || !user.LinkedClientId.HasValue)
-        {
-            throw new UnauthorizedAccessException("Client not found for user");
-        }
-
-        var clientId = user.LinkedClientId.Value;
-
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // Use UTC DateTime range to be robust against time zone / kind issues
+        var todayStartUtc = DateTime.UtcNow.Date;           // Kind = Utc
+        var tomorrowStartUtc = todayStartUtc.AddDays(1);
 
         // Get active diet plan for this client
         var plan = await _context.DietPlans
             .Where(p => p.ClientId == clientId && p.Status == DietPlanStatus.Active)
-            .Include(p => p.Days.Where(d => d.Date == today))
+            .Include(p => p.Days.Where(d => d.Date >= DateOnly.FromDateTime(todayStartUtc) && d.Date < DateOnly.FromDateTime(tomorrowStartUtc)))
                 .ThenInclude(d => d.Meals)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(cancellationToken);
 
         if (plan == null)
@@ -93,7 +78,7 @@ public class GetTodayPlanQueryHandler : IRequestHandler<GetTodayPlanQuery, GetTo
 
         return new GetTodayPlanResult
         {
-            Date = today,
+            Date = DateOnly.FromDateTime(todayStartUtc),
             DailyTargetCalories = todayDay.DailyTargetCalories,
             Meals = meals
         };

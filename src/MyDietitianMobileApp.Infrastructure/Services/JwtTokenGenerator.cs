@@ -21,6 +21,8 @@ public static class JwtTokenGenerator
             new Claim(JwtRegisteredClaimNames.Sub, userId),
             // Backward compatibility: also include NameIdentifier
             new Claim(ClaimTypes.NameIdentifier, userId),
+            // Role claims (double-write for robustness)
+            new Claim("role", role),
             new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };

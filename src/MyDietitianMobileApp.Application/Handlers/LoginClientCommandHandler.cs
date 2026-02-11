@@ -91,8 +91,8 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
             };
         }
 
-        // Generate JWT with client profile and PublicUserId
-        var token = GenerateJwtToken(userAccount.Id, client.Id, client, userAccount.PublicUserId, client.ActiveDietitianId);
+        // Generate JWT with minimal identity claims and PublicUserId
+        var token = GenerateJwtToken(userAccount.Id, client.Id, userAccount.PublicUserId);
 
         return new LoginClientResult
         {
@@ -103,7 +103,7 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
         };
     }
 
-    private string GenerateJwtToken(Guid userId, Guid clientId, Client client, string publicUserId, Guid? activeDietitianId)
+    private string GenerateJwtToken(Guid userId, Guid clientId, string publicUserId)
     {
         var secret = _config["Jwt:SecretKey"];
         var issuer = _config["Jwt:Issuer"];
@@ -123,24 +123,12 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
         var claims = new List<System.Security.Claims.Claim>
         {
             new("sub", userId.ToString()),
+            // Role claims (double-write for robustness)
             new("role", "Client"),
+            new(System.Security.Claims.ClaimTypes.Role, "Client"),
             new("clientId", clientId.ToString()),
-            new("publicUserId", publicUserId),
-            new("isPremium", (activeDietitianId.HasValue).ToString().ToLower())
+            new("publicUserId", publicUserId)
         };
-
-        // Add profile claims
-        if (client != null)
-        {
-            claims.Add(new("gender", client.Gender.ToString()));
-            claims.Add(new("birthDate", client.BirthDate.ToString("yyyy-MM-dd")));
-            claims.Add(new("age", client.Age.ToString()));
-        }
-
-        if (activeDietitianId.HasValue)
-        {
-            claims.Add(new("activeDietitianId", activeDietitianId.Value.ToString()));
-        }
 
         var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
         {

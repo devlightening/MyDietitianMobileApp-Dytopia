@@ -18,6 +18,10 @@ public class RegisterClientResult
     public string Token { get; set; } = string.Empty;
     public string PublicUserId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    /// <summary>
+    /// Optional machine-readable error code (e.g. EMAIL_DOMAIN_NOT_ALLOWED)
+    /// </summary>
+    public string? ErrorCode { get; set; }
     public Guid? ClientId { get; set; }
     public bool IsPremium { get; set; }
 }

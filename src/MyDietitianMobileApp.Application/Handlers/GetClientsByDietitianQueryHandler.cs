@@ -50,6 +50,7 @@ public class GetClientsByDietitianQueryHandler
 
             clientSummaries.Add(new ClientSummaryDto
             {
+                Id = client.Id, // Client GUID for routing
                 PublicUserId = link.PublicUserId,
                 FullName = client.FullName,
                 IsActive = link.IsActive,

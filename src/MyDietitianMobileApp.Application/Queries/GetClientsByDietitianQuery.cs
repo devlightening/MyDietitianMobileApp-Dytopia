@@ -14,7 +14,8 @@ public class GetClientsByDietitianResult
 
 public class ClientSummaryDto
 {
-    public string PublicUserId { get; set; } = string.Empty;
+    public Guid Id { get; set; } // Client GUID for routing
+    public string PublicUserId { get; set; } = string.Empty; // AccessKey code for display
     public string FullName { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public DateTime? LastLoginAt { get; set; }

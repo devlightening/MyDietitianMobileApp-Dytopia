@@ -6,9 +6,8 @@ using MyDietitianMobileApp.Infrastructure.Persistence;
 namespace MyDietitianMobileApp.Api.Controllers;
 
 /// <summary>
-/// Public recipes endpoint - available to all authenticated clients (free and premium)
+/// Public recipes endpoint - available to free and premium users, no auth required.
 /// </summary>
-[Authorize]
 [ApiController]
 [Route("api/public")]
 public class PublicRecipesController : ControllerBase
@@ -25,15 +24,37 @@ public class PublicRecipesController : ControllerBase
     }
 
     /// <summary>
-    /// Get all public recipes (available to free users)
+    /// Get public recipes (available to free users) with pagination and optional search.
     /// </summary>
     [HttpGet("recipes")]
-    public async Task<IActionResult> GetPublicRecipes()
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPublicRecipes(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? q = null)
     {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
+
         try
         {
-            var recipes = await _appDb.Recipes
-                .Where(r => r.IsPublic)
+            var queryable = _appDb.Recipes
+                .Where(r => r.IsPublic);
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var term = q.Trim();
+                queryable = queryable.Where(r =>
+                    EF.Functions.ILike(r.Name, $"%{term}%") ||
+                    EF.Functions.ILike(r.Description, $"%{term}%"));
+            }
+
+            var total = await queryable.CountAsync();
+
+            var recipes = await queryable
+                .OrderBy(r => r.Name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Include(r => r.MandatoryIngredients)
                 .Include(r => r.OptionalIngredients)
                 .Include(r => r.ProhibitedIngredients)
@@ -48,7 +69,13 @@ public class PublicRecipesController : ControllerBase
                 })
                 .ToListAsync();
 
-            return Ok(new { recipes });
+            return Ok(new
+            {
+                page,
+                pageSize,
+                total,
+                recipes
+            });
         }
         catch (Exception ex)
         {

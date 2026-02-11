@@ -2,11 +2,14 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using System.Security.Claims;
 using MyDietitianMobileApp.Api.Extensions;
+using MyDietitianMobileApp.Api.Problems;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -21,12 +24,21 @@ public class DietPlanController : ControllerBase
     private readonly IMediator _mediator;
     private readonly AuthDbContext _authDb;
     private readonly AppDbContext _appDb;
+    private readonly IPremiumStatusService _premiumStatusService;
+    private readonly ILogger<DietPlanController> _logger;
 
-    public DietPlanController(IMediator mediator, AuthDbContext authDb, AppDbContext appDb)
+    public DietPlanController(
+        IMediator mediator,
+        AuthDbContext authDb,
+        AppDbContext appDb,
+        IPremiumStatusService premiumStatusService,
+        ILogger<DietPlanController> logger)
     {
         _mediator = mediator;
         _authDb = authDb;
         _appDb = appDb;
+        _premiumStatusService = premiumStatusService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -111,50 +123,34 @@ public class DietPlanController : ControllerBase
         try
         {
             var userId = User.GetUserId();
-            if (string.IsNullOrEmpty(userId))
+            if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
                 return Unauthorized(new { 
                     message = "JWT token eksik",
                     code = "AUTH_REQUIRED"
                 });
 
-            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
-            if (user == null)
-                return Unauthorized(new { 
-                    message = "Kullanıcı bulunamadı",
-                    code = "AUTH_REQUIRED"
-                });
-
-            var client = await _appDb.Clients.FindAsync(user.LinkedClientId);
-            if (client == null)
-                return NotFound(new { 
+            // Resolve clientId from AuthDb to avoid trusting claims
+            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userGuid);
+            if (user == null || !user.LinkedClientId.HasValue)
+            {
+                return NotFound(new
+                {
                     message = "Client kaydı bulunamadı",
                     code = "CLIENT_NOT_FOUND"
                 });
-
-            // Check premium status
-            var activeLink = await _appDb.DietitianClientLinks
-                .FirstOrDefaultAsync(l => l.ClientId == client.Id && l.IsActive);
-
-            bool isPremium = false;
-            if (client.ActiveDietitianId.HasValue && activeLink != null)
-            {
-                var now = DateTime.UtcNow;
-                if (client.ProgramEndDate == null || client.ProgramEndDate > now)
-                {
-                    isPremium = true;
-                }
             }
 
-            if (!isPremium)
+            var clientId = user.LinkedClientId.Value;
+
+            var premium = await _premiumStatusService.GetPremiumStatusAsync(userGuid);
+            if (!premium.IsPremium)
             {
-                return StatusCode(403, new { 
-                    code = "PREMIUM_REQUIRED",
-                    message = "Bu özellik premium üyelik gerektirir"
-                });
+                var problem = ApiProblems.PremiumRequired();
+                return StatusCode(problem.Status ?? 403, problem);
             }
 
-            // Get today's plan
-            var query = new GetTodayPlanQuery();
+            // Get today's plan for this client
+            var query = new GetTodayPlanQuery(clientId);
             var result = await _mediator.Send(query);
             
             // If no plan exists, return 404
@@ -170,6 +166,7 @@ public class DietPlanController : ControllerBase
         }
         catch (UnauthorizedAccessException)
         {
+            _logger.LogWarning("Unauthorized access when getting today's plan for diet client. TraceId={TraceId}", HttpContext.TraceIdentifier);
             return Unauthorized(new { 
                 message = "Yetkilendirme hatası",
                 code = "AUTH_REQUIRED"
@@ -177,9 +174,11 @@ public class DietPlanController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected error while getting today's diet plan. TraceId={TraceId}", HttpContext.TraceIdentifier);
             return StatusCode(500, new { 
                 message = "Plan alınırken bir hata oluştu",
-                code = "INTERNAL_ERROR"
+                code = "INTERNAL_ERROR",
+                traceId = HttpContext.TraceIdentifier
             });
         }
     }

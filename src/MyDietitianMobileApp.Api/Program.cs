@@ -113,6 +113,11 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IDietitianRepository, DietitianRepository>();
 builder.Services.AddScoped<IClientRepository, ClientRepository>();
 builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
+builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IKitchenNarrator, MyDietitianMobileApp.Application.Services.KitchenNarrator>();
+builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientIdentityResolver, MyDietitianMobileApp.Application.Services.ClientIdentityResolver>();
+builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientActivityWriter, MyDietitianMobileApp.Application.Services.ClientActivityWriter>();
+builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IComplianceService, MyDietitianMobileApp.Application.Services.ComplianceService>();
+builder.Services.AddHostedService<PremiumExpirationWorker>();
 
 // ====================
 // ASP.NET CORE SERVICES
@@ -193,6 +198,25 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    // Dietitian write operations (recipe CRUD): per-dietitian throttling
+    options.AddPolicy("dietitian-write", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"dietitian-write:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
     // Pantry operations: per-client throttling
     options.AddPolicy("pantry", httpContext =>
     {
@@ -206,6 +230,44 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    // Profile write operations: per-client throttling
+    options.AddPolicy("profile-write", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"profile-write:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    // Kitchen merge operations: per-client throttling
+    options.AddPolicy("kitchen", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"kitchen:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -378,6 +440,101 @@ using (var scope = app.Services.CreateScope())
 
         await appDb.Recipes.AddRangeAsync(seedRecipes);
         await appDb.SaveChangesAsync();
+    }
+
+    // Seed ingredient packs (idempotent)
+    if (!await appDb.IngredientPacks.AnyAsync(p => p.IsSystem))
+    {
+        // First, ensure we have basic ingredients
+        var basicIngredientNames = new[] { "Yumurta", "Süt", "Yoğurt", "Tavuk", "Zeytinyağı", "Tuz", "Karabiber", "Yulaf", "Muz", "Domates" };
+        var existingIngredients = await appDb.Ingredients
+            .Where(i => basicIngredientNames.Contains(i.CanonicalName))
+            .ToDictionaryAsync(i => i.CanonicalName, i => i.Id);
+
+        var ingredientsToCreate = new List<Ingredient>();
+        foreach (var name in basicIngredientNames)
+        {
+            if (!existingIngredients.ContainsKey(name))
+            {
+                ingredientsToCreate.Add(new Ingredient(Guid.NewGuid(), name, isActive: true));
+            }
+        }
+
+        if (ingredientsToCreate.Any())
+        {
+            appDb.Ingredients.AddRange(ingredientsToCreate);
+            await appDb.SaveChangesAsync();
+        }
+
+        // Reload all ingredients
+        var allIngredients = await appDb.Ingredients
+            .Where(i => basicIngredientNames.Contains(i.CanonicalName))
+            .ToDictionaryAsync(i => i.CanonicalName, i => i.Id);
+
+        // Create packs
+        var packs = new List<IngredientPack>
+        {
+            new IngredientPack(Guid.NewGuid(), "Kahvaltılıklar", isSystem: true, sortOrder: 1),
+            new IngredientPack(Guid.NewGuid(), "Temel Baharatlar", isSystem: true, sortOrder: 2),
+            new IngredientPack(Guid.NewGuid(), "Fitness Temelleri", isSystem: true, sortOrder: 3)
+        };
+
+        appDb.IngredientPacks.AddRange(packs);
+        await appDb.SaveChangesAsync();
+
+        // Add pack items
+        var packItems = new List<IngredientPackItem>();
+
+        // Extract ingredient IDs
+        allIngredients.TryGetValue("Yumurta", out var eggId);
+        allIngredients.TryGetValue("Süt", out var milkId);
+        allIngredients.TryGetValue("Yoğurt", out var yogurtId);
+        allIngredients.TryGetValue("Yulaf", out var oatsId);
+        allIngredients.TryGetValue("Muz", out var bananaId);
+        allIngredients.TryGetValue("Tuz", out var saltId);
+        allIngredients.TryGetValue("Karabiber", out var pepperId);
+        allIngredients.TryGetValue("Tavuk", out var chickenId);
+
+        // Kahvaltılıklar: Yumurta, Süt, Yoğurt, Yulaf, Muz
+        if (eggId != Guid.Empty && milkId != Guid.Empty && yogurtId != Guid.Empty && oatsId != Guid.Empty && bananaId != Guid.Empty)
+        {
+            packItems.AddRange(new[]
+            {
+                new IngredientPackItem(packs[0].Id, eggId),
+                new IngredientPackItem(packs[0].Id, milkId),
+                new IngredientPackItem(packs[0].Id, yogurtId),
+                new IngredientPackItem(packs[0].Id, oatsId),
+                new IngredientPackItem(packs[0].Id, bananaId)
+            });
+        }
+
+        // Temel Baharatlar: Tuz, Karabiber
+        if (saltId != Guid.Empty && pepperId != Guid.Empty)
+        {
+            packItems.AddRange(new[]
+            {
+                new IngredientPackItem(packs[1].Id, saltId),
+                new IngredientPackItem(packs[1].Id, pepperId)
+            });
+        }
+
+        // Fitness Temelleri: Tavuk, Yulaf, Muz, Yoğurt
+        if (chickenId != Guid.Empty && oatsId != Guid.Empty && bananaId != Guid.Empty && yogurtId != Guid.Empty)
+        {
+            packItems.AddRange(new[]
+            {
+                new IngredientPackItem(packs[2].Id, chickenId),
+                new IngredientPackItem(packs[2].Id, oatsId),
+                new IngredientPackItem(packs[2].Id, bananaId),
+                new IngredientPackItem(packs[2].Id, yogurtId)
+            });
+        }
+
+        if (packItems.Any())
+        {
+            appDb.IngredientPackItems.AddRange(packItems);
+            await appDb.SaveChangesAsync();
+        }
     }
 }
 

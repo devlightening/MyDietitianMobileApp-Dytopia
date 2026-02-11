@@ -18,6 +18,9 @@ public class DietitianClientLink
     
     public bool IsActive { get; private set; }
 
+    // Navigation properties
+    public Client Client { get; set; } = null!;
+
     private DietitianClientLink() { } // EF Core
 
     public DietitianClientLink(
@@ -31,6 +34,13 @@ public class DietitianClientLink
         PublicUserId = publicUserId;
         LinkedAt = DateTime.UtcNow;
         IsActive = true;
+    }
+
+    public void SetPublicUserIdIfEmpty(string publicUserId)
+    {
+        if (!string.IsNullOrEmpty(PublicUserId))
+            throw new InvalidOperationException("PublicUserId is already set for this link");
+        PublicUserId = publicUserId;
     }
 
     public void Deactivate()
