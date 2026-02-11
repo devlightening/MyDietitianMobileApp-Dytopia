@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,13 +13,16 @@ using MyDietitianMobileApp.Application.Handlers;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Services;
+using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
-using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Api.Middleware;
+using MyDietitianMobileApp.Api.Services;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Npgsql;
 using System.Text;
+using System.Threading.RateLimiting;
 using System.Threading.Tasks;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
@@ -98,6 +104,7 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 // ====================
 builder.Services.AddScoped<PasswordHasherService>();
 builder.Services.AddScoped<IHealthCalculationService, HealthCalculationService>();
+builder.Services.AddScoped<IPremiumStatusService, PremiumStatusService>();
 builder.Services.AddScoped<IAlternativeMealDecisionService, AlternativeMealDecisionService>();
 builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -105,11 +112,29 @@ builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IDietitianRepository, DietitianRepository>();
 builder.Services.AddScoped<IClientRepository, ClientRepository>();
+builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
 
 // ====================
 // ASP.NET CORE SERVICES
 // ====================
 builder.Services.AddHttpContextAccessor();
+
+// ====================
+// DISTRIBUTED CACHE (Lockout / rate limiting metadata)
+// ====================
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(redisConnection))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.InstanceName = "MyDietitian:";
+    });
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
 
 // ====================
 // MediatR (CQRS)
@@ -129,6 +154,75 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowCredentials();
     });
+});
+
+// ====================
+// RATE LIMITING
+// ====================
+builder.Services.AddRateLimiter(options =>
+{
+    // Auth endpoints: IP-based sliding window
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromSeconds(10),
+                SegmentsPerWindow = 2,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    // Access key generation: per-dietitian focused throttling
+    options.AddPolicy("keygen", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"keygen:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    // Pantry operations: per-client throttling
+    options.AddPolicy("pantry", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"pantry:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/problem+json";
+
+        var problem = MyDietitianMobileApp.Api.Problems.ApiProblems
+            .TooManyRequests("RATE_LIMITED", "Çok fazla istek gönderdiniz. Lütfen daha sonra tekrar deneyin.");
+
+        await context.HttpContext.Response.WriteAsJsonAsync(problem, cancellationToken: token);
+    };
 });
 
 // ====================
@@ -154,8 +248,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            NameClaimType = JwtRegisteredClaimNames.Sub,
-            RoleClaimType = ClaimTypes.Role
+            NameClaimType = "sub",
+            RoleClaimType = "role"
         };
 
         options.Events = new JwtBearerEvents
@@ -188,6 +282,9 @@ builder.Services.AddAuthorization(options =>
     });
 });
 
+// Standardize 401/403 responses as ProblemDetails
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemDetailsAuthorizationMiddlewareResultHandler>();
+
 var app = builder.Build();
 
 // ====================
@@ -216,6 +313,75 @@ if (app.Environment.IsDevelopment())
 }
 
 // ====================
+// ONE-TIME DATA FIXES (IDEMPOTENT)
+// ====================
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+    // Backfill missing PublicUserId values on DietitianClientLinks and associated UserAccounts
+    var linksWithoutPublicId = await appDb.DietitianClientLinks
+        .Where(l => string.IsNullOrWhiteSpace(l.PublicUserId))
+        .ToListAsync();
+
+    if (linksWithoutPublicId.Any())
+    {
+        logger.LogInformation("Backfilling PublicUserId for {Count} dietitian-client links", linksWithoutPublicId.Count);
+
+        foreach (var link in linksWithoutPublicId)
+        {
+            var userAccount = await authDb.UserAccounts
+                .FirstOrDefaultAsync(u => u.LinkedClientId == link.ClientId);
+
+            string publicUserId;
+
+            if (userAccount != null && !string.IsNullOrWhiteSpace(userAccount.PublicUserId))
+            {
+                publicUserId = userAccount.PublicUserId;
+            }
+            else
+            {
+                // Generate unique PublicUserId
+                do
+                {
+                    publicUserId = PublicUserIdGenerator.Generate();
+                } while (await authDb.UserAccounts.AnyAsync(u => u.PublicUserId == publicUserId)
+                      || await appDb.DietitianClientLinks.AnyAsync(l => l.PublicUserId == publicUserId));
+
+                if (userAccount != null)
+                {
+                    userAccount.SetPublicUserId(publicUserId);
+                }
+            }
+
+            link.SetPublicUserIdIfEmpty(publicUserId);
+        }
+
+        await authDb.SaveChangesAsync();
+        await appDb.SaveChangesAsync();
+    }
+
+    // Seed initial public recipes for free users (idempotent)
+    if (!await appDb.Recipes.AnyAsync(r => r.IsPublic))
+    {
+        var seedRecipes = new List<Recipe>();
+        for (int i = 1; i <= 50; i++)
+        {
+            var id = Guid.NewGuid();
+            var name = $"Genel Tarif {i}";
+            var description = "Sistem tarafından tanımlanmış genel tarif.";
+            var recipe = new Recipe(id, null, name, description, isPublic: true);
+            seedRecipes.Add(recipe);
+        }
+
+        await appDb.Recipes.AddRangeAsync(seedRecipes);
+        await appDb.SaveChangesAsync();
+    }
+}
+
+// ====================
 // MIDDLEWARE PIPELINE
 // ====================
 if (app.Environment.IsDevelopment())
@@ -224,7 +390,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Forwarded headers (for reverse proxy / real client IP)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardLimit = 1,
+    // Trust all proxies by default; can be restricted via config in production
+});
+
 app.UseCors("Frontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<GlobalExceptionMiddleware>();
@@ -254,7 +429,9 @@ if (app.Environment.IsDevelopment())
             environment = app.Environment.EnvironmentName,
             utc = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")
         });
-    }).AllowAnonymous();
+    })
+    .AllowAnonymous()
+    .WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });
 
     // AG-DASH-FIX-14: List all registered endpoints
     app.MapGet("/debug/endpoints", (IEnumerable<Microsoft.AspNetCore.Routing.EndpointDataSource> sources) =>
@@ -280,7 +457,9 @@ if (app.Environment.IsDevelopment())
             dashboardEndpoints,
             allEndpoints = endpoints
         });
-    }).AllowAnonymous();
+    })
+    .AllowAnonymous()
+    .WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });
 }
 
 app.Run();
