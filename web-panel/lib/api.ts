@@ -33,7 +33,14 @@ api.interceptors.response.use(
       message: error.response?.data?.message ?? error.message ?? 'An unexpected error occurred',
     };
 
-    // No navigation logic here - let pages/guards handle auth
+    // Handle authentication/authorization errors
+    if (status === 401 || status === 403) {
+      // Only redirect if we're not already on auth pages
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
+        window.location.href = '/auth/login';
+      }
+    }
+
     return Promise.reject(apiError);
   }
 );
