@@ -1,6 +1,5 @@
 "use client"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
 import { useState } from 'react'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Card } from '@/components/ui/Card'
@@ -10,6 +9,7 @@ import { Plus, ChefHat, AlertCircle, X } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { IngredientAutocomplete, IngredientOption } from '@/components/ingredients/IngredientAutocomplete'
+import { getRecipes, createRecipe } from '@/lib/api/recipes'
 
 interface RecipeIngredient {
   ingredientId: string;
@@ -20,10 +20,10 @@ interface RecipeIngredient {
   isProhibited: boolean;
 }
 
-function RecipeIngredientsInput({ 
-  value, 
-  onChange 
-}: { 
+function RecipeIngredientsInput({
+  value,
+  onChange
+}: {
   value: RecipeIngredient[];
   onChange: (ingredients: RecipeIngredient[]) => void;
 }) {
@@ -146,41 +146,34 @@ function RecipeIngredientsInput({
   );
 }
 
-async function fetchRecipes() {
-  try {
-    const res = await api.get('/api/recipes');
-    return res.data.recipes;
-  } catch (err: any) {
-    throw new Error(err?.toString() || 'Failed to load recipes');
-  }
-}
-
-async function createRecipe(data: { 
-  name: string; 
-  description: string;
-  mandatoryIngredientIds: string[];
-  optionalIngredientIds: string[];
-  prohibitedIngredientIds: string[];
-}) {
-  return api.post('/api/recipes', data)
-}
-
 export default function RecipesPage() {
   const t = useTranslations('recipes');
   const tCommon = useTranslations('common');
   const queryClient = useQueryClient()
-  const { data: recipes, isLoading, error, refetch } = useQuery({
+  const { data: recipesData, isLoading, error, refetch } = useQuery({
     queryKey: ['recipes'],
-    queryFn: fetchRecipes
+    queryFn: getRecipes
   })
+
+  const recipes = recipesData?.recipes || [];
+
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
     { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true, isProhibited: false }
   ])
-  
+
   const mutation = useMutation({
-    mutationFn: createRecipe,
+    mutationFn: (data: {
+      name: string;
+      description: string;
+      ingredients: Array<{
+        ingredientId: string;
+        quantity: number;
+        unit: string;
+      }>;
+      isPublic: boolean;
+    }) => createRecipe(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] })
       setName("")
@@ -191,41 +184,34 @@ export default function RecipesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate: All ingredients must be selected
     const hasUnselectedIngredients = ingredients.some(ing => !ing.ingredientId);
     if (hasUnselectedIngredients) {
-      // Could show a toast/error message here
+      alert('Lütfen tüm malzemeleri seçin');
       return;
     }
 
-    // Separate mandatory and optional ingredients
-    const mandatoryIngredientIds = ingredients
-      .filter(ing => ing.isMandatory && ing.ingredientId)
-      .map(ing => ing.ingredientId);
-    
-    const optionalIngredientIds = ingredients
-      .filter(ing => !ing.isMandatory && ing.ingredientId)
-      .map(ing => ing.ingredientId);
-
-    const prohibitedIngredientIds = ingredients
-      .filter(ing => ing.isProhibited && ing.ingredientId)
-      .map(ing => ing.ingredientId);
+    // Transform ingredients to API format
+    const apiIngredients = ingredients.map(ing => ({
+      ingredientId: ing.ingredientId,
+      quantity: parseFloat(ing.amount) || 0,
+      unit: ing.unit
+    }));
 
     mutation.mutate({
       name,
       description,
-      mandatoryIngredientIds,
-      optionalIngredientIds,
-      prohibitedIngredientIds
+      ingredients: apiIngredients,
+      isPublic: true
     });
   };
 
-  const canSubmit = name.trim() && 
-                    description.trim() && 
-                    ingredients.length > 0 && 
-                    ingredients.every(ing => ing.ingredientId) &&
-                    !mutation.isPending;
+  const canSubmit = name.trim() &&
+    description.trim() &&
+    ingredients.length > 0 &&
+    ingredients.every(ing => ing.ingredientId) &&
+    !mutation.isPending;
 
   return (
     <div className="space-y-8">
@@ -256,7 +242,7 @@ export default function RecipesPage() {
             onChange={e => setDescription(e.target.value)}
             required
           />
-          <RecipeIngredientsInput 
+          <RecipeIngredientsInput
             value={ingredients}
             onChange={setIngredients}
           />

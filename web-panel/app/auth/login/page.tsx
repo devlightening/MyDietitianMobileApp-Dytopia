@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { dietitianLogin } from "@/lib/auth-api";
 
 export default function DietitianLoginPage() {
   const [values, setValues] = useState({ email: '', password: '', remember: false });
@@ -20,24 +21,12 @@ export default function DietitianLoginPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/dietitian/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: values.email.trim(), password: values.password })
+      await dietitianLogin({
+        email: values.email.trim(),
+        password: values.password
       });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || 'E-posta veya şifre hatalı.');
-      }
-      const data = await res.json();
 
-      // Store in localStorage for client-side axios interceptor
-      localStorage.setItem("accessToken", data.token);
-
-      // Store in cookie for ServerGuard
-      document.cookie = `access_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
-
+      // Cookie is set automatically by backend
       window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err?.message || 'E-posta veya şifre hatalı.');

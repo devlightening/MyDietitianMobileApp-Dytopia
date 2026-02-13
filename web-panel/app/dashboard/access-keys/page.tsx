@@ -1,26 +1,24 @@
 'use client';
 import { useQuery } from '@tanstack/react-query'
-import api from '@/lib/api'
 import { useState } from 'react'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Key, Plus, Check } from 'lucide-react'
+import { Key, Plus, Check, Copy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
-
-function fetchAccessKeys() {
-  return api.get('/api/dietitian/access-keys').then(res => res.data.accessKeys)
-}
+import { getAccessKeys, createAccessKeyForClient } from '@/lib/api/access-keys'
 
 export default function AccessKeysPage() {
   const t = useTranslations('accessKeys');
   const router = useRouter();
-  const { data: accessKeys, isLoading, refetch } = useQuery({
+  const { data: accessKeysData, isLoading, refetch } = useQuery({
     queryKey: ['accessKeys'],
-    queryFn: fetchAccessKeys
+    queryFn: getAccessKeys
   })
+
+  const accessKeys = accessKeysData?.accessKeys || [];
 
   const [formData, setFormData] = useState({
     clientPublicUserId: '',
@@ -28,6 +26,7 @@ export default function AccessKeysPage() {
     endDate: ''
   });
   const [loading, setLoading] = useState(false);
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
 
   const handlePublicUserIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
@@ -61,24 +60,17 @@ export default function AccessKeysPage() {
 
     setLoading(true);
     try {
-      // DEBUG: Verify JWT exists
-      const token = localStorage.getItem('accessToken');
-      console.log('🔑 JWT Token:', token ? `${token.substring(0, 20)}...` : 'MISSING');
-
-      const response = await api.post('/api/dietitian/access-keys', {
-        clientId: formData.clientPublicUserId,
+      const result = await createAccessKeyForClient(formData.clientPublicUserId, {
         startDate: formData.startDate,
         endDate: formData.endDate
       });
 
-      console.log('✅ Request sent with Authorization header');
+      setCreatedKey(result.accessKey);
 
-      if (!response.data.success) {
-        const error = response.data.error;
-        throw new Error(error.message || 'Key oluşturulamadı');
-      }
+      // Copy to clipboard
+      navigator.clipboard.writeText(result.accessKey);
+      alert(`Access key oluşturuldu ve panoya kopyalandı!\n\nKey: ${result.accessKey}`);
 
-      alert('Access key başarıyla oluşturuldu!');
       setFormData({ clientPublicUserId: '', startDate: '', endDate: '' });
       refetch();
     } catch (error: any) {
