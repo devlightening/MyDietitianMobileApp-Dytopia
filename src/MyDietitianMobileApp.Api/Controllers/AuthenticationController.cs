@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Infrastructure.Services;
 
@@ -39,7 +40,7 @@ public class AuthenticationController : ControllerBase
     /// Dietitian login (legacy route, use /api/dietitian/login instead)
     /// </summary>
     [HttpPost("dietitian/login")]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("auth-strict")]
     [ApiExplorerSettings(IgnoreApi = true)] // Hidden from Swagger (use /api/dietitian/login instead)
     public async Task<IActionResult> DietitianLogin([FromBody] DietitianLoginRequest request)
     {
@@ -93,14 +94,14 @@ public class AuthenticationController : ControllerBase
         };
 
         Response.Cookies.Append("access_token", token, cookieOptions);
-        return Ok(new { ok = true });
+        return Ok(new { ok = true, token });
     }
 
     /// <summary>
     /// Admin login
     /// </summary>
     [HttpPost("admin/login")]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> AdminLogin([FromBody] AdminLoginRequest request)
     {
         var user = await _authDb.UserAccounts
@@ -146,6 +147,73 @@ public class AuthenticationController : ControllerBase
         };
 
         Response.Cookies.Append("access_token", token, cookieOptions);
+        return Ok(new { ok = true });
+    }
+
+    /// <summary>
+    /// Dietitian register for web panel
+    /// </summary>
+    /// <remarks>
+    /// Contract used by web-panel:
+    /// POST /api/auth/dietitian/register
+    /// {
+    ///   "fullName": "Dr. Example",
+    ///   "clinicName": "Example Clinic",
+    ///   "email": "example@example.com",
+    ///   "password": "Strong123"
+    /// }
+    /// </remarks>
+    [HttpPost("dietitian/register")]
+    [EnableRateLimiting("auth-strict")]
+    public async Task<IActionResult> RegisterDietitian([FromBody] DietitianRegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "Email and password required" });
+
+        var exists = await _authDb.UserAccounts
+            .AnyAsync(u => u.Email == request.Email && u.Role == "Dietitian");
+
+        if (exists)
+            return Conflict(new { message = "Email already in use" });
+
+        if (request.Password.Length < 8 ||
+            !request.Password.Any(char.IsUpper) ||
+            !request.Password.Any(char.IsDigit))
+        {
+            return BadRequest(new { message = "Password must be 8+ chars, include 1 uppercase and 1 digit." });
+        }
+
+        var dietitian = new MyDietitianMobileApp.Domain.Entities.Dietitian(
+            Guid.NewGuid(),
+            request.FullName,
+            request.ClinicName,
+            true
+        );
+
+        _appDb.Dietitians.Add(dietitian);
+        await _appDb.SaveChangesAsync();
+
+        try
+        {
+            var user = new UserAccount
+            {
+                Id = Guid.NewGuid(),
+                Email = request.Email,
+                Role = "Dietitian",
+                LinkedDietitianId = dietitian.Id,
+                PasswordHash = _hasher.HashPassword(request.Password)
+            };
+
+            _authDb.UserAccounts.Add(user);
+            await _authDb.SaveChangesAsync();
+        }
+        catch
+        {
+            _appDb.Dietitians.Remove(dietitian);
+            await _appDb.SaveChangesAsync();
+            throw;
+        }
+
         return Ok(new { ok = true });
     }
 

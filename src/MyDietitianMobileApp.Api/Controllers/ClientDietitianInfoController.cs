@@ -49,10 +49,12 @@ public class ClientDietitianInfoController : ControllerBase
 
         var (userId, clientId, _) = identity.Value;
 
-        // Premium gate
+        // For free users, return null dietitian (graceful degradation)
         var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userId, CancellationToken.None);
         if (!premiumStatus.IsPremium || !premiumStatus.ActiveDietitianId.HasValue)
-            return StatusCode(403, ApiProblems.PremiumRequired());
+        {
+            return Ok(new { dietitian = (object?)null });
+        }
 
         var dietitianId = premiumStatus.ActiveDietitianId.Value;
 

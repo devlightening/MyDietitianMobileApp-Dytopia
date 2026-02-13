@@ -17,7 +17,7 @@ export default function ProfileMeasurementsScreen({ navigation }: any) {
 
   async function loadLatestMeasurement() {
     try {
-      const response = await api.get('/api/profile/measurements');
+      const response = await api.get('/api/client/progress/measurements');
       if (response.data.latest) {
         setLatestMeasurement(response.data.latest);
         setHeightCm(response.data.latest.heightCm.toString());
@@ -48,7 +48,7 @@ export default function ProfileMeasurementsScreen({ navigation }: any) {
 
     setLoading(true);
     try {
-      const response = await api.post('/api/profile/measurements', {
+      const response = await api.post('/api/client/progress/measurements', {
         weightKg: weight,
         heightCm: height
       });

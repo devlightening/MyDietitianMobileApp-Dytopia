@@ -280,9 +280,9 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                         v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
                 entity.Property(e => e.Status).IsRequired();
 
-                // Navigation property mapping (backing field)
-                entity.HasMany<DietPlanDay>()
-                    .WithOne()
+                // Navigation property mapping (backing field) with explicit FK to avoid shadow FK
+                entity.HasMany(d => d.Days)
+                    .WithOne(d => d.DietPlan)
                     .HasForeignKey(d => d.DietPlanId)
                     .OnDelete(DeleteBehavior.Cascade);
                 
@@ -308,9 +308,9 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                         d => DateTime.SpecifyKind(d.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
                         d => DateOnly.FromDateTime(DateTime.SpecifyKind(d, DateTimeKind.Utc)));
 
-                // Navigation property mapping
-                entity.HasMany<DietPlanMeal>()
-                    .WithOne()
+                // Navigation property mapping with explicit FK to avoid shadow FK
+                entity.HasMany(d => d.Meals)
+                    .WithOne(m => m.DietPlanDay)
                     .HasForeignKey(m => m.DietPlanDayId)
                     .OnDelete(DeleteBehavior.Cascade);
                 

@@ -1,5 +1,7 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/dashboard/recipes/create/page": "app/dashboard/recipes/create/page.js",
-  "/auth/login/page": "app/auth/login/page.js"
+  "/dashboard/clients/page": "app/dashboard/clients/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/auth/login/page": "app/auth/login/page.js",
+  "/auth/register/page": "app/auth/register/page.js",
+  "/dashboard/clients/[clientId]/page": "app/dashboard/clients/[clientId]/page.js"
 }

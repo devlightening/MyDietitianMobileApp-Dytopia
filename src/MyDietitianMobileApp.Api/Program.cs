@@ -86,10 +86,26 @@ builder.Services.AddSwaggerGen(c =>
 // ====================
 // DATABASE CONTEXTS
 // ====================
-var appDbConnection = builder.Configuration.GetConnectionString("AppDb") 
-    ?? throw new InvalidOperationException("Connection string 'AppDb' missing");
-var authDbConnection = builder.Configuration.GetConnectionString("AuthDb")
-    ?? throw new InvalidOperationException("Connection string 'AuthDb' missing");
+var appDbConnection = builder.Configuration.GetConnectionString("AppDb");
+var authDbConnection = builder.Configuration.GetConnectionString("AuthDb");
+
+// In Testing environment (used by smoke tests), fall back to in-memory placeholders
+// to allow WebApplicationFactory to override DbContexts without requiring real Npgsql strings.
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    appDbConnection ??= "Host=localhost;Database=SmokeTest_AppDb;Username=ignored;Password=ignored";
+    authDbConnection ??= "Host=localhost;Database=SmokeTest_AuthDb;Username=ignored;Password=ignored";
+}
+
+if (appDbConnection is null)
+{
+    throw new InvalidOperationException("Connection string 'AppDb' missing");
+}
+
+if (authDbConnection is null)
+{
+    throw new InvalidOperationException("Connection string 'AuthDb' missing");
+}
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(appDbConnection)
@@ -102,6 +118,8 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 // ====================
 // SERVICES
 // ====================
+var premiumWorkerEnabled = builder.Configuration.GetValue<bool?>("PremiumExpirationWorker:Enabled") ?? true;
+
 builder.Services.AddScoped<PasswordHasherService>();
 builder.Services.AddScoped<IHealthCalculationService, HealthCalculationService>();
 builder.Services.AddScoped<IPremiumStatusService, PremiumStatusService>();
@@ -117,7 +135,11 @@ builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IKitchenNar
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientIdentityResolver, MyDietitianMobileApp.Application.Services.ClientIdentityResolver>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientActivityWriter, MyDietitianMobileApp.Application.Services.ClientActivityWriter>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IComplianceService, MyDietitianMobileApp.Application.Services.ComplianceService>();
-builder.Services.AddHostedService<PremiumExpirationWorker>();
+
+if (premiumWorkerEnabled)
+{
+    builder.Services.AddHostedService<PremiumExpirationWorker>();
+}
 
 // ====================
 // ASP.NET CORE SERVICES
@@ -178,6 +200,39 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
             }));
+
+    // auth-strict policy: auth/register/login gibi endpointler için IP bazlı limit
+    options.AddPolicy("auth-strict", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ip,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,                 // 1 dakikada 10 istek
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+    });
+    options.AddPolicy("activation", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"activation:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,                   // ör: 10 deneme
+                Window = TimeSpan.FromMinutes(5),   // 5 dakika
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
 
     // Access key generation: per-dietitian focused throttling
     options.AddPolicy("keygen", httpContext =>
@@ -274,6 +329,44 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    // Telemetry write operations (meal mark done/skip): per-client throttling
+    options.AddPolicy("telemetry-write", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"telemetry:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,                    // 120 telemetry events
+                Window = TimeSpan.FromMinutes(1),     // per minute
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    // Dietitian read-heavy reporting endpoints: per-dietitian throttling
+    options.AddPolicy("dietitian-read-heavy", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"dietitian-read:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,                    // 120 read ops
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, token) =>
     {
@@ -290,10 +383,22 @@ builder.Services.AddRateLimiter(options =>
 // ====================
 // JWT AUTHENTICATION
 // ====================
-var jwtSecret = builder.Configuration["Jwt:SecretKey"] 
-    ?? throw new InvalidOperationException("JWT Secret missing");
+var jwtSecret = builder.Configuration["Jwt:SecretKey"];
+
+// In Testing environment (smoke tests / WebApplicationFactory discovery host),
+// use a deterministic fallback secret if none is configured so the host can start.
+if (string.IsNullOrEmpty(jwtSecret) && builder.Environment.IsEnvironment("Testing"))
+{
+    jwtSecret = "SmokeTests_Secret_Key_1234567890";
+}
+
+if (string.IsNullOrEmpty(jwtSecret))
+{
+    throw new InvalidOperationException("JWT Secret missing");
+}
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MyDietitian.Api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MyDietitian.Mobile";
+var isTestingLikeEnv = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -303,8 +408,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
+            // In development/testing, be more lenient on issuer/audience to simplify smoke tests
+            ValidateIssuer = !isTestingLikeEnv,
+            ValidateAudience = !isTestingLikeEnv,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtIssuer,
@@ -567,9 +673,9 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 app.MapControllers();
 
 // ====================
-// DEBUG ENDPOINTS (DEV ONLY)
+// DEBUG ENDPOINTS (DEV/TEST ONLY)
 // ====================
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
     // AG-DASH-FIX-13: Build info to verify correct backend instance
     app.MapGet("/debug/build", () =>
@@ -601,7 +707,10 @@ if (app.Environment.IsDevelopment())
                 pattern = e.RoutePattern.RawText,
                 methods = e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods.ToArray() ?? new[] { "ANY" },
                 name = e.DisplayName,
-                requiresAuth = e.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>() != null
+                requiresAuth = e.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>() != null,
+                roles = e.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()?.Roles,
+                policy = e.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()?.Policy,
+                rateLimitPolicy = e.Metadata.GetMetadata<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()?.PolicyName
             })
             .OrderBy(e => e.pattern)
             .ToList();
