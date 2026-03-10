@@ -32,7 +32,7 @@ public class ActivatePremiumCommandHandler : IRequestHandler<ActivatePremiumComm
 
         // Find access key
         var accessKey = await _context.AccessKeys
-            .FirstOrDefaultAsync(k => k.Key == request.AccessKey, cancellationToken);
+            .FirstOrDefaultAsync(k => k.KeyValue == request.AccessKey, cancellationToken);
 
         if (accessKey == null)
         {
@@ -69,8 +69,8 @@ public class ActivatePremiumCommandHandler : IRequestHandler<ActivatePremiumComm
         // Activate premium
         client.ActivatePremium(
             accessKey.DietitianId,
-            accessKey.StartDate,
-            accessKey.EndDate
+            accessKey.CreatedAtUtc,
+            accessKey.ExpiresAtUtc
         );
 
         // Mark key as used
@@ -88,8 +88,8 @@ public class ActivatePremiumCommandHandler : IRequestHandler<ActivatePremiumComm
             Message = "Premium aktivasyonu başarılı! Artık diyet planınıza erişebilirsiniz.",
             DietitianId = accessKey.DietitianId,
             DietitianName = dietitian?.FullName ?? "Diyetisyen",
-            ProgramStartDate = accessKey.StartDate,
-            ProgramEndDate = accessKey.EndDate
+            ProgramStartDate = accessKey.CreatedAtUtc,
+            ProgramEndDate = accessKey.ExpiresAtUtc
         };
     }
 }

@@ -2,15 +2,19 @@ import { cn } from '@/lib/utils';
 import { ReactNode } from 'react';
 
 interface CardProps {
-  className?: string;
   children: ReactNode;
+  className?: string;
+  interactive?: boolean;
+  onClick?: () => void;
 }
 
-export function Card({ className, children }: CardProps) {
+export function Card({ children, className, interactive, onClick }: CardProps) {
   return (
     <div
+      onClick={onClick}
       className={cn(
-        'rounded-xl bg-card border border-border shadow-sm transition-all duration-200',
+        'card-premium',
+        interactive && 'interactive-card cursor-pointer',
         className
       )}
     >

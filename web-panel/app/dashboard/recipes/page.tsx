@@ -152,10 +152,10 @@ export default function RecipesPage() {
   const queryClient = useQueryClient()
   const { data: recipesData, isLoading, error, refetch } = useQuery({
     queryKey: ['recipes'],
-    queryFn: getRecipes
+    queryFn: () => getRecipes({ page: 1, pageSize: 50 })
   })
 
-  const recipes = recipesData?.recipes || [];
+  const recipes = recipesData?.items || [];
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -167,12 +167,10 @@ export default function RecipesPage() {
     mutationFn: (data: {
       name: string;
       description: string;
-      ingredients: Array<{
-        ingredientId: string;
-        quantity: number;
-        unit: string;
-      }>;
       isPublic: boolean;
+      mandatoryIngredients: string[];
+      optionalIngredients?: string[];
+      prohibitions?: string[];
     }) => createRecipe(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] })
@@ -192,18 +190,24 @@ export default function RecipesPage() {
       return;
     }
 
-    // Transform ingredients to API format
-    const apiIngredients = ingredients.map(ing => ({
-      ingredientId: ing.ingredientId,
-      quantity: parseFloat(ing.amount) || 0,
-      unit: ing.unit
-    }));
+    // Separate into mandatory / optional by role
+    const mandatoryIngredients = ingredients
+      .filter(ing => ing.isMandatory && !ing.isProhibited && ing.ingredientId)
+      .map(ing => ing.ingredientId);
+    const optionalIngredients = ingredients
+      .filter(ing => !ing.isMandatory && !ing.isProhibited && ing.ingredientId)
+      .map(ing => ing.ingredientId);
+    const prohibitions = ingredients
+      .filter(ing => ing.isProhibited && ing.ingredientId)
+      .map(ing => ing.ingredientId);
 
     mutation.mutate({
       name,
       description,
-      ingredients: apiIngredients,
-      isPublic: true
+      isPublic: false,
+      mandatoryIngredients,
+      optionalIngredients,
+      prohibitions,
     });
   };
 

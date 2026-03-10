@@ -63,7 +63,7 @@ public class ClientController : ControllerBase
 
             // Load access key (including already-used ones for idempotency)
             var accessKey = await _appDb.AccessKeys
-                .FirstOrDefaultAsync(k => k.Key == request.AccessKey);
+                .FirstOrDefaultAsync(k => k.KeyValue == request.AccessKey);
 
             if (accessKey == null || accessKey.ClientId != client.Id)
                 return NotFound(new { message = "Geçersiz erişim anahtarı" });
@@ -93,7 +93,7 @@ public class ClientController : ControllerBase
                 return BadRequest(new { message = "Erişim anahtarı geçersiz veya süresi dolmuş" });
 
             // Update client premium status using domain method
-            client.ActivatePremium(dietitian.Id, accessKey.StartDate, accessKey.EndDate);
+            client.ActivatePremium(dietitian.Id, accessKey.CreatedAtUtc, accessKey.ExpiresAtUtc);
 
             // Mark key as used
             accessKey.MarkAsActivated();
@@ -126,9 +126,9 @@ public class ClientController : ControllerBase
                 System.Text.Json.JsonSerializer.Serialize(new
                 {
                     accessKeyId = accessKey.Id,
-                    accessKey = accessKey.Key,
-                    startDate = accessKey.StartDate,
-                    endDate = accessKey.EndDate
+                    accessKey = accessKey.KeyValue,
+                    startDate = accessKey.CreatedAtUtc,
+                    endDate = accessKey.ExpiresAtUtc
                 }));
 
             _appDb.PremiumAuditLogs.Add(audit);

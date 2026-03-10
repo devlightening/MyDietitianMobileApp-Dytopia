@@ -10,6 +10,10 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<Client> Clients { get; set; }
         public DbSet<Recipe> Recipes { get; set; }
         public DbSet<Ingredient> Ingredients { get; set; }
+        public DbSet<RecipeIngredient> RecipeIngredients { get; set; } = null!;
+        public DbSet<RecipeSubstitute> RecipeSubstitutes { get; set; } = null!;
+        public DbSet<RecipeProhibition> RecipeProhibitions { get; set; } = null!;
+        public DbSet<ClientIngredientProhibition> ClientIngredientProhibitions { get; set; } = null!;
         public DbSet<AccessKey> AccessKeys { get; set; }
         public DbSet<ClientPantryItem> ClientPantryItems { get; set; }
         public DbSet<PremiumAuditLog> PremiumAuditLogs { get; set; }
@@ -17,7 +21,10 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ClientProhibitedIngredient> ClientProhibitedIngredients { get; set; }
         public DbSet<IngredientPack> IngredientPacks { get; set; }
         public DbSet<IngredientPackItem> IngredientPackItems { get; set; }
-        
+        public DbSet<IngredientFamily> IngredientFamilies { get; set; }
+        public DbSet<IngredientFamilyMember> IngredientFamilyMembers { get; set; }
+        public DbSet<IngredientCompatibilityRule> IngredientCompatibilityRules { get; set; }
+
         // EPIC E: Progress tracking
         public DbSet<ClientDailyTracking> ClientDailyTrackings { get; set; }
         public DbSet<ClientWeightEntry> ClientWeightEntries { get; set; }
@@ -26,6 +33,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<MealCompletion> MealCompletions { get; set; }
         public DbSet<DailyComplianceSnapshot> DailyComplianceSnapshots { get; set; }
         public DbSet<DietitianBrandingConfig> DietitianBrandingConfigs { get; set; }
+        public DbSet<DietitianSettings> DietitianSettings { get; set; }
         public DbSet<DietitianNote> DietitianNotes { get; set; }
         
         // FAZ 3: Permanent Binding & Measurements
@@ -44,6 +52,14 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<MealItemCompliance> MealItemCompliance { get; set; }
         public DbSet<ComplianceScoreConfig> ComplianceScoreConfigs { get; set; }
         public DbSet<MealCompliance> MealCompliances { get; set; }
+        
+        // New meal plan system
+        public DbSet<ClientMealPlan> ClientMealPlans { get; set; }
+        public DbSet<ClientMeal> ClientMeals { get; set; }
+
+        // Evaluation / logging
+        public DbSet<IngredientNormalizationLog> IngredientNormalizationLogs { get; set; }
+        public DbSet<RecipeRecommendationLog> RecipeRecommendationLogs { get; set; }
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -580,6 +596,83 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
+            // IngredientFamily configuration
+            modelBuilder.Entity<IngredientFamily>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Description)
+                    .HasMaxLength(1000);
+
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.HasIndex(e => e.IsActive);
+                entity.HasIndex(e => e.SortOrder);
+
+                entity.HasMany(e => e.Members)
+                    .WithOne(m => m.Family)
+                    .HasForeignKey(m => m.FamilyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // IngredientFamilyMember configuration
+            modelBuilder.Entity<IngredientFamilyMember>(entity =>
+            {
+                entity.HasKey(e => new { e.FamilyId, e.IngredientId });
+
+                entity.Property(e => e.Role)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(50);
+
+                entity.HasOne(e => e.Family)
+                    .WithMany(f => f.Members)
+                    .HasForeignKey(e => e.FamilyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Ingredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.IngredientId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // IngredientCompatibilityRule configuration
+            modelBuilder.Entity<IngredientCompatibilityRule>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.CompatibilityType)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.ScorePenalty)
+                    .HasPrecision(5, 2);
+
+                entity.Property(e => e.Reason)
+                    .HasMaxLength(500);
+
+                entity.HasIndex(e => e.RequiredIngredientId);
+                entity.HasIndex(e => e.CandidateIngredientId);
+                entity.HasIndex(e => e.IsActive);
+                
+                // Prevent duplicate rules for the same exact pair
+                entity.HasIndex(e => new { e.RequiredIngredientId, e.CandidateIngredientId }).IsUnique();
+
+                entity.HasOne(e => e.RequiredIngredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.RequiredIngredientId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.CandidateIngredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.CandidateIngredientId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
             // EPIC E: ClientDailyTracking configuration
             modelBuilder.Entity<ClientDailyTracking>(entity =>
             {
@@ -733,7 +826,6 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasKey(e => e.DietitianId);
 
                 entity.Property(e => e.ClinicName)
-                    .IsRequired()
                     .HasMaxLength(120);
 
                 entity.Property(e => e.LogoUrl)
@@ -742,12 +834,12 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.Property(e => e.PrimaryColorHex)
                     .IsRequired()
                     .HasMaxLength(7)
-                    .HasDefaultValue("#111111");
+                    .HasDefaultValue("#4A7C59");
 
                 entity.Property(e => e.AccentColorHex)
                     .IsRequired()
                     .HasMaxLength(7)
-                    .HasDefaultValue("#22C55E");
+                    .HasDefaultValue("#FF8C61");
 
                 entity.Property(e => e.UpdatedAtUtc)
                     .IsRequired();
@@ -759,6 +851,122 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .HasForeignKey<DietitianBrandingConfig>(e => e.DietitianId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            // IngredientNormalizationLog configuration
+            modelBuilder.Entity<IngredientNormalizationLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.RawInput)
+                    .IsRequired()
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.NormalizedInput)
+                    .IsRequired()
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.MatchedBy)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.MatchedCanonicalName)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.CandidateSummaryJson)
+                    .HasColumnType("jsonb")
+                    .IsRequired(false);
+
+                entity.Property(e => e.CorrelationId)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.RequestPath)
+                    .HasMaxLength(300);
+
+                entity.HasIndex(e => e.CreatedAtUtc);
+                entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.MatchedBy);
+                entity.HasIndex(e => e.MatchedIngredientId);
+            });
+
+            // RecipeRecommendationLog configuration
+            modelBuilder.Entity<RecipeRecommendationLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Flow)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.MissingMandatoryIdsJson)
+                    .HasColumnType("jsonb")
+                    .IsRequired(false);
+
+                entity.Property(e => e.AdditionalMetaJson)
+                    .HasColumnType("jsonb")
+                    .IsRequired(false);
+
+                entity.Property(e => e.CorrelationId)
+                    .HasMaxLength(100);
+
+                entity.HasIndex(e => e.CreatedAtUtc);
+                entity.HasIndex(e => e.Flow);
+                entity.HasIndex(e => e.ClientId);
+                entity.HasIndex(e => e.DietitianId);
+                entity.HasIndex(e => e.PlannedRecipeId);
+                entity.HasIndex(e => e.SelectedRecipeId);
+            });
+
+            // DietitianSettings configuration
+            modelBuilder.Entity<DietitianSettings>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                // Unique constraint: One settings record per dietitian
+                entity.HasIndex(e => e.DietitianId)
+                    .IsUnique();
+
+                entity.Property(e => e.ClinicName)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.DietitianDisplayName)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.PrimaryColorHex)
+                    .IsRequired()
+                    .HasMaxLength(7)
+                    .HasDefaultValue("#4A7C59"); // Sage
+
+                entity.Property(e => e.AccentColorHex)
+                    .IsRequired()
+                    .HasMaxLength(7)
+                    .HasDefaultValue("#8FBC8F"); // Forest
+
+                entity.Property(e => e.ThemePresetKey)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.LogoUrl)
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.CreatedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+
+                entity.Property(e => e.UpdatedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithOne()
+                    .HasForeignKey<DietitianSettings>(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
 
             // DietitianNote configuration
             modelBuilder.Entity<DietitianNote>(entity =>

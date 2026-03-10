@@ -1,376 +1,162 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
-using System.Security.Claims;
+using MyDietitianMobileApp.Domain.Services;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
 /// <summary>
-/// Manages dietitian's private recipes: full CRUD with IDOR protection
+/// Manages dietitian recipe operations: create, update, search with ingredient dictionary
 /// </summary>
-[Authorize("Dietitian")]
+[Authorize]
 [ApiController]
 [Route("api/dietitian/recipes")]
 public class DietitianRecipesController : ControllerBase
 {
     private readonly AppDbContext _appDb;
     private readonly AuthDbContext _authDb;
+    private readonly RecipeMatchService _matchService;
     private readonly ILogger<DietitianRecipesController> _logger;
 
     public DietitianRecipesController(
         AppDbContext appDb,
         AuthDbContext authDb,
+        RecipeMatchService matchService,
         ILogger<DietitianRecipesController> logger)
     {
         _appDb = appDb;
         _authDb = authDb;
+        _matchService = matchService;
         _logger = logger;
     }
 
     /// <summary>
-    /// List dietitian's recipes with pagination and search
+    /// Get all recipes for the authenticated dietitian
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> ListRecipes(
+    public async Task<IActionResult> GetRecipes(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] string? visibility = null,
+        [FromQuery] string? tag = null,
         [FromQuery] string? q = null)
     {
-        var dietitianId = await GetDietitianIdAsync();
-        if (!dietitianId.HasValue)
-            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
 
-        var queryable = _appDb.Recipes
-            .Where(r => r.DietitianId == dietitianId.Value);
+        var dietitianId = user.LinkedDietitianId.Value;
 
-        if (!string.IsNullOrWhiteSpace(q))
+        // Validate pagination
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var query = _appDb.Recipes
+            .Where(r => r.DietitianId == dietitianId)
+            .AsQueryable();
+
+        // Apply visibility filter
+        if (!string.IsNullOrWhiteSpace(visibility))
         {
-            var term = q.Trim();
-            queryable = queryable.Where(r =>
-                EF.Functions.ILike(r.Name, $"%{term}%") ||
-                EF.Functions.ILike(r.Description, $"%{term}%"));
+            if (visibility.ToLower() == "public")
+                query = query.Where(r => r.IsPublic);
+            else if (visibility.ToLower() == "private")
+                query = query.Where(r => !r.IsPublic);
         }
 
-        var total = await queryable.CountAsync();
+        // Apply tag filter (if tags are stored as JSON or separate table)
+        // TODO: Implement tag filtering when tag system is ready
 
-        var recipes = await queryable
-            .OrderByDescending(r => r.Id)
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var searchTerm = q.Trim();
+            query = query.Where(r =>
+                EF.Functions.ILike(r.Name, $"%{searchTerm}%") ||
+                EF.Functions.ILike(r.Description, $"%{searchTerm}%"));
+        }
+
+        var total = await query.CountAsync();
+
+        var recipes = await query
+            .OrderBy(r => r.Name) // Recipe doesn't have CreatedAtUtc, order by name instead
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Include(r => r.MandatoryIngredients)
-            .Include(r => r.OptionalIngredients)
-            .Include(r => r.ProhibitedIngredients)
-            .ToListAsync();
-
-        var recipeIds = recipes.Select(r => r.Id).ToList();
-        var substitutes = await _appDb.RecipeIngredientSubstitutes
-            .Where(s => recipeIds.Contains(s.RecipeId))
-            .Include(s => s.RequiredIngredient)
-            .Include(s => s.SubstituteIngredient)
-            .ToListAsync();
-
-        var substitutesByRecipe = substitutes
-            .GroupBy(s => s.RecipeId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.GroupBy(s => s.RequiredIngredientId)
-                    .Select(gr => new
-                    {
-                        requiredIngredient = new { id = gr.Key, name = gr.First().RequiredIngredient.CanonicalName },
-                        substitutes = gr.Select(s => new { id = s.SubstituteIngredientId, name = s.SubstituteIngredient.CanonicalName }).ToList()
-                    })
-                    .Cast<object>()
-                    .ToList());
-
-        var result = recipes.Select(r =>
-        {
-            var recipeSubstitutes = substitutesByRecipe.ContainsKey(r.Id)
-                ? substitutesByRecipe[r.Id]
-                : new List<object>();
-            return new
+            .Select(r => new
             {
                 id = r.Id,
                 name = r.Name,
                 description = r.Description,
-                isPublic = r.IsPublic,
-                mandatoryIngredients = r.MandatoryIngredients.Select(i => new { id = i.Id, name = i.CanonicalName }),
-                optionalIngredients = r.OptionalIngredients.Select(i => new { id = i.Id, name = i.CanonicalName }),
-                prohibitedIngredients = r.ProhibitedIngredients.Select(i => new { id = i.Id, name = i.CanonicalName }),
-                substitutes = recipeSubstitutes
-            };
-        }).ToList();
-
-        return Ok(new { page, pageSize, total, recipes = result });
-    }
-
-    /// <summary>
-    /// Get single recipe by ID (IDOR-safe: only own recipes)
-    /// </summary>
-    [HttpGet("{recipeId:guid}")]
-    public async Task<IActionResult> GetRecipe(Guid recipeId)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (!dietitianId.HasValue)
-            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
-
-        var recipe = await _appDb.Recipes
-            .Include(r => r.MandatoryIngredients)
-            .Include(r => r.OptionalIngredients)
-            .Include(r => r.ProhibitedIngredients)
-            .FirstOrDefaultAsync(r => r.Id == recipeId && r.DietitianId == dietitianId.Value);
-
-        if (recipe == null)
-            return NotFound(ApiProblems.NotFound("RECIPE_NOT_FOUND", "Tarif bulunamadı veya erişim yetkiniz yok"));
-
-        var substitutes = await _appDb.RecipeIngredientSubstitutes
-            .Where(s => s.RecipeId == recipeId)
-            .Include(s => s.RequiredIngredient)
-            .Include(s => s.SubstituteIngredient)
+                isPublic = r.IsPublic
+                // TODO: Add createdAt when timestamp is added to Recipe entity
+                // TODO: Add tags, image URL, nutrition info
+            })
             .ToListAsync();
-
-        var substitutesGrouped = substitutes
-            .GroupBy(s => s.RequiredIngredientId)
-            .Select(gr => new
-            {
-                requiredIngredient = new { id = gr.Key, name = gr.First().RequiredIngredient.CanonicalName },
-                substitutes = gr.Select(s => new { id = s.SubstituteIngredientId, name = s.SubstituteIngredient.CanonicalName }).ToList()
-            }).ToList();
 
         return Ok(new
         {
-            id = recipe.Id,
-            name = recipe.Name,
-            description = recipe.Description,
-            isPublic = recipe.IsPublic,
-            mandatoryIngredients = recipe.MandatoryIngredients.Select(i => new { id = i.Id, name = i.CanonicalName }),
-            optionalIngredients = recipe.OptionalIngredients.Select(i => new { id = i.Id, name = i.CanonicalName }),
-            prohibitedIngredients = recipe.ProhibitedIngredients.Select(i => new { id = i.Id, name = i.CanonicalName }),
-            substitutes = substitutesGrouped
+            items = recipes,
+            total,
+            page,
+            pageSize
         });
     }
 
     /// <summary>
-    /// Create new recipe
+    /// Create a new recipe
     /// </summary>
     [HttpPost]
-    [EnableRateLimiting("dietitian-write")]
-    public async Task<IActionResult> CreateRecipe([FromBody] CreateDietitianRecipeRequest request)
+    public async Task<IActionResult> CreateRecipe([FromBody] CreateRecipeRequest request)
     {
-        var dietitianId = await GetDietitianIdAsync();
-        if (!dietitianId.HasValue)
-            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
-        // Validate ingredient sets are disjoint
-        var allIngredientIds = request.MandatoryIngredientIds
-            .Concat(request.OptionalIngredientIds)
-            .Concat(request.ProhibitedIngredientIds)
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        // Validate ingredients exist
+        var allIngredientIds = request.MandatoryIngredients
+            .Concat(request.OptionalIngredients ?? Enumerable.Empty<Guid>())
+            .Concat(request.Prohibitions ?? Enumerable.Empty<Guid>())
             .Distinct()
             .ToList();
 
-        if (allIngredientIds.Count != request.MandatoryIngredientIds.Count +
-            request.OptionalIngredientIds.Count +
-            request.ProhibitedIngredientIds.Count)
-        {
-            return BadRequest(ApiProblems.Validation("INVALID_RECIPE_INGREDIENTS",
-                "Malzemeler mandatory, optional ve prohibited kategorilerinde çakışamaz."));
-        }
-
-        // Validate all ingredient IDs exist
         var existingIngredients = await _appDb.Ingredients
             .Where(i => allIngredientIds.Contains(i.Id) && i.IsActive)
+            .Select(i => i.Id)
             .ToListAsync();
 
-        var missingIds = allIngredientIds.Except(existingIngredients.Select(i => i.Id)).ToList();
+        var missingIds = allIngredientIds.Except(existingIngredients).ToList();
         if (missingIds.Any())
         {
             return BadRequest(ApiProblems.Validation("INGREDIENT_NOT_FOUND",
-                $"Şu malzemeler bulunamadı: {string.Join(", ", missingIds)}"));
+                $"Some ingredients not found: {string.Join(", ", missingIds)}"));
         }
 
         // Create recipe
         var recipe = new Recipe(
             Guid.NewGuid(),
-            dietitianId.Value,
-            request.Name.Trim(),
-            request.Description?.Trim() ?? string.Empty,
-            isPublic: false);
-
-        foreach (var ingId in request.MandatoryIngredientIds)
-        {
-            var ingredient = existingIngredients.First(i => i.Id == ingId);
-            recipe.AddMandatoryIngredient(ingredient);
-        }
-
-        foreach (var ingId in request.OptionalIngredientIds)
-        {
-            var ingredient = existingIngredients.First(i => i.Id == ingId);
-            recipe.AddOptionalIngredient(ingredient);
-        }
-
-        foreach (var ingId in request.ProhibitedIngredientIds)
-        {
-            var ingredient = existingIngredients.First(i => i.Id == ingId);
-            recipe.AddProhibitedIngredient(ingredient);
-        }
+            dietitianId,
+            request.Name,
+            request.Description,
+            request.IsPublic);
 
         _appDb.Recipes.Add(recipe);
-        await _appDb.SaveChangesAsync();
 
-        // Add substitutes
-        if (request.Substitutes != null && request.Substitutes.Any())
-        {
-            foreach (var sub in request.Substitutes)
-            {
-                foreach (var substituteId in sub.SubstituteIngredientIds.Distinct())
-                {
-                    if (substituteId == sub.RequiredIngredientId)
-                        continue; // Skip self-reference
-
-                    var substitute = new RecipeIngredientSubstitute(recipe.Id, sub.RequiredIngredientId, substituteId);
-                    _appDb.RecipeIngredientSubstitutes.Add(substitute);
-                }
-            }
-            await _appDb.SaveChangesAsync();
-        }
-
-        return CreatedAtAction(nameof(GetRecipe), new { recipeId = recipe.Id }, new
-        {
-            id = recipe.Id,
-            name = recipe.Name,
-            description = recipe.Description,
-            isPublic = recipe.IsPublic
-        });
-    }
-
-    /// <summary>
-    /// Update recipe (IDOR-safe: only own recipes)
-    /// </summary>
-    [HttpPut("{recipeId:guid}")]
-    [EnableRateLimiting("dietitian-write")]
-    public async Task<IActionResult> UpdateRecipe(Guid recipeId, [FromBody] UpdateDietitianRecipeRequest request)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (!dietitianId.HasValue)
-            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
-
-        var recipe = await _appDb.Recipes
-            .Include(r => r.MandatoryIngredients)
-            .Include(r => r.OptionalIngredients)
-            .Include(r => r.ProhibitedIngredients)
-            .FirstOrDefaultAsync(r => r.Id == recipeId && r.DietitianId == dietitianId.Value);
-
-        if (recipe == null)
-            return NotFound(ApiProblems.NotFound("RECIPE_NOT_FOUND", "Tarif bulunamadı veya erişim yetkiniz yok"));
-
-        // Validate ingredient sets are disjoint
-        var allIngredientIds = request.MandatoryIngredientIds
-            .Concat(request.OptionalIngredientIds)
-            .Concat(request.ProhibitedIngredientIds)
-            .Distinct()
-            .ToList();
-
-        if (allIngredientIds.Count != request.MandatoryIngredientIds.Count +
-            request.OptionalIngredientIds.Count +
-            request.ProhibitedIngredientIds.Count)
-        {
-            return BadRequest(ApiProblems.Validation("INVALID_RECIPE_INGREDIENTS",
-                "Malzemeler mandatory, optional ve prohibited kategorilerinde çakışamaz."));
-        }
-
-        // Validate substitutes: requiredIngredientId must be in mandatoryIngredients
-        if (request.Substitutes != null)
-        {
-            foreach (var sub in request.Substitutes)
-            {
-                if (!request.MandatoryIngredientIds.Contains(sub.RequiredIngredientId))
-                {
-                    return BadRequest(ApiProblems.Validation("INVALID_RECIPE_INGREDIENTS",
-                        $"Substitute için belirtilen requiredIngredientId ({sub.RequiredIngredientId}) mandatoryIngredients içinde olmalıdır."));
-                }
-            }
-
-            // Validate substitute ingredient IDs exist and add to validation set
-            var substituteIngredientIds = request.Substitutes.SelectMany(s => s.SubstituteIngredientIds).Distinct().ToList();
-            allIngredientIds = allIngredientIds.Concat(substituteIngredientIds).Distinct().ToList();
-
-            // Validate substitutes cannot overlap with prohibited
-            var prohibitedSet = request.ProhibitedIngredientIds.ToHashSet();
-            var invalidSubstitutes = substituteIngredientIds.Where(id => prohibitedSet.Contains(id)).ToList();
-            if (invalidSubstitutes.Any())
-            {
-                return BadRequest(ApiProblems.Validation("INVALID_RECIPE_INGREDIENTS",
-                    $"Substitute malzemeler prohibitedIngredients içinde olamaz: {string.Join(", ", invalidSubstitutes)}"));
-            }
-        }
-
-        // Validate all ingredient IDs exist
-        var existingIngredients = await _appDb.Ingredients
-            .Where(i => allIngredientIds.Contains(i.Id) && i.IsActive)
-            .ToListAsync();
-
-        var missingIds = allIngredientIds.Except(existingIngredients.Select(i => i.Id)).ToList();
-        if (missingIds.Any())
-        {
-            return BadRequest(ApiProblems.Validation("INGREDIENT_NOT_FOUND",
-                $"Şu malzemeler bulunamadı: {string.Join(", ", missingIds)}"));
-        }
-
-        // Update recipe properties using domain methods
-        recipe.UpdateName(request.Name);
-        recipe.UpdateDescription(request.Description ?? string.Empty);
-
-        // Clear existing ingredient collections
-        recipe.ClearMandatoryIngredients();
-        recipe.ClearOptionalIngredients();
-        recipe.ClearProhibitedIngredients();
-
-        // Re-add ingredients
-        foreach (var ingId in request.MandatoryIngredientIds)
-        {
-            var ingredient = existingIngredients.First(i => i.Id == ingId);
-            recipe.AddMandatoryIngredient(ingredient);
-        }
-
-        foreach (var ingId in request.OptionalIngredientIds)
-        {
-            var ingredient = existingIngredients.First(i => i.Id == ingId);
-            recipe.AddOptionalIngredient(ingredient);
-        }
-
-        foreach (var ingId in request.ProhibitedIngredientIds)
-        {
-            var ingredient = existingIngredients.First(i => i.Id == ingId);
-            recipe.AddProhibitedIngredient(ingredient);
-        }
-
-        // Update substitutes: delete existing, add new
-        var existingSubstitutes = await _appDb.RecipeIngredientSubstitutes
-            .Where(s => s.RecipeId == recipeId)
-            .ToListAsync();
-        _appDb.RecipeIngredientSubstitutes.RemoveRange(existingSubstitutes);
-
-        if (request.Substitutes != null && request.Substitutes.Any())
-        {
-            foreach (var sub in request.Substitutes)
-            {
-                foreach (var substituteId in sub.SubstituteIngredientIds.Distinct())
-                {
-                    if (substituteId == sub.RequiredIngredientId)
-                        continue; // Skip self-reference
-
-                    var substitute = new RecipeIngredientSubstitute(recipe.Id, sub.RequiredIngredientId, substituteId);
-                    _appDb.RecipeIngredientSubstitutes.Add(substitute);
-                }
-            }
-        }
+        // TODO: Add ingredients, substitutes, tags, instructions
+        // This requires proper many-to-many relationship setup
 
         await _appDb.SaveChangesAsync();
 
@@ -384,58 +170,182 @@ public class DietitianRecipesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete recipe (IDOR-safe: only own recipes)
+    /// Get popular recipes (most completed in specified time range)
     /// </summary>
-    [HttpDelete("{recipeId:guid}")]
-    [EnableRateLimiting("dietitian-write")]
-    public async Task<IActionResult> DeleteRecipe(Guid recipeId)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (!dietitianId.HasValue)
-            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
-
-        var recipe = await _appDb.Recipes
-            .FirstOrDefaultAsync(r => r.Id == recipeId && r.DietitianId == dietitianId.Value);
-
-        if (recipe == null)
-            return NotFound(ApiProblems.NotFound("RECIPE_NOT_FOUND", "Tarif bulunamadı veya erişim yetkiniz yok"));
-
-        _appDb.Recipes.Remove(recipe);
-        await _appDb.SaveChangesAsync();
-
-        return NoContent();
-    }
-
-    private async Task<Guid?> GetDietitianIdAsync()
+    [HttpGet("popular")]
+    public async Task<IActionResult> GetPopularRecipes([FromQuery] string range = "week")
     {
         var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
-            return null;
+            return Unauthorized();
 
-        var user = await _authDb.UserAccounts
-            .FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId) && u.Role == "Dietitian");
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
 
-        return user?.LinkedDietitianId;
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        // Calculate date range
+        var now = DateTime.UtcNow;
+        var startDate = range.ToLower() switch
+        {
+            "week" => now.AddDays(-7),
+            "month" => now.AddMonths(-1),
+            _ => DateTime.MinValue
+        };
+
+        // Get completion counts for recipes
+        var popularRecipes = await _appDb.ClientMeals
+            .Where(m => m.CompletedAt != null &&
+                       m.CompletedAt >= startDate &&
+                       m.ClientMealPlan.DietitianId == dietitianId)
+            .GroupBy(m => m.RecipeId)
+            .Select(g => new
+            {
+                RecipeId = g.Key,
+                CompletionCount = g.Count()
+            })
+            .OrderByDescending(x => x.CompletionCount)
+            .Take(10)
+            .ToListAsync();
+
+        // Get recipe details
+        var recipeIds = popularRecipes.Select(p => p.RecipeId).ToList();
+        var recipes = await _appDb.Recipes
+            .Where(r => recipeIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id);
+
+        var result = popularRecipes
+            .Where(p => recipes.ContainsKey(p.RecipeId))
+            .Select(p => new
+            {
+                recipeId = p.RecipeId,
+                recipeName = recipes[p.RecipeId].Name,
+                completionCount = p.CompletionCount
+            })
+            .ToList();
+
+        return Ok(new { items = result });
+    }
+
+    /// <summary>
+    /// Match recipes to client basket and dietary restrictions
+    /// </summary>
+    [HttpPost("match")]
+    public async Task<IActionResult> MatchRecipes([FromBody] RecipeMatchRequest request)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        // Verify client belongs to dietitian (IDOR prevention)
+        var link = await _appDb.DietitianClientLinks
+            .FirstOrDefaultAsync(l => l.DietitianId == dietitianId &&
+                                     l.ClientId == request.ClientId &&
+                                     l.IsActive);
+
+        if (link == null)
+            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND",
+                "Client not found or not linked to this dietitian"));
+
+        // Get client's prohibited ingredients
+        var clientProhibitedIngredients = await _appDb.ClientIngredientProhibitions
+            .Where(p => p.ClientId == request.ClientId && p.IsActive)
+            .Select(p => p.IngredientId)
+            .ToListAsync();
+
+        // Get recipe pool (dietitian's recipes + public recipes)
+        var recipePool = await _appDb.Recipes
+            .Where(r => r.DietitianId == dietitianId || r.IsPublic)
+            .ToListAsync();
+
+        // Load all recipe ingredients and prohibitions
+        var recipeIds = recipePool.Select(r => r.Id).ToList();
+
+        var allRecipeIngredients = await _appDb.RecipeIngredients
+            .Where(ri => recipeIds.Contains(ri.RecipeId))
+            .ToListAsync();
+
+        var allRecipeProhibitions = await _appDb.RecipeProhibitions
+            .Where(rp => recipeIds.Contains(rp.RecipeId))
+            .ToListAsync();
+
+        // Run matching algorithm
+        var matches = _matchService.MatchRecipes(
+            request.BasketIngredientIds,
+            clientProhibitedIngredients,
+            recipePool,
+            allRecipeIngredients,
+            allRecipeProhibitions);
+
+        // Load ingredient names for missing ingredients
+        var allMissingIds = matches
+            .SelectMany(m => m.MissingMandatoryIngredientIds)
+            .Distinct()
+            .ToList();
+
+        var ingredientNames = await _appDb.Ingredients
+            .Where(i => allMissingIds.Contains(i.Id))
+            .ToDictionaryAsync(i => i.Id, i => i.CanonicalName);
+
+        // Build response
+        var response = matches.Select(m => new
+        {
+            recipeId = m.RecipeId,
+            recipeName = m.RecipeName,
+            score = m.Score,
+            isFullMatch = m.IsFullMatch,
+            mandatoryIngredients = new
+            {
+                total = m.MandatoryIngredientsCount,
+                matched = m.MatchedMandatoryCount,
+                missing = m.MissingMandatoryIngredientIds.Count
+            },
+            optionalIngredients = new
+            {
+                total = m.OptionalIngredientsCount,
+                matched = m.MatchedOptionalCount
+            },
+            missingIngredients = m.MissingMandatoryIngredientIds
+                .Select(id => new
+                {
+                    id,
+                    name = ingredientNames.GetValueOrDefault(id, "Unknown")
+                })
+                .ToList()
+        }).ToList();
+
+        return Ok(new
+        {
+            clientId = request.ClientId,
+            basketSize = request.BasketIngredientIds.Count,
+            totalMatches = response.Count,
+            fullMatches = response.Count(r => r.isFullMatch),
+            matches = response
+        });
     }
 }
 
 // DTOs
-public record CreateDietitianRecipeRequest(
-    string Name,
-    string? Description,
-    List<Guid> MandatoryIngredientIds,
-    List<Guid> OptionalIngredientIds,
-    List<Guid> ProhibitedIngredientIds,
-    List<SubstituteGroup>? Substitutes = null);
+public record RecipeMatchRequest(
+    Guid ClientId,
+    List<Guid> BasketIngredientIds);
 
-public record UpdateDietitianRecipeRequest(
+public record CreateRecipeRequest(
     string Name,
-    string? Description,
-    List<Guid> MandatoryIngredientIds,
-    List<Guid> OptionalIngredientIds,
-    List<Guid> ProhibitedIngredientIds,
-    List<SubstituteGroup>? Substitutes = null);
-
-public record SubstituteGroup(
-    Guid RequiredIngredientId,
-    List<Guid> SubstituteIngredientIds);
+    string Description,
+    bool IsPublic,
+    List<Guid> MandatoryIngredients,
+    List<Guid>? OptionalIngredients,
+    List<Guid>? Prohibitions,
+    List<string>? Tags,
+    List<string>? Instructions,
+    int? PrepTimeMinutes,
+    int? CookTimeMinutes,
+    int? Servings);

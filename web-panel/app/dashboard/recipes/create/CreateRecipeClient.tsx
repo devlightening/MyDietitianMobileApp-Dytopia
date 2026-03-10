@@ -4,253 +4,322 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
-import { Plus, X } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { Plus, X, Lock, Globe, Loader2, AlertCircle, ChefHat } from 'lucide-react';
 import { IngredientAutocomplete, IngredientOption } from '@/components/ingredients/IngredientAutocomplete';
+import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
 interface RecipeIngredient {
   ingredientId: string;
   ingredientName: string;
-  amount: string;
-  unit: string;
   isMandatory: boolean;
   isProhibited: boolean;
 }
 
-function RecipeIngredientsInput({
-  value,
-  onChange
-}: {
-  value: RecipeIngredient[];
-  onChange: (ingredients: RecipeIngredient[]) => void;
-}) {
-  const t = useTranslations('recipes');
+type IngredientRole = 'mandatory' | 'optional' | 'prohibited';
 
-  function handleIngredientSelect(idx: number, ingredient: IngredientOption) {
-    const updated = value.map((ing, i) =>
-      i === idx ? { ...ing, ingredientId: ingredient.id, ingredientName: ingredient.canonicalName } : ing
-    );
-    onChange(updated);
-  }
+const ROLE_CONFIG: Record<IngredientRole, { label: string; className: string; nextRole: IngredientRole }> = {
+  mandatory: {
+    label: 'Zorunlu',
+    className: 'bg-action/10 text-action border border-action/20 hover:bg-action/20',
+    nextRole: 'optional',
+  },
+  optional: {
+    label: 'İsteğe Bağlı',
+    className: 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20',
+    nextRole: 'prohibited',
+  },
+  prohibited: {
+    label: 'Yasak',
+    className: 'bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20',
+    nextRole: 'mandatory',
+  },
+};
 
-  function handleIngredientClear(idx: number) {
-    const updated = value.map((ing, i) =>
-      i === idx ? { ...ing, ingredientId: '', ingredientName: '' } : ing
-    );
-    onChange(updated);
-  }
+function getRole(ing: RecipeIngredient): IngredientRole {
+  if (ing.isProhibited) return 'prohibited';
+  if (ing.isMandatory) return 'mandatory';
+  return 'optional';
+}
 
-  function handleIngredientChange(idx: number, field: 'amount' | 'unit', fieldValue: string) {
-    const updated = value.map((ing, i) =>
-      i === idx ? { ...ing, [field]: fieldValue } : ing
-    );
-    onChange(updated);
-  }
+function roleToFlags(role: IngredientRole): Pick<RecipeIngredient, 'isMandatory' | 'isProhibited'> {
+  return { isMandatory: role === 'mandatory', isProhibited: role === 'prohibited' };
+}
 
-  function handleMandatoryToggle(idx: number) {
-    const updated = value.map((ing, i) =>
-      i === idx ? { ...ing, isMandatory: !ing.isMandatory } : ing
-    );
-    onChange(updated);
-  }
-
-  function handleProhibitedToggle(idx: number) {
-    const updated = value.map((ing, i) =>
-      i === idx ? { ...ing, isProhibited: !ing.isProhibited } : ing
-    );
-    onChange(updated);
-  }
-
-  function addIngredient() {
-    onChange([...value, { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true, isProhibited: false }]);
-  }
-
-  function removeIngredient(idx: number) {
-    onChange(value.filter((_, i) => i !== idx));
-  }
-
-  return (
-    <div className="space-y-3">
-      <label className="text-sm font-medium text-foreground">{t('ingredients')}</label>
-      <div className="space-y-3">
-        {value.map((ing, idx) => (
-          <div key={idx} className="flex flex-col gap-2 p-3 border border-border rounded-md bg-muted/30">
-            <div className="flex gap-2 items-start">
-              <div className="flex-1">
-                <IngredientAutocomplete
-                  value={ing.ingredientId ? { id: ing.ingredientId, canonicalName: ing.ingredientName } : null}
-                  onSelect={(ingredient) => handleIngredientSelect(idx, ingredient)}
-                  onClear={() => handleIngredientClear(idx)}
-                  placeholder={t('ingredientName')}
-                />
-              </div>
-              {value.length > 1 && (
-                <Button
-                  type="button"
-                  variant="danger"
-                  onClick={() => removeIngredient(idx)}
-                  className="px-3"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                className="flex-1"
-                placeholder={t('amount')}
-                value={ing.amount}
-                onChange={e => handleIngredientChange(idx, 'amount', e.target.value)}
-                type="number"
-                step="0.01"
-              />
-              <Input
-                className="w-32"
-                placeholder={t('unit')}
-                value={ing.unit}
-                onChange={e => handleIngredientChange(idx, 'unit', e.target.value)}
-              />
-              <Button
-                type="button"
-                variant={ing.isMandatory ? 'primary' : 'secondary'}
-                onClick={() => handleMandatoryToggle(idx)}
-                className="whitespace-nowrap"
-              >
-                {ing.isMandatory ? t('mandatory') : t('optional')}
-              </Button>
-              <Button
-                type="button"
-                variant={ing.isProhibited ? 'danger' : 'secondary'}
-                onClick={() => handleProhibitedToggle(idx)}
-                className="whitespace-nowrap"
-              >
-                {ing.isProhibited ? t('prohibited') : t('allowed')}
-              </Button>
-            </div>
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={addIngredient}
-          className="w-full sm:w-auto"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {t('addIngredient')}
-        </Button>
-      </div>
-    </div>
-  );
+interface CreateRecipePayload {
+  name: string;
+  description: string;
+  isPublic: boolean;
+  mandatoryIngredients: string[];
+  optionalIngredients: string[];
+  prohibitions: string[];
 }
 
 export default function CreateRecipeClient() {
-  const t = useTranslations('recipes');
-  const tCommon = useTranslations('common');
   const router = useRouter();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
-    { ingredientId: '', ingredientName: '', amount: '', unit: '', isMandatory: true, isProhibited: false }
+    { ingredientId: '', ingredientName: '', isMandatory: true, isProhibited: false },
   ]);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: (data: {
-      name: string;
-      description: string;
-      mandatoryIngredientIds: string[];
-      optionalIngredientIds: string[];
-      prohibitedIngredientIds: string[];
-    }) => api.post('/api/recipes', data),
+    mutationFn: (data: CreateRecipePayload) => api.post('/api/dietitian/recipes', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
       router.push('/dashboard/recipes');
     },
+    onError: (error: any) => {
+      setApiError(
+        error?.response?.data?.message ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Tarif oluşturulamadı. Lütfen tekrar deneyin.'
+      );
+    },
   });
+
+  function handleIngredientSelect(idx: number, ingredient: IngredientOption) {
+    setIngredients(prev => prev.map((ing, i) =>
+      i === idx ? { ...ing, ingredientId: ingredient.id, ingredientName: ingredient.canonicalName } : ing
+    ));
+  }
+
+  function handleIngredientClear(idx: number) {
+    setIngredients(prev => prev.map((ing, i) =>
+      i === idx ? { ...ing, ingredientId: '', ingredientName: '' } : ing
+    ));
+  }
+
+  function cycleRole(idx: number) {
+    setIngredients(prev => prev.map((ing, i) => {
+      if (i !== idx) return ing;
+      const role = ROLE_CONFIG[getRole(ing)].nextRole;
+      return { ...ing, ...roleToFlags(role) };
+    }));
+  }
+
+  function addIngredient() {
+    setIngredients(prev => [...prev, { ingredientId: '', ingredientName: '', isMandatory: true, isProhibited: false }]);
+  }
+
+  function removeIngredient(idx: number) {
+    setIngredients(prev => prev.filter((_, i) => i !== idx));
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validate: All ingredients must be selected
-    const hasUnselectedIngredients = ingredients.some(ing => !ing.ingredientId);
-    if (hasUnselectedIngredients) {
-      // Could show a toast/error message here
+    setApiError(null);
+    if (!name.trim()) { setApiError('Tarif adı zorunludur.'); return; }
+    if (!description.trim()) { setApiError('Açıklama zorunludur.'); return; }
+    if (ingredients.some(ing => !ing.ingredientId)) {
+      setApiError('Tüm malzeme satırlarını doldurun veya boş satırları kaldırın.');
       return;
     }
-
-    // Separate mandatory and optional ingredients
-    const mandatoryIngredientIds = ingredients
-      .filter(ing => ing.isMandatory && ing.ingredientId)
-      .map(ing => ing.ingredientId);
-
-    const optionalIngredientIds = ingredients
-      .filter(ing => !ing.isMandatory && !ing.isProhibited && ing.ingredientId)
-      .map(ing => ing.ingredientId);
-
-    const prohibitedIngredientIds = ingredients
-      .filter(ing => ing.isProhibited && ing.ingredientId)
-      .map(ing => ing.ingredientId);
-
-    mutation.mutate({
-      name,
-      description,
-      mandatoryIngredientIds,
-      optionalIngredientIds,
-      prohibitedIngredientIds
-    });
+    const mandatoryIngredients = ingredients
+      .filter(ing => ing.isMandatory && !ing.isProhibited).map(ing => ing.ingredientId);
+    const optionalIngredients = ingredients
+      .filter(ing => !ing.isMandatory && !ing.isProhibited).map(ing => ing.ingredientId);
+    const prohibitions = ingredients
+      .filter(ing => ing.isProhibited).map(ing => ing.ingredientId);
+    if (mandatoryIngredients.length === 0) {
+      setApiError('En az bir zorunlu malzeme eklenmelidir.');
+      return;
+    }
+    mutation.mutate({ name: name.trim(), description: description.trim(), isPublic, mandatoryIngredients, optionalIngredients, prohibitions });
   };
 
-  const canSubmit = name.trim() &&
-    description.trim() &&
-    ingredients.length > 0 &&
-    ingredients.every(ing => ing.ingredientId) &&
-    !mutation.isPending;
+  const canSubmit = name.trim() && description.trim() &&
+    ingredients.length > 0 && ingredients.every(ing => ing.ingredientId) && !mutation.isPending;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 fade-in max-w-3xl">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-semibold text-foreground">{t('newRecipe')}</h2>
-        <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl kpi-forest flex items-center justify-center">
+          <ChefHat className="w-6 h-6" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Yeni Tarif</h1>
+          <p className="text-sm text-muted-foreground">Özel tarif kütüphanenize ekleyin</p>
+        </div>
       </div>
 
-      {/* Form */}
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Input
-            placeholder={t('recipeName')}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <Input
-            placeholder={t('description')}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-          />
-          <RecipeIngredientsInput
-            value={ingredients}
-            onChange={setIngredients}
-          />
-          <div className="flex gap-2">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={!canSubmit}
-              loading={mutation.isPending}
-              className="w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {mutation.isPending ? t('adding') : t('addRecipe')}
-            </Button>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic Info Card */}
+        <Card className="p-6 space-y-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Temel Bilgiler</h2>
+
+          {/* Name */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Tarif Adı</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="ör. Yoğurtlu Avokado Salatası"
+              className={cn(
+                'w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm',
+                'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow placeholder:text-muted-foreground'
+              )}
+              required
+            />
           </div>
-        </form>
-      </Card>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Açıklama</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Tarif hakkında kısa bir açıklama..."
+              rows={3}
+              className={cn(
+                'w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm resize-none',
+                'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow placeholder:text-muted-foreground'
+              )}
+              required
+            />
+          </div>
+
+          {/* Visibility Toggle */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Görünürlük</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPublic(false)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all',
+                  !isPublic
+                    ? 'bg-action text-action-foreground border-action shadow-sm'
+                    : 'bg-card text-muted-foreground border-border hover:border-action/30'
+                )}
+              >
+                <Lock className="w-4 h-4" />
+                Özel (İmzalı Tarif)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPublic(true)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all',
+                  isPublic
+                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                    : 'bg-card text-muted-foreground border-border hover:border-primary/30'
+                )}
+              >
+                <Globe className="w-4 h-4" />
+                Herkese Açık
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {isPublic
+                ? 'Diğer diyetisyenler bu tarifi görebilir'
+                : 'Bu tarif sadece size ve danışanlarınıza özeldir'}
+            </p>
+          </div>
+        </Card>
+
+        {/* Ingredients Card */}
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Malzemeler</h2>
+            <p className="text-xs text-muted-foreground">Role tıklayarak değiştir: Zorunlu → Opsiyonel → Yasak</p>
+          </div>
+
+          <div className="space-y-3">
+            {ingredients.map((ing, idx) => {
+              const role = getRole(ing);
+              const roleConfig = ROLE_CONFIG[role];
+              return (
+                <div
+                  key={idx}
+                  className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex-1">
+                    <IngredientAutocomplete
+                      value={ing.ingredientId ? { id: ing.ingredientId, canonicalName: ing.ingredientName } : null}
+                      onSelect={(ingredient) => handleIngredientSelect(idx, ingredient)}
+                      onClear={() => handleIngredientClear(idx)}
+                      placeholder="Malzeme adı ara..."
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => cycleRole(idx)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors',
+                      roleConfig.className
+                    )}
+                    title="Rolü değiştir"
+                  >
+                    {roleConfig.label}
+                  </button>
+                  {ingredients.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeIngredient(idx)}
+                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={addIngredient}
+            className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors py-1"
+          >
+            <Plus className="w-4 h-4" />
+            Malzeme Ekle
+          </button>
+        </Card>
+
+        {/* Error Display */}
+        {apiError && (
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-destructive/8 border border-destructive/20 text-sm text-destructive">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{apiError}</span>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className={cn(
+              'flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all',
+              canSubmit
+                ? 'bg-action text-action-foreground hover:opacity-90 active:scale-[0.98] shadow-md hover:shadow-lg'
+                : 'bg-muted text-muted-foreground cursor-not-allowed'
+            )}
+          >
+            {mutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Kaydediliyor...</>
+            ) : (
+              <><ChefHat className="w-4 h-4" /> Tarifi Kaydet</>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="px-6 py-3 rounded-xl text-sm font-medium border border-border text-muted-foreground hover:bg-muted/50 transition-colors"
+          >
+            İptal
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

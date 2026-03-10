@@ -1,0 +1,40 @@
+{
+  "name": "Sample Recipe Recommendation Benchmark",
+  "version": "1.0",
+  "description": "Small realistic dataset for testing recipe recommendation and alternative decision",
+  "cases": [
+    {
+      "id": "case-001",
+      "description": "Original recipe cookable with all mandatory ingredients",
+      "plannedRecipeId": "recipe-full-match",
+      "availableCanonicalIngredients": ["Tomato", "Onion", "Garlic"],
+      "clientProhibitedCanonicalIngredients": [],
+      "expectedOriginalCookable": true,
+      "expectedSelectedRecipeId": "recipe-full-match",
+      "acceptableAlternativeRecipeIds": [],
+      "expectedReasonCategory": "full_match"
+    },
+    {
+      "id": "case-002",
+      "description": "Original recipe missing one mandatory ingredient",
+      "plannedRecipeId": "recipe-missing-one",
+      "availableCanonicalIngredients": ["Tomato", "Onion"],
+      "clientProhibitedCanonicalIngredients": [],
+      "expectedOriginalCookable": false,
+      "expectedSelectedRecipeId": "recipe-alternative-1",
+      "acceptableAlternativeRecipeIds": ["recipe-alternative-1", "recipe-alternative-2"],
+      "expectedReasonCategory": "missing_mandatory"
+    },
+    {
+      "id": "case-003",
+      "description": "No alternative recipe available",
+      "plannedRecipeId": "recipe-no-alternative",
+      "availableCanonicalIngredients": ["Tomato"],
+      "clientProhibitedCanonicalIngredients": [],
+      "expectedOriginalCookable": false,
+      "expectedSelectedRecipeId": null,
+      "acceptableAlternativeRecipeIds": [],
+      "expectedReasonCategory": "no_solution"
+    }
+  ]
+}

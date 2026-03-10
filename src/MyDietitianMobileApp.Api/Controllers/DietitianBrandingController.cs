@@ -23,15 +23,18 @@ public class DietitianBrandingController : ControllerBase
     private readonly AppDbContext _appDb;
     private readonly AuthDbContext _authDb;
     private readonly ILogger<DietitianBrandingController> _logger;
+    private readonly IWebHostEnvironment _environment;
 
     public DietitianBrandingController(
         AppDbContext appDb,
         AuthDbContext authDb,
-        ILogger<DietitianBrandingController> logger)
+        ILogger<DietitianBrandingController> logger,
+        IWebHostEnvironment environment)
     {
         _appDb = appDb;
         _authDb = authDb;
         _logger = logger;
+        _environment = environment;
     }
 
     /// <summary>
@@ -132,6 +135,143 @@ public class DietitianBrandingController : ControllerBase
             primaryColorHex = config.PrimaryColorHex,
             accentColorHex = config.AccentColorHex
         });
+    }
+
+    /// <summary>
+    /// Upload clinic logo
+    /// </summary>
+    [HttpPost("branding/logo")]
+    [RequestSizeLimit(2 * 1024 * 1024)] // 2 MB max
+    [EnableRateLimiting("dietitian-write")]
+    public async Task<IActionResult> UploadLogo(IFormFile file)
+    {
+        var dietitianId = await GetDietitianIdAsync();
+        if (!dietitianId.HasValue)
+            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
+
+        // Validate file
+        if (file == null || file.Length == 0)
+            return BadRequest(ApiProblems.Validation("NO_FILE", "Dosya yüklenmedi"));
+
+        // Validate file type
+        var allowedTypes = new[] { "image/png", "image/jpeg", "image/webp" };
+        if (!allowedTypes.Contains(file.ContentType.ToLower()))
+            return BadRequest(ApiProblems.Validation("INVALID_FILE_TYPE", "Sadece PNG, JPEG ve WebP formatları desteklenir"));
+
+        // Validate file size (2 MB)
+        if (file.Length > 2 * 1024 * 1024)
+            return BadRequest(ApiProblems.Validation("FILE_TOO_LARGE", "Dosya boyutu 2 MB'ı aşamaz"));
+
+        try
+        {
+            // Create upload directory
+            var uploadDir = Path.Combine(_environment.WebRootPath, "uploads", "branding", dietitianId.Value.ToString());
+            Directory.CreateDirectory(uploadDir);
+
+            // Generate unique filename
+            var extension = Path.GetExtension(file.FileName);
+            var timestamp = DateTime.UtcNow.Ticks;
+            var filename = $"logo-{timestamp}{extension}";
+            var filePath = Path.Combine(uploadDir, filename);
+
+            // Save file
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Generate URL
+            var logoUrl = $"/uploads/branding/{dietitianId.Value}/{filename}";
+
+            // Update branding config
+            var config = await _appDb.DietitianBrandingConfigs
+                .FirstOrDefaultAsync(c => c.DietitianId == dietitianId.Value);
+
+            if (config == null)
+            {
+                // Create with defaults
+                config = new DietitianBrandingConfig(dietitianId.Value, null, logoUrl);
+                _appDb.DietitianBrandingConfigs.Add(config);
+            }
+            else
+            {
+                // Delete old logo file if exists
+                if (!string.IsNullOrEmpty(config.LogoUrl))
+                {
+                    var oldFilePath = Path.Combine(_environment.WebRootPath, config.LogoUrl.TrimStart('/'));
+                    if (System.IO.File.Exists(oldFilePath))
+                    {
+                        try { System.IO.File.Delete(oldFilePath); } catch { /* Ignore */ }
+                    }
+                }
+
+                // Update with new logo
+                config.Update(
+                    config.ClinicName,
+                    logoUrl,
+                    config.PrimaryColorHex,
+                    config.AccentColorHex
+                );
+            }
+
+            await _appDb.SaveChangesAsync();
+
+            return Ok(new { logoUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading logo for dietitian {DietitianId}", dietitianId.Value);
+            return StatusCode(500, ApiProblems.InternalServerError("UPLOAD_ERROR", "Logo yüklenirken hata oluştu"));
+        }
+    }
+
+    /// <summary>
+    /// Reset branding to defaults
+    /// </summary>
+    [HttpDelete("branding")]
+    [EnableRateLimiting("dietitian-write")]
+    public async Task<IActionResult> ResetBranding()
+    {
+        var dietitianId = await GetDietitianIdAsync();
+        if (!dietitianId.HasValue)
+            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
+
+        try
+        {
+            var config = await _appDb.DietitianBrandingConfigs
+                .FirstOrDefaultAsync(c => c.DietitianId == dietitianId.Value);
+
+            if (config != null)
+            {
+                // Delete logo file if exists
+                if (!string.IsNullOrEmpty(config.LogoUrl))
+                {
+                    var filePath = Path.Combine(_environment.WebRootPath, config.LogoUrl.TrimStart('/'));
+                    if (System.IO.File.Exists(filePath))
+                    {
+                        try { System.IO.File.Delete(filePath); } catch { /* Ignore */ }
+                    }
+                }
+
+                // Remove branding config
+                _appDb.DietitianBrandingConfigs.Remove(config);
+                await _appDb.SaveChangesAsync();
+            }
+
+            // Return defaults
+            return Ok(new
+            {
+                clinicName = (string?)null,
+                logoUrl = (string?)null,
+                primaryColorHex = "#4A7C59",
+                accentColorHex = "#FF8C61"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting branding for dietitian {DietitianId}", dietitianId.Value);
+            return StatusCode(500, ApiProblems.InternalServerError("RESET_ERROR", "Branding sıfırlanırken hata oluştu"));
+        }
     }
 
     private async Task<Guid?> GetDietitianIdAsync()

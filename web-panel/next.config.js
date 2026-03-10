@@ -5,13 +5,19 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    const base =
-      process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000'
+    const api =
+      process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:5000'
 
     return [
+      // Forward /uploads to backend for static files (logos, etc.)
+      {
+        source: '/uploads/:path*',
+        destination: `${api}/uploads/:path*`,
+      },
+      // Forward API requests to backend
       {
         source: '/api/:path*',
-        destination: `${base}/api/:path*`,
+        destination: `${api}/api/:path*`,
       },
     ]
   },

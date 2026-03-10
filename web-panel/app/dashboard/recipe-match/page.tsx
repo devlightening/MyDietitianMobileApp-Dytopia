@@ -1,203 +1,348 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { Search, AlertCircle, ChefHat } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { ClientSelect } from '@/components/recipe-match/ClientSelect';
-import { IngredientChipList } from '@/components/recipe-match/IngredientChipList';
-import type { IngredientOption } from '@/components/recipe-match/IngredientChipList';
-import { RecipeMatchCard, RecipeMatchResult } from '@/components/recipe-match/RecipeMatchCard';
-import { RecipeMatchSkeleton } from '@/components/recipe-match/RecipeMatchSkeleton';
-import EmptyState from '@/components/states/EmptyState';
-import ErrorState from '@/components/states/ErrorState';
-import { useTranslations } from 'next-intl';
-import api from '@/lib/api';
-import { ApiError } from '@/lib/api';
+import { useState } from 'react'
+import { Button } from '@/components/ui/Button'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { Search, Loader2, CheckCircle2, AlertCircle, ChefHat, X, Sparkles, ShoppingBasket, Users } from 'lucide-react'
+import toast from 'react-hot-toast'
+import api from '@/lib/api'
+import { cn } from '@/lib/utils'
 
-// Backend returns RecipeMatchResultDto with camelCase properties (ASP.NET Core default)
-interface RecipeMatchResponse {
-  recipeId: string;
-  recipeName: string;
-  matchPercentage: number;
-  matchedIngredients: string[];
-  missingMandatoryIngredients: string[];
-  missingOptionalIngredients: string[];
-  isFullyMatch: boolean;
+interface RecipeMatch {
+  recipeId: string
+  recipeName: string
+  matchScore: number
+  missingIngredients: string[]
+  substitutes?: string[]
+  isPublic: boolean
+  explanation?: string
 }
 
-async function matchRecipes(ingredientIds: string[]): Promise<RecipeMatchResult[]> {
-  const res = await api.post<RecipeMatchResponse[]>('/api/recipes/match', ingredientIds);
-  // Backend returns camelCase by default, so direct mapping should work
-  return res.data.map(item => ({
-    recipeId: item.recipeId,
-    recipeName: item.recipeName,
-    matchPercentage: item.matchPercentage,
-    matchedIngredients: item.matchedIngredients ?? [],
-    missingMandatoryIngredients: item.missingMandatoryIngredients ?? [],
-    missingOptionalIngredients: item.missingOptionalIngredients ?? [],
-    isFullyMatch: item.isFullyMatch,
-  }));
+interface Client {
+  clientId: string
+  fullName: string
+  email?: string
+}
+
+interface BasketItem {
+  id: string
+  name: string
 }
 
 export default function RecipeMatchPage() {
-  const t = useTranslations('recipeMatch');
-  const tCommon = useTranslations('common');
+  const [selectedClientId, setSelectedClientId] = useState<string>('')
+  const [basketIngredients, setBasketIngredients] = useState<BasketItem[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
 
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [ingredients, setIngredients] = useState<IngredientOption[]>([]);
+  // FIX: use api interceptor (adds JWT header)
+  const { data: clientsData } = useQuery({
+    queryKey: ['dietitian-clients'],
+    queryFn: async () => {
+      const res = await api.get('/api/dietitian/clients', { params: { page: 1, pageSize: 100 } })
+      return res.data
+    }
+  })
+  const clients: Client[] = clientsData?.items ?? []
 
-  const matchMutation = useMutation<RecipeMatchResult[], ApiError, string[]>({
-    mutationFn: matchRecipes,
-    retry: 1,
-  });
+  // FIX: use api interceptor and map canonicalName
+  const { data: ingredientsData, isLoading: searchingIngredients } = useQuery({
+    queryKey: ['ingredients-search', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery || searchQuery.length < 2) return { items: [] }
+      const res = await api.get(`/api/ingredients/search?q=${encodeURIComponent(searchQuery)}&limit=10`)
+      const raw = res.data?.ingredients ?? res.data?.items ?? []
+      return { items: raw }
+    },
+    enabled: searchQuery.length >= 2
+  })
 
-  const handleFindRecipes = () => {
-    if (ingredients.length === 0) return;
-    const ingredientIds = ingredients.map(ing => ing.id);
-    matchMutation.mutate(ingredientIds);
-  };
+  const matchMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/api/dietitian/recipes/match', {
+        clientId: selectedClientId || null,
+        basketIngredientIds: basketIngredients.map(i => i.id)
+      })
+      return res.data
+    },
+    onError: (error: any) => {
+      const msg = error?.response?.data?.message || error?.message || '';
+      if (msg.includes('401')) toast.error('Oturum süreniz dolmuş, lütfen tekrar giriş yapın');
+      else if (msg.includes('503')) toast.error('Sistem şu an yoğun, lütfen birazdan tekrar deneyin');
+      else toast.error('Tarif eşleştirme sırasında bir sorun oluştu. Lütfen malzemeleri kontrol edip tekrar deneyin.');
+    }
+  })
 
-  const handleAddIngredient = (ingredient: IngredientOption) => {
-    setIngredients(prev => [...prev, ingredient]);
-  };
+  const addIngredient = (ingredient: { id: string; canonicalName: string }) => {
+    if (!basketIngredients.find(i => i.id === ingredient.id)) {
+      setBasketIngredients([...basketIngredients, { id: ingredient.id, name: ingredient.canonicalName }])
+      setSearchQuery('')
+    }
+  }
 
-  const handleRemoveIngredient = (ingredientId: string) => {
-    setIngredients(prev => prev.filter(ing => ing.id !== ingredientId));
-  };
+  const removeIngredient = (id: string) => {
+    setBasketIngredients(basketIngredients.filter(i => i.id !== id))
+  }
 
-  const handleViewRecipe = (recipeId: string) => {
-    // TODO: Navigate to recipe detail page
-    console.log('View recipe:', recipeId);
-  };
-
-  const handleRecommend = (recipeId: string) => {
-    // TODO: Implement recommendation feature
-    console.log('Recommend recipe:', recipeId, 'to client:', selectedClientId);
-  };
-
-  const canFindRecipes = ingredients.length > 0 && !matchMutation.isPending;
-  const hasResults = matchMutation.data && matchMutation.data.length > 0;
+  const matches: RecipeMatch[] = matchMutation.data?.matches ?? []
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 fade-in">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-semibold text-foreground">{t('title')}</h2>
-        <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
+        <h1 className="text-3xl font-bold text-gradient-sage">Tarif Eşleştirici</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Danışanın mutfağındaki malzemelere göre en uygun tarifleri keşfedin
+        </p>
       </div>
 
-      {/* Step 1: Client Selection */}
-      <Card className="p-6">
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-2 block">
-              {t('selectClient')}
-            </label>
-            <ClientSelect
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* ── Left Panel: Controls ──────────────────────── */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* Client Selector */}
+          <div className="card-premium p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg kpi-sage flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+              <h2 className="text-sm font-semibold text-foreground">Danışan Seç</h2>
+            </div>
+            <select
               value={selectedClientId}
-              onSelect={setSelectedClientId}
-            />
+              onChange={e => setSelectedClientId(e.target.value)}
+              className={cn(
+                'w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm',
+                'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow',
+                !selectedClientId && 'text-muted-foreground'
+              )}
+            >
+              <option value="">— Genel eşleştirme (opsiyonel) —</option>
+              {clients.map((c) => (
+                <option key={c.clientId} value={c.clientId}>{c.fullName}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ingredient Basket */}
+          <div className="card-premium p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg kpi-forest flex items-center justify-center">
+                <ShoppingBasket className="w-4 h-4" />
+              </div>
+              <h2 className="text-sm font-semibold text-foreground">Malzeme Sepeti</h2>
+              {basketIngredients.length > 0 && (
+                <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-action/10 text-action">
+                  {basketIngredients.length} malzeme
+                </span>
+              )}
+            </div>
+
+            {/* Search Input */}
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Malzeme ara..."
+                className={cn(
+                  'w-full pl-9 pr-3 py-2.5 rounded-lg border border-input bg-background text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow'
+                )}
+              />
+            </div>
+
+            {/* Search Results Dropdown */}
+            {searchQuery.length >= 2 && (
+              <div className="mb-3 max-h-44 overflow-y-auto rounded-xl border border-border bg-card shadow-sm">
+                {searchingIngredients ? (
+                  <div className="p-4 flex items-center justify-center gap-2 text-muted-foreground text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Aranıyor...
+                  </div>
+                ) : (ingredientsData?.items?.length ?? 0) > 0 ? (
+                  ingredientsData!.items.map((ingredient: any) => (
+                    <button
+                      key={ingredient.id}
+                      onClick={() => addIngredient({ id: ingredient.id, canonicalName: ingredient.canonicalName ?? ingredient.name })}
+                      className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted/60 transition-colors border-b border-border/50 last:border-0"
+                    >
+                      {ingredient.canonicalName ?? ingredient.name}
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-sm text-muted-foreground">Malzeme bulunamadı</div>
+                )}
+              </div>
+            )}
+
+            {/* Popular Suggestions */}
+            <div className="mb-4">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70 mb-2 px-1">
+                Sık Kullanılanlar
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {['Yumurta', 'Yoğurt', 'Tavuk Göğsü', 'Domates', 'Yulaf', 'Zeytinyağı', 'Elma'].map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => {
+                      setSearchQuery(name);
+                      // The search query will trigger the query, and user can click the result.
+                      // Alternatively, we could automatically pick the first result if we wanted "magic".
+                    }}
+                    className="px-2.5 py-1 rounded-md bg-muted/50 hover:bg-action/10 hover:text-action text-[11px] font-medium transition-colors border border-border/50"
+                  >
+                    + {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Basket Items */}
+            {basketIngredients.length === 0 ? (
+              <div className="py-6 text-center bg-muted/20 rounded-xl border border-dashed border-border/50">
+                <ShoppingBasket className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-40" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Malzeme arayın veya yukarıdaki <br /> önerilere tıklayın
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {basketIngredients.map((item) => (
+                  <span
+                    key={item.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium badge-premium"
+                  >
+                    {item.name}
+                    <button
+                      onClick={() => removeIngredient(item.id)}
+                      className="hover:opacity-70 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Match Button */}
+            <button
+              onClick={() => matchMutation.mutate()}
+              disabled={basketIngredients.length === 0 || matchMutation.isPending}
+              className={cn(
+                'w-full mt-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all',
+                basketIngredients.length === 0
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                  : 'bg-action text-action-foreground hover:opacity-90 active:scale-[0.98] shadow-md hover:shadow-lg'
+              )}
+            >
+              {matchMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Eşleştiriliyor...</>
+              ) : (
+                <><Sparkles className="w-4 h-4" /> Tarif Bul</>
+              )}
+            </button>
           </div>
         </div>
-      </Card>
 
-      {/* Step 2: Ingredients */}
-      {selectedClientId && (
-        <Card className="p-6">
-          <IngredientChipList
-            ingredients={ingredients}
-            onAdd={handleAddIngredient}
-            onRemove={handleRemoveIngredient}
-          />
-        </Card>
-      )}
+        {/* ── Right Panel: Results ──────────────────────── */}
+        <div className="lg:col-span-3">
+          {!matchMutation.data && !matchMutation.isPending && !matchMutation.isError ? (
+            /* Empty state before search */
+            <div className="card-premium p-16 text-center h-full flex flex-col items-center justify-center">
+              <div className="w-20 h-20 rounded-2xl kpi-forest flex items-center justify-center mx-auto mb-5">
+                <ChefHat className="w-10 h-10" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Tarif Asistanı</h3>
+              <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+                Soldaki sepete malzeme ekleyin, ardından &quot;Tarif Bul&quot; butonuna basın.
+                Sistem danışanın profiline göre en uygun tarifleri sıralar.
+              </p>
+            </div>
+          ) : matchMutation.isPending ? (
+            <div className="card-premium p-16 text-center flex flex-col items-center justify-center">
+              <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+              <p className="text-sm text-muted-foreground">En uygun tarifler analiz ediliyor...</p>
+            </div>
+          ) : matchMutation.isError ? (
+            <div className="card-premium p-10 text-center">
+              <AlertCircle className="w-12 h-12 mx-auto mb-3 text-destructive/50" />
+              <h3 className="text-base font-semibold text-foreground mb-1">Bir şeyler ters gitti</h3>
+              <p className="text-sm text-muted-foreground">Eşleştirme motoruna şu an ulaşılamıyor. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.</p>
+              <Button 
+                variant="secondary" 
+                className="mt-4"
+                onClick={() => matchMutation.mutate()}
+              >
+                Yeniden Dene
+              </Button>
+            </div>
+          ) : matches.length === 0 ? (
+            <div className="card-premium p-14 text-center">
+              <ChefHat className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-40" />
+              <h3 className="text-base font-semibold text-foreground mb-1">Uygun tarif bulunamadı</h3>
+              <p className="text-sm text-muted-foreground">Sepete farklı malzeme ekleyerek tekrar deneyin.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-foreground">{matches.length} Tarif Bulundu</h2>
+                <span className="text-xs text-muted-foreground">Uyum skoruna göre sıralı</span>
+              </div>
+              {matches.map((match) => (
+                <div key={match.recipeId} className="card-premium p-5 interactive-card">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-semibold text-foreground truncate">{match.recipeName}</h3>
+                        <span className={cn(
+                          'text-xs px-2 py-0.5 rounded-full font-medium',
+                          match.isPublic ? 'badge-free' : 'badge-premium'
+                        )}>
+                          {match.isPublic ? 'Genel' : 'Özel'}
+                        </span>
+                      </div>
+                      {match.explanation && (
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{match.explanation}</p>
+                      )}
+                    </div>
+                    {/* Match Score */}
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <div className={cn(
+                        'w-14 h-14 rounded-xl flex items-center justify-center text-lg font-bold',
+                        match.matchScore >= 80 ? 'kpi-forest' :
+                        match.matchScore >= 50 ? 'kpi-sage' : 'kpi-coral'
+                      )}>
+                        {match.matchScore}%
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-1">uyum</span>
+                    </div>
+                  </div>
 
-      {/* Step 3: Find Recipes Button */}
-      {selectedClientId && ingredients.length > 0 && (
-        <div className="flex justify-center">
-          <Button
-            variant="primary"
-            onClick={handleFindRecipes}
-            disabled={!canFindRecipes}
-            loading={matchMutation.isPending}
-            className="px-8 py-3 text-base"
-          >
-            <Search className="h-5 w-5 mr-2" />
-            {matchMutation.isPending ? t('finding') : t('findRecipes')}
-          </Button>
+                  {match.matchScore === 100 && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-action mb-3">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Tüm malzemeler mevcut
+                    </div>
+                  )}
+
+                  {match.missingIngredients?.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Eksik: </span>
+                      {match.missingIngredients.join(', ')}
+                    </div>
+                  )}
+
+                  {match.substitutes?.length > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      <span className="font-medium text-foreground">Alternatif: </span>
+                      {match.substitutes.join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* Empty States */}
-      {!selectedClientId && (
-        <EmptyState
-          title={t('noClientSelected')}
-          description={t('noClientSelectedDescription')}
-          icon={<ChefHat className="h-8 w-8 text-muted-foreground" />}
-        />
-      )}
-
-      {selectedClientId && ingredients.length === 0 && !matchMutation.data && (
-        <EmptyState
-          title={t('noIngredients')}
-          description={t('noIngredientsDescription')}
-          icon={<ChefHat className="h-8 w-8 text-muted-foreground" />}
-        />
-      )}
-
-      {/* Loading State */}
-      {matchMutation.isPending && (
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <RecipeMatchSkeleton key={i} />
-          ))}
-        </div>
-      )}
-
-      {/* Error State */}
-      {matchMutation.isError && (
-        <ErrorState
-          title={t('failedToMatch')}
-          message={matchMutation.error?.message || tCommon('error')}
-          onRetry={() => {
-            if (ingredients.length > 0) {
-              const ingredientIds = ingredients.map(ing => ing.id);
-              matchMutation.mutate(ingredientIds);
-            }
-          }}
-        />
-      )}
-
-      {/* Results */}
-      {hasResults && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">
-              Found {matchMutation.data!.length} matching recipe{matchMutation.data!.length !== 1 ? 's' : ''}
-            </h3>
-          </div>
-          {matchMutation.data!.map((match) => (
-            <RecipeMatchCard
-              key={match.recipeId}
-              match={match}
-              onViewRecipe={handleViewRecipe}
-              onRecommend={handleRecommend}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* No Results */}
-      {matchMutation.data && matchMutation.data.length === 0 && !matchMutation.isPending && (
-        <EmptyState
-          title={t('noMatches')}
-          description={t('noMatchesDescription')}
-          icon={<AlertCircle className="h-8 w-8 text-muted-foreground" />}
-        />
-      )}
+      </div>
     </div>
-  );
+  )
 }
-

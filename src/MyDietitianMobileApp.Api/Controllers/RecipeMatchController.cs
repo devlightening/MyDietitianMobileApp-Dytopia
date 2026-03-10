@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Application.Services;
+using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Extensions;
@@ -24,6 +25,7 @@ public class RecipeMatchController : ControllerBase
     private readonly IPremiumStatusService _premiumStatusService;
     private readonly IKitchenNarrator _narrator;
     private readonly IClientActivityWriter _activityWriter;
+    private readonly IRecipeRecommendationEngine _engine;
     private readonly ILogger<RecipeMatchController> _logger;
 
     public RecipeMatchController(
@@ -32,6 +34,7 @@ public class RecipeMatchController : ControllerBase
         IPremiumStatusService premiumStatusService,
         IKitchenNarrator narrator,
         IClientActivityWriter activityWriter,
+        IRecipeRecommendationEngine engine,
         ILogger<RecipeMatchController> logger)
     {
         _appDb = appDb;
@@ -39,6 +42,7 @@ public class RecipeMatchController : ControllerBase
         _premiumStatusService = premiumStatusService;
         _narrator = narrator;
         _activityWriter = activityWriter;
+        _engine = engine;
         _logger = logger;
     }
 
@@ -160,83 +164,77 @@ public class RecipeMatchController : ControllerBase
 
             var ingredientSet = ingredientIds.ToHashSet();
             var results = new List<object>();
+            var evaluationSummaries = new List<(Guid RecipeId, decimal MatchPercentage, int MissingMandatoryCount, bool ProhibitedRejected, bool UsedSubstitutes, IReadOnlyCollection<Guid> MissingMandatoryIds)>();
+
+            var context = new RecipeEvaluationContext(
+                availableIngredientIds: ingredientIds,
+                prohibitedIngredientIds: clientProhibitedIds,
+                substitutesByRecipeAndRequired: substitutesByRecipeAndRequired
+                    .ToDictionary(
+                        kvp => (kvp.Key.RecipeId, kvp.Key.RequiredIngredientId),
+                        kvp => (IReadOnlySet<Guid>)kvp.Value));
 
             foreach (var recipe in candidateRecipes)
             {
+                var eval = _engine.EvaluateRecipe(recipe, context);
+
                 // A) Elimination by prohibitions
-                var recipeProhibitedIds = recipe.ProhibitedIngredients.Select(i => i.Id).ToHashSet();
-                if (clientProhibitedIds.Intersect(recipeProhibitedIds).Any())
+                if (eval.Explanation.RejectedBecauseProhibited)
                 {
+                    evaluationSummaries.Add((recipe.Id, eval.MatchPercentage, eval.MissingMandatoryCount, true, eval.Explanation.UsedSubstituteIngredientIds.Any(), eval.MissingMandatoryIngredientIds));
                     continue; // ELIMINATE
                 }
 
-                // B) Mandatory coverage with substitutes
-                var mandatoryIds = recipe.MandatoryIngredients.Select(i => i.Id).ToList();
-                var missingMandatory = new List<(Guid Id, string Name, List<Guid> Substitutes)>();
-
-                foreach (var mandatoryId in mandatoryIds)
-                {
-                    var hasRequired = ingredientSet.Contains(mandatoryId);
-                    var hasSubstitute = false;
-                    var substituteIds = new List<Guid>();
-
-                    if (!hasRequired)
-                    {
-                        // Check substitutes
-                        var key = new { RecipeId = recipe.Id, RequiredIngredientId = mandatoryId };
-                        if (substitutesByRecipeAndRequired.TryGetValue(key, out var subIds))
-                        {
-                            hasSubstitute = subIds.Any(id => ingredientSet.Contains(id));
-                            substituteIds = subIds.Where(id => ingredientSet.Contains(id)).ToList();
-                        }
-                    }
-
-                    if (!hasRequired && !hasSubstitute)
-                    {
-                        var substituteOptions = substitutesByRecipeAndRequired
-                            .GetValueOrDefault(new { RecipeId = recipe.Id, RequiredIngredientId = mandatoryId }, new HashSet<Guid>())
-                            .ToList();
-                        missingMandatory.Add((mandatoryId, ingredientNames.GetValueOrDefault(mandatoryId, "Bilinmeyen"), substituteOptions));
-                    }
-                }
-
-                var missingCount = missingMandatory.Count;
+                // B) Kitchen semantics for missing mandatory: allow 0 or 1, drop >1
+                var missingIds = eval.MissingMandatoryIngredientIds.ToList();
+                var missingCount = missingIds.Count;
                 if (missingCount > 1)
                 {
+                    evaluationSummaries.Add((recipe.Id, eval.MatchPercentage, missingCount, false, eval.Explanation.UsedSubstituteIngredientIds.Any(), eval.MissingMandatoryIngredientIds));
                     continue; // ELIMINATE (>1 missing)
                 }
 
-                MatchStatus matchStatus;
-                if (missingCount == 0)
-                {
-                    matchStatus = MatchStatus.FullMatch;
-                }
-                else
-                {
-                    matchStatus = MatchStatus.OneMissing;
-                }
+                MatchStatus matchStatus = missingCount == 0
+                    ? MatchStatus.FullMatch
+                    : MatchStatus.OneMissing;
 
-                // C) Score: count optional ingredients present
-                var optionalIds = recipe.OptionalIngredients.Select(i => i.Id).ToList();
-                var score = optionalIds.Count(id => ingredientSet.Contains(id));
+                // C) Score: count optional ingredients present (reuse engine's MatchedOptionalCount)
+                var score = eval.MatchedOptionalCount;
 
-                // D) Build response
-                var missingInfo = missingMandatory.FirstOrDefault();
-                var missingPayload = missingCount == 1 ? new[]
+                // D) Build missing payload (if exactly one missing)
+                var missingPayload = Array.Empty<object>();
+                MissingInfo? missingInfoForNarrator = null;
+
+                if (missingCount == 1)
                 {
-                    new
+                    var missingId = missingIds[0];
+                    var missingName = ingredientNames.GetValueOrDefault(missingId, "Bilinmeyen");
+
+                    var key = (recipe.Id, missingId);
+                    var substituteIds = context.SubstitutesByRecipeAndRequired.TryGetValue(key, out var subIds)
+                        ? subIds.Where(id => ingredientSet.Contains(id)).ToList()
+                        : new List<Guid>();
+
+                    missingInfoForNarrator = new MissingInfo(
+                        missingName,
+                        substituteIds.Select(id => ingredientNames.GetValueOrDefault(id, "Bilinmeyen")).ToList());
+
+                    missingPayload = new[]
                     {
-                        ingredient = new { id = missingInfo.Id, name = missingInfo.Name },
-                        suggestedSubstitutes = missingInfo.Substitutes
-                            .Select(id => new { id, name = ingredientNames.GetValueOrDefault(id, "Bilinmeyen") })
-                            .ToList()
-                    }
-                } : Array.Empty<object>();
+                        new
+                        {
+                            ingredient = new { id = missingId, name = missingName },
+                            suggestedSubstitutes = substituteIds
+                                .Select(id => new { id, name = ingredientNames.GetValueOrDefault(id, "Bilinmeyen") })
+                                .ToList()
+                        }
+                    };
+                }
 
                 var motivationText = _narrator.BuildMotivationText(
                     matchStatus,
                     score,
-                    missingCount == 1 ? new MissingInfo(missingInfo.Name, missingInfo.Substitutes.Select(id => ingredientNames.GetValueOrDefault(id, "Bilinmeyen")).ToList()) : null,
+                    missingInfoForNarrator,
                     recipe.Name);
 
                 results.Add(new
@@ -251,6 +249,8 @@ public class RecipeMatchController : ControllerBase
                     isDietitianRecipe = recipe.DietitianId.HasValue,
                     motivationText
                 });
+
+                evaluationSummaries.Add((recipe.Id, eval.MatchPercentage, missingCount, false, eval.Explanation.UsedSubstituteIngredientIds.Any(), eval.MissingMandatoryIngredientIds));
             }
 
             // Sort: higher score first, then name ascending
@@ -281,6 +281,46 @@ public class RecipeMatchController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to write kitchen merge activity");
+            }
+
+            // Log top recommendation for evaluation (best by current score ordering)
+            try
+            {
+                var top = results.FirstOrDefault();
+                if (top != null)
+                {
+                    var topId = (Guid)((dynamic)top).recipeId;
+                    var summary = evaluationSummaries.FirstOrDefault(e => e.RecipeId == topId);
+
+                    var meta = new
+                    {
+                        eliminatedProhibitedCount = candidateRecipes.Count - results.Count,
+                        missingMandatoryCount = results.Count(r => ((dynamic)r).matchStatus == "ONE_MISSING")
+                    };
+
+                    var log = new RecipeRecommendationLog(
+                        id: Guid.NewGuid(),
+                        flow: "recipe_match",
+                        clientId: clientId,
+                        dietitianId: premiumStatus.IsPremium ? premiumStatus.ActiveDietitianId : null,
+                        plannedRecipeId: null,
+                        selectedRecipeId: topId,
+                        originalCookable: false,
+                        matchPercentage: summary.MatchPercentage,
+                        missingMandatoryCount: summary.MissingMandatoryCount,
+                        prohibitedRejected: summary.ProhibitedRejected,
+                        usedSubstitutes: summary.UsedSubstitutes,
+                        missingMandatoryIdsJson: summary.MissingMandatoryIds.Any() ? System.Text.Json.JsonSerializer.Serialize(summary.MissingMandatoryIds) : null,
+                        additionalMetaJson: System.Text.Json.JsonSerializer.Serialize(meta),
+                        correlationId: HttpContext.TraceIdentifier);
+
+                    _appDb.RecipeRecommendationLogs.Add(log);
+                    await _appDb.SaveChangesAsync();
+                }
+            }
+            catch
+            {
+                // Logging must not break recipe match flow
             }
 
             return Ok(new

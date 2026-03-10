@@ -3,6 +3,7 @@
 import { ThemeProvider } from "next-themes";
 import { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ToastProvider } from "@/components/ui/Toast";
 
 const queryClient = new QueryClient();
 
@@ -11,6 +12,7 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         {children}
+        <ToastProvider />
       </ThemeProvider>
     </QueryClientProvider>
   );

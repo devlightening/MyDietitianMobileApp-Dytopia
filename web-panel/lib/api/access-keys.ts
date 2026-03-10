@@ -26,14 +26,18 @@ export async function getAccessKeys(): Promise<{ accessKeys: AccessKey[] }> {
 }
 
 /**
- * Create a new access key for a client (canonical route)
+ * Create a new access key for a client (canonical route).
+ * FIX: Backend CreateAccessKeyForClientRequest DTO uses createdAtUtc / expiresAtUtc fields.
+ * Backend response returns { success, key, publicUserId, startDate, endDate }.
  */
 export async function createAccessKeyForClient(
   publicUserId: string,
-  data: { startDate: string; endDate: string }
-): Promise<{ accessKey: string }> {
+  data: { createdAtUtc: string; expiresAtUtc: string }
+): Promise<{ key: string; accessKey: string; success: boolean; startDate: string; endDate: string }> {
   const res = await api.post(`/api/dietitian/clients/${publicUserId}/access-key`, data);
-  return res.data;
+  // Normalise: backend returns `key`, expose as both `key` and `accessKey` for compat
+  const d = res.data;
+  return { ...d, accessKey: d.key ?? d.accessKey };
 }
 
 /**

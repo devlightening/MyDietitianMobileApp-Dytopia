@@ -218,6 +218,107 @@ public class AuthenticationController : ControllerBase
     }
 
     /// <summary>
+    /// Get current authenticated user information
+    /// </summary>
+    /// <remarks>
+    /// Returns user info based on JWT claims from HttpOnly cookie.
+    /// Used by web panel AuthGuard for session verification and RBAC.
+    /// </remarks>
+    [HttpGet("me")]
+    [Authorize] // Requires valid JWT token
+    public async Task<IActionResult> GetCurrentUser()
+    {
+        try
+        {
+            // Extract claims from authenticated user
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
+                ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+            
+            var roleClaim = User.FindFirst("role")
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.Role);
+
+            // If no user ID claim, authentication is invalid
+            if (userIdClaim == null)
+            {
+                return Unauthorized(new { message = "Invalid authentication token" });
+            }
+
+            // If no role claim, user cannot access protected resources
+            if (roleClaim == null)
+            {
+                return StatusCode(403, new { message = "User role not found" });
+            }
+
+            var userId = userIdClaim.Value;
+            var role = roleClaim.Value;
+
+            // Build response based on role
+            if (role == "Dietitian")
+            {
+                // Fetch dietitian details
+                var userAccount = await _authDb.UserAccounts
+                    .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+
+                if (userAccount == null)
+                {
+                    return Unauthorized(new { message = "User account not found" });
+                }
+
+                var dietitian = await _appDb.Dietitians
+                    .FirstOrDefaultAsync(d => d.Id == userAccount.LinkedDietitianId);
+
+                if (dietitian == null || !dietitian.IsActive)
+                {
+                    return StatusCode(403, new { message = "Dietitian account not active" });
+                }
+
+                return Ok(new
+                {
+                    userId = userId,
+                    email = userAccount.Email,
+                    fullName = dietitian.FullName,
+                    role = "dietitian", // Lowercase for frontend consistency
+                    dietitianId = dietitian.Id.ToString(),
+                    clinicName = dietitian.ClinicName
+                });
+            }
+            else if (role == "Admin")
+            {
+                var userAccount = await _authDb.UserAccounts
+                    .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+
+                if (userAccount == null)
+                {
+                    return Unauthorized(new { message = "User account not found" });
+                }
+
+                return Ok(new
+                {
+                    userId = userId,
+                    email = userAccount.Email,
+                    role = "admin" // Lowercase for frontend consistency
+                });
+            }
+            else if (role == "Client")
+            {
+                // Clients should not access web panel
+                return StatusCode(403, new { message = "Access denied. This area is for dietitians only." });
+            }
+            else
+            {
+                // Unknown role
+                return StatusCode(403, new { message = "Unknown user role" });
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't expose internal details
+            Console.Error.WriteLine($"Error in /api/auth/me: {ex.Message}");
+            return StatusCode(500, new { message = "An error occurred while retrieving user information" });
+        }
+    }
+
+    /// <summary>
     /// Logout (all user types)
     /// </summary>
     [HttpPost("logout")]

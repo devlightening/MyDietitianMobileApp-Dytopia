@@ -35,23 +35,15 @@ public class DietitianNotesController : ControllerBase
     /// <summary>
     /// Create note for client (IDOR-safe: must have active link)
     /// </summary>
-    [HttpPost("clients/{publicUserId}/notes")]
+    [HttpPost("clients/{clientId:guid}/notes")]
     [EnableRateLimiting("dietitian-write")]
-    public async Task<IActionResult> CreateNote(string publicUserId, [FromBody] CreateNoteRequest request)
+    public async Task<IActionResult> CreateNote(Guid clientId, [FromBody] CreateNoteRequest request)
     {
         var dietitianId = await GetDietitianIdAsync();
         if (!dietitianId.HasValue)
             return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
 
-        // Resolve client and verify active link
-        var user = await _authDb.UserAccounts
-            .FirstOrDefaultAsync(u => u.PublicUserId == publicUserId && u.Role == "Client");
-
-        if (user == null || !user.LinkedClientId.HasValue)
-            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND", "Client bulunamadı"));
-
-        var clientId = user.LinkedClientId.Value;
-
+        // IDOR Prevention: Verify this client belongs to this dietitian
         var link = await _appDb.DietitianClientLinks
             .AsNoTracking()
             .FirstOrDefaultAsync(l =>
@@ -73,7 +65,7 @@ public class DietitianNotesController : ControllerBase
         _appDb.DietitianNotes.Add(note);
         await _appDb.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetNotes), new { publicUserId }, new
+        return CreatedAtAction(nameof(GetNotes), new { clientId }, new
         {
             id = note.Id,
             text = note.Text,
@@ -84,9 +76,9 @@ public class DietitianNotesController : ControllerBase
     /// <summary>
     /// Get notes for client (IDOR-safe)
     /// </summary>
-    [HttpGet("clients/{publicUserId}/notes")]
+    [HttpGet("clients/{clientId:guid}/notes")]
     public async Task<IActionResult> GetNotes(
-        string publicUserId,
+        Guid clientId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -94,16 +86,7 @@ public class DietitianNotesController : ControllerBase
         if (!dietitianId.HasValue)
             return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabı bulunamadı"));
 
-        // Resolve client and verify active link
-        var user = await _authDb.UserAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.PublicUserId == publicUserId && u.Role == "Client");
-
-        if (user == null || !user.LinkedClientId.HasValue)
-            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND", "Client bulunamadı"));
-
-        var clientId = user.LinkedClientId.Value;
-
+        // IDOR Prevention: Verify this client belongs to this dietitian
         var link = await _appDb.DietitianClientLinks
             .AsNoTracking()
             .FirstOrDefaultAsync(l =>

@@ -29,11 +29,65 @@ export interface ClientMeasurement {
   createdAt: string;
 }
 
+export interface ClientActivity {
+  id: string;
+  type: 'meal_logged' | 'weight_update' | 'login' | 'plan_assigned';
+  timestamp: string;
+  metadata?: {
+    mealName?: string;
+    weight?: number;
+    planName?: string;
+    isCompliant?: boolean;
+  };
+}
+
+export interface ClientNote {
+  id: string;
+  content: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+// Query parameters for clients list
+export interface ClientsQueryParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: 'premium' | 'free';
+  expiringSoon?: boolean;
+  lowCompliance?: boolean;
+  sortBy?: 'lastActivity' | 'name' | 'endDate';
+  sortDir?: 'asc' | 'desc';
+}
+
+// Client row for table display
+export interface ClientRow {
+  clientId: string;
+  publicUserId: string;
+  fullName: string;
+  email: string;
+  isPremium: boolean;
+  premiumEndDate?: string;
+  daysRemaining?: number; // Days until premium expires
+  compliancePercent: number;
+  lastActivityAt?: string;
+  hasActivePlan: boolean; // Has an active meal plan assigned
+  linkedAt: string;
+}
+
+// Paged response
+export interface ClientsPagedResponse {
+  items: ClientRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 /**
- * Get list of all clients for the authenticated dietitian
+ * Get paginated list of clients with search and filtering
  */
-export async function getClients(): Promise<{ clients: Client[] }> {
-  const res = await api.get('/api/dietitian/clients');
+export async function getClients(params: ClientsQueryParams): Promise<ClientsPagedResponse> {
+  const res = await api.get('/api/dietitian/clients', { params });
   return res.data;
 }
 
@@ -55,5 +109,29 @@ export async function getClientMeasurements(
 ): Promise<{ measurements: ClientMeasurement[] }> {
   const params = lastNDays ? { lastNDays } : {};
   const res = await api.get(`/api/dietitian/clients/${clientId}/measurements`, { params });
+  return res.data;
+}
+
+/**
+ * Get client activities timeline
+ */
+export async function getClientActivities(clientId: string): Promise<{ activities: ClientActivity[] }> {
+  const res = await api.get(`/api/dietitian/clients/${clientId}/activities`);
+  return res.data;
+}
+
+/**
+ * Get client notes
+ */
+export async function getClientNotes(clientId: string): Promise<{ notes: ClientNote[] }> {
+  const res = await api.get(`/api/dietitian/clients/${clientId}/notes`);
+  return res.data;
+}
+
+/**
+ * Add a new note for a client
+ */
+export async function addClientNote(clientId: string, content: string): Promise<ClientNote> {
+  const res = await api.post(`/api/dietitian/clients/${clientId}/notes`, { content });
   return res.data;
 }

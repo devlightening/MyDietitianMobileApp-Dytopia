@@ -3,9 +3,16 @@ import { toast } from 'react-toastify';
 import {
   createDietPlan,
   getDietPlanByClient,
-  type ClientWithPlanStatus,
 } from '@/lib/api/diet-plans';
 import type { CreateDietPlanRequest, DietPlan } from '@/lib/types/diet-plan';
+
+// Minimal local type — ClientWithPlanStatus was never exported from diet-plans.ts
+interface ClientWithPlanStatus {
+  clientId: string;
+  fullName: string;
+  hasActivePlan: boolean;
+}
+
 
 /**
  * Hook to create a new diet plan

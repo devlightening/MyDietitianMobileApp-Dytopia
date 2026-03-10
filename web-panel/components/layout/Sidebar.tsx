@@ -12,21 +12,26 @@ import {
   Plus,
   Search,
   Pin,
-  PinOff
+  PinOff,
+  Calendar,
+  Palette
 } from 'lucide-react';
 import { logout } from '@/lib/auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useBranding } from '@/contexts/BrandingContext';
 
 const menuItems = [
   { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
-  { key: 'createRecipe', href: '/dashboard/recipes/create', icon: Plus },
-  { key: 'recipeMatch', href: '/dashboard/recipe-match', icon: Search, badge: 'NEW' },
   { key: 'clients', href: '/dashboard/clients', icon: Users },
+  { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
+  { key: 'plans', href: '/dashboard/plans', icon: Calendar },
+  { key: 'recipeMatch', href: '/dashboard/recipe-match', icon: Search, badge: 'NEW' },
   { key: 'accessKeys', href: '/dashboard/access-keys', icon: Key },
+  { key: 'settings', href: '/dashboard/settings', icon: Palette },
 ];
+
 
 const COLLAPSED_WIDTH = 64;
 const EXPANDED_WIDTH = 240;
@@ -37,12 +42,19 @@ export function Sidebar() {
   const queryClient = useQueryClient();
   const t = useTranslations('common');
   const { isLocked, isHovered, isOpen, toggleLock, setHovered } = useSidebar();
+  const { settings } = useBranding();
+
+  const clinicName = settings?.clinicName || 'MyDietitian';
+  const dietitianName = settings?.dietitianDisplayName || '';
+  const logoUrl = settings?.logoUrl;
+  const initials = clinicName.substring(0, 2).toUpperCase();
 
   const handleLogout = async () => {
-    queryClient.clear();
-    await logout();
-    router.replace('/auth/login');
-    router.refresh();
+    const success = await logout(queryClient);
+    if (success) {
+      router.replace('/auth/login');
+      router.refresh();
+    }
   };
 
   const handleMouseEnter = () => {
@@ -78,16 +90,24 @@ export function Sidebar() {
         isOpen ? 'justify-between px-4' : 'justify-center px-2'
       )}>
         {!isOpen ? (
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">MD</span>
-          </div>
+          logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-cover" />
+          ) : (
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--brand-primary)' }}>
+              <span className="text-white font-bold text-sm">{initials}</span>
+            </div>
+          )
         ) : (
           <>
             <Link href="/dashboard" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center group-hover:bg-primary/90 transition-colors">
-                <span className="text-primary-foreground font-bold text-sm">MD</span>
-              </div>
-              <span className="font-semibold text-lg text-foreground">MyDietitian</span>
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-cover group-hover:opacity-90 transition-opacity" />
+              ) : (
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-90 transition-opacity" style={{ backgroundColor: 'var(--brand-primary)' }}>
+                  <span className="text-white font-bold text-sm">{initials}</span>
+                </div>
+              )}
+              <span className="font-semibold text-lg text-foreground truncate">{clinicName}</span>
             </Link>
 
             {/* Lock/Pin Button */}

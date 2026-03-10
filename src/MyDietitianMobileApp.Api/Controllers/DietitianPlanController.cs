@@ -1,20 +1,19 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using MyDietitianMobileApp.Api.Extensions;
-using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Api.Extensions;
+using MyDietitianMobileApp.Api.Problems;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
 /// <summary>
-/// Dietitian endpoints for managing client meal plans
-/// API-PLAN-02: Dietitian CRUD operations
+/// Manages dietitian meal plan operations: templates, assignments, client plans
 /// </summary>
-[Authorize(Roles = "Dietitian")]
+[Authorize]
 [ApiController]
-[Route("api/dietitian")]
+[Route("api/dietitian/plans")]
 public class DietitianPlanController : ControllerBase
 {
     private readonly AppDbContext _appDb;
@@ -32,309 +31,227 @@ public class DietitianPlanController : ControllerBase
     }
 
     /// <summary>
-    /// Get meal plans for a specific client and date
+    /// Assign a meal plan to a client
     /// </summary>
-    [HttpGet("clients/{clientId}/plans")]
-    public async Task<IActionResult> GetClientPlans(Guid clientId, [FromQuery] DateTime? date = null)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (dietitianId == null)
-            return Unauthorized();
-
-        // IDOR Prevention: Verify dietitian owns this client
-        var hasAccess = await _appDb.DietitianClientLinks
-            .AnyAsync(l => l.DietitianId == dietitianId.Value && l.ClientId == clientId && l.IsActive);
-
-        if (!hasAccess)
-            return Forbid(); // 403: Dietitian doesn't have access to this client
-
-        var targetDate = date?.Date ?? DateTime.UtcNow.Date;
-
-        var plans = await _appDb.MealPlans
-            .Where(p => p.ClientId == clientId && p.Date.Date == targetDate)
-            .Include(p => p.Items)
-            .ThenInclude(i => i.Completion)
-            .OrderByDescending(p => p.UpdatedAt)
-            .Select(p => new MealPlanDTO
-            {
-                Id = p.Id,
-                ClientId = p.ClientId,
-                Date = p.Date,
-                Status = p.Status.ToString(),
-                UpdatedAt = p.UpdatedAt,
-                Items = p.Items.OrderBy(i => i.Time).Select(i => new MealItemDTO
-                {
-                    Id = i.Id,
-                    Time = i.Time.ToString(@"hh\:mm"),
-                    Title = i.Title,
-                    Note = i.Note,
-                    OrderIndex = i.OrderIndex,
-                    Calories = i.Calories,
-                    Macros = i.ProteinGrams.HasValue || i.CarbsGrams.HasValue || i.FatGrams.HasValue
-                        ? new MacrosDTO
-                        {
-                            ProteinGrams = i.ProteinGrams,
-                            CarbsGrams = i.CarbsGrams,
-                            FatGrams = i.FatGrams
-                        }
-                        : null,
-                    IsCompleted = i.Completion != null
-                }).ToList()
-            })
-            .ToListAsync();
-
-        return Ok(plans);
-    }
-
-    /// <summary>
-    /// Create a new draft meal plan for a client
-    /// </summary>
-    [HttpPost("clients/{clientId}/plans")]
-    public async Task<IActionResult> CreatePlan(Guid clientId, [FromBody] CreateMealPlanRequest request)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (dietitianId == null)
-            return Unauthorized();
-
-        // IDOR Prevention
-        var hasAccess = await _appDb.DietitianClientLinks
-            .AnyAsync(l => l.DietitianId == dietitianId.Value && l.ClientId == clientId && l.IsActive);
-
-        if (!hasAccess)
-            return Forbid();
-
-        var plan = new MealPlan
-        {
-            Id = Guid.NewGuid(),
-            ClientId = clientId,
-            Date = request.Date.Date,
-            Status = MealPlanStatus.Draft,
-            CreatedBy = dietitianId.Value,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _appDb.MealPlans.Add(plan);
-        await _appDb.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetClientPlans), new { clientId, date = request.Date }, new { id = plan.Id });
-    }
-
-    /// <summary>
-    /// Bulk upsert meal items in a plan
-    /// </summary>
-    [HttpPut("plans/{planId}/items")]
-    public async Task<IActionResult> UpsertMealItems(Guid planId, [FromBody] BulkUpsertMealItemsRequest request)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (dietitianId == null)
-            return Unauthorized();
-
-        var plan = await _appDb.MealPlans
-            .Include(p => p.Items)
-            .FirstOrDefaultAsync(p => p.Id == planId);
-
-        if (plan == null)
-            return NotFound(new { message = "Plan bulunamadı" });
-
-        // IDOR Prevention: Verify dietitian owns the client
-        var hasAccess = await _appDb.DietitianClientLinks
-            .AnyAsync(l => l.DietitianId == dietitianId.Value && l.ClientId == plan.ClientId && l.IsActive);
-
-        if (!hasAccess)
-            return Forbid();
-
-        // Remove items not in the request
-        var requestItemIds = request.Items.Where(i => i.Id.HasValue).Select(i => i.Id!.Value).ToList();
-        var itemsToRemove = plan.Items.Where(i => !requestItemIds.Contains(i.Id)).ToList();
-        foreach (var item in itemsToRemove)
-        {
-            _appDb.PlanMealItems.Remove(item);
-        }
-
-        // Upsert items
-        foreach (var itemDto in request.Items)
-        {
-            if (itemDto.Id.HasValue)
-            {
-                // Update existing
-                var existing = plan.Items.FirstOrDefault(i => i.Id == itemDto.Id.Value);
-                if (existing != null)
-                {
-                    existing.Time = TimeSpan.Parse(itemDto.Time);
-                    existing.Title = itemDto.Title;
-                    existing.Note = itemDto.Note;
-                    existing.OrderIndex = itemDto.OrderIndex;
-                    existing.Calories = itemDto.Calories;
-                    existing.ProteinGrams = itemDto.Macros?.ProteinGrams;
-                    existing.CarbsGrams = itemDto.Macros?.CarbsGrams;
-                    existing.FatGrams = itemDto.Macros?.FatGrams;
-                }
-            }
-            else
-            {
-                // Create new
-                var newItem = new PlanMealItem
-                {
-                    Id = Guid.NewGuid(),
-                    PlanId = planId,
-                    Time = TimeSpan.Parse(itemDto.Time),
-                    Title = itemDto.Title,
-                    Note = itemDto.Note,
-                    OrderIndex = itemDto.OrderIndex,
-                    Calories = itemDto.Calories,
-                    ProteinGrams = itemDto.Macros?.ProteinGrams,
-                    CarbsGrams = itemDto.Macros?.CarbsGrams,
-                    FatGrams = itemDto.Macros?.FatGrams,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _appDb.PlanMealItems.Add(newItem);
-            }
-        }
-
-        plan.UpdatedAt = DateTime.UtcNow;
-        await _appDb.SaveChangesAsync();
-
-        return Ok(new { message = "Öğünler güncellendi" });
-    }
-
-    /// <summary>
-    /// Publish a meal plan (make it visible to client)
-    /// </summary>
-    [HttpPost("plans/{planId}/publish")]
-    public async Task<IActionResult> PublishPlan(Guid planId)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (dietitianId == null)
-            return Unauthorized();
-
-        var plan = await _appDb.MealPlans.FindAsync(planId);
-        if (plan == null)
-            return NotFound(new { message = "Plan bulunamadı" });
-
-        // IDOR Prevention
-        var hasAccess = await _appDb.DietitianClientLinks
-            .AnyAsync(l => l.DietitianId == dietitianId.Value && l.ClientId == plan.ClientId && l.IsActive);
-
-        if (!hasAccess)
-            return Forbid();
-
-        // Unpublish any other published plans for the same date
-        var otherPublishedPlans = await _appDb.MealPlans
-            .Where(p => p.ClientId == plan.ClientId && p.Date.Date == plan.Date.Date && p.Id != planId && p.Status == MealPlanStatus.Published)
-            .ToListAsync();
-
-        foreach (var otherPlan in otherPublishedPlans)
-        {
-            otherPlan.Status = MealPlanStatus.Draft;
-        }
-
-        plan.Status = MealPlanStatus.Published;
-        plan.UpdatedAt = DateTime.UtcNow;
-        await _appDb.SaveChangesAsync();
-
-        return Ok(new { message = "Plan yayınlandı" });
-    }
-
-    /// <summary>
-    /// Duplicate a meal plan to another date
-    /// </summary>
-    [HttpPost("plans/{planId}/duplicate")]
-    public async Task<IActionResult> DuplicatePlan(Guid planId, [FromQuery] DateTime toDate)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (dietitianId == null)
-            return Unauthorized();
-
-        var sourcePlan = await _appDb.MealPlans
-            .Include(p => p.Items)
-            .FirstOrDefaultAsync(p => p.Id == planId);
-
-        if (sourcePlan == null)
-            return NotFound(new { message = "Plan bulunamadı" });
-
-        // IDOR Prevention
-        var hasAccess = await _appDb.DietitianClientLinks
-            .AnyAsync(l => l.DietitianId == dietitianId.Value && l.ClientId == sourcePlan.ClientId && l.IsActive);
-
-        if (!hasAccess)
-            return Forbid();
-
-        var newPlan = new MealPlan
-        {
-            Id = Guid.NewGuid(),
-            ClientId = sourcePlan.ClientId,
-            Date = toDate.Date,
-            Status = MealPlanStatus.Draft,
-            CreatedBy = dietitianId.Value,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _appDb.MealPlans.Add(newPlan);
-
-        // Copy items
-        foreach (var sourceItem in sourcePlan.Items)
-        {
-            var newItem = new PlanMealItem
-            {
-                Id = Guid.NewGuid(),
-                PlanId = newPlan.Id,
-                Time = sourceItem.Time,
-                Title = sourceItem.Title,
-                Note = sourceItem.Note,
-                OrderIndex = sourceItem.OrderIndex,
-                Calories = sourceItem.Calories,
-                ProteinGrams = sourceItem.ProteinGrams,
-                CarbsGrams = sourceItem.CarbsGrams,
-                FatGrams = sourceItem.FatGrams,
-                CreatedAt = DateTime.UtcNow
-            };
-            _appDb.PlanMealItems.Add(newItem);
-        }
-
-        await _appDb.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetClientPlans), new { clientId = sourcePlan.ClientId, date = toDate }, new { id = newPlan.Id });
-    }
-
-    /// <summary>
-    /// Delete a meal plan
-    /// </summary>
-    [HttpDelete("plans/{planId}")]
-    public async Task<IActionResult> DeletePlan(Guid planId)
-    {
-        var dietitianId = await GetDietitianIdAsync();
-        if (dietitianId == null)
-            return Unauthorized();
-
-        var plan = await _appDb.MealPlans.FindAsync(planId);
-        if (plan == null)
-            return NotFound(new { message = "Plan bulunamadı" });
-
-        // IDOR Prevention
-        var hasAccess = await _appDb.DietitianClientLinks
-            .AnyAsync(l => l.DietitianId == dietitianId.Value && l.ClientId == plan.ClientId && l.IsActive);
-
-        if (!hasAccess)
-            return Forbid();
-
-        _appDb.MealPlans.Remove(plan);
-        await _appDb.SaveChangesAsync();
-
-        return Ok(new { message = "Plan silindi" });
-    }
-
-    private async Task<Guid?> GetDietitianIdAsync()
+    [HttpPost("clients/{clientId:guid}/assign")]
+    public async Task<IActionResult> AssignPlanToClient(
+        Guid clientId,
+        [FromBody] AssignPlanRequest request)
     {
         var userId = User.GetUserId();
         if (string.IsNullOrEmpty(userId))
-            return null;
+            return Unauthorized();
 
         var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
-        if (user == null)
-            return null;
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
 
-        return user.LinkedDietitianId;
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        // IDOR Prevention: Verify dietitian owns this client
+        var link = await _appDb.DietitianClientLinks
+            .FirstOrDefaultAsync(l => l.DietitianId == dietitianId &&
+                                     l.ClientId == clientId &&
+                                     l.IsActive);
+
+        if (link == null)
+            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND",
+                "Client not found or not linked to this dietitian"));
+
+        // Validate dates
+        if (!DateTime.TryParse(request.StartDate, out var startDate))
+        {
+            return BadRequest(ApiProblems.Validation("INVALID_START_DATE", "Invalid start date format"));
+        }
+
+        DateTime? endDate = null;
+        if (!string.IsNullOrWhiteSpace(request.EndDate))
+        {
+            if (!DateTime.TryParse(request.EndDate, out var parsedEndDate))
+            {
+                return BadRequest(ApiProblems.Validation("INVALID_END_DATE", "Invalid end date format"));
+            }
+            endDate = DateTime.SpecifyKind(parsedEndDate.Date, DateTimeKind.Utc);
+        }
+
+        var startUtc = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
+
+        // Validate recipes exist
+        var recipeIds = request.Meals.Select(m => m.RecipeId).Distinct().ToList();
+        var existingRecipes = await _appDb.Recipes
+            .Where(r => recipeIds.Contains(r.Id) &&
+                       (r.DietitianId == dietitianId || r.IsPublic))
+            .Select(r => r.Id)
+            .ToListAsync();
+
+        var missingRecipes = recipeIds.Except(existingRecipes).ToList();
+        if (missingRecipes.Any())
+        {
+            return BadRequest(ApiProblems.Validation("RECIPE_NOT_FOUND",
+                $"Some recipes not found or not accessible: {string.Join(", ", missingRecipes)}"));
+        }
+
+        // Create meal plan
+        var mealPlan = new ClientMealPlan(
+            clientId,
+            dietitianId,
+            request.Name,
+            startUtc,
+            endDate,
+            request.Description);
+
+        _appDb.ClientMealPlans.Add(mealPlan);
+
+        // Add meals to plan
+        foreach (var mealRequest in request.Meals)
+        {
+            var meal = new ClientMeal(
+                mealPlan.Id,
+                mealRequest.RecipeId,
+                mealRequest.DayOfWeek,
+                mealRequest.MealType,
+                mealRequest.Servings);
+
+            _appDb.ClientMeals.Add(meal);
+        }
+
+        await _appDb.SaveChangesAsync();
+
+        return Ok(new
+        {
+            id = mealPlan.Id,
+            name = mealPlan.Name,
+            startDate = mealPlan.StartDate.ToString("yyyy-MM-dd"),
+            endDate = mealPlan.EndDate?.ToString("yyyy-MM-dd"),
+            mealCount = request.Meals.Count
+        });
+    }
+
+    /// <summary>
+    /// Get all meal plans for a specific client
+    /// </summary>
+    [HttpGet("clients/{clientId:guid}")]
+    public async Task<IActionResult> GetClientPlans(Guid clientId)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        // IDOR Prevention
+        var link = await _appDb.DietitianClientLinks
+            .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value &&
+                                     l.ClientId == clientId &&
+                                     l.IsActive);
+
+        if (link == null)
+            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND",
+                "Client not found or not linked to this dietitian"));
+
+        var plans = await _appDb.ClientMealPlans
+            .Where(p => p.ClientId == clientId)
+            .OrderByDescending(p => p.StartDate)
+            .Select(p => new
+            {
+                id = p.Id,
+                name = p.Name,
+                description = p.Description,
+                startDate = p.StartDate,
+                endDate = p.EndDate,
+                isActive = p.IsActive,
+                mealCount = p.Meals.Count,
+                completedMeals = p.Meals.Count(m => m.CompletedAt != null)
+            })
+            .ToListAsync();
+
+        return Ok(new { items = plans });
+    }
+
+    /// <summary>
+    /// Get dashboard summary (KPIs)
+    /// </summary>
+    [HttpGet("~/api/dietitian/dashboard/summary")]
+    public async Task<IActionResult> GetDashboardSummary()
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        // Get active premium clients
+        var activePremiumClients = await _appDb.DietitianClientLinks
+            .Where(l => l.DietitianId == dietitianId &&
+                       l.IsActive &&
+                       l.Client.IsPremium)
+            .CountAsync();
+
+        // Get expiring soon (within 7 days)
+        var sevenDaysFromNow = DateTime.UtcNow.AddDays(7);
+        var expiringSoon = await _appDb.DietitianClientLinks
+            .Where(l => l.DietitianId == dietitianId &&
+                       l.IsActive &&
+                       l.Client.IsPremium &&
+                       l.Client.ProgramEndDate != null &&
+                       l.Client.ProgramEndDate <= sevenDaysFromNow &&
+                       l.Client.ProgramEndDate > DateTime.UtcNow)
+            .CountAsync();
+
+        // Calculate average compliance
+        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+        var clientIds = await _appDb.DietitianClientLinks
+            .Where(l => l.DietitianId == dietitianId && l.IsActive)
+            .Select(l => l.ClientId)
+            .ToListAsync();
+
+        var complianceData = await _appDb.ClientMealPlans
+            .Where(p => clientIds.Contains(p.ClientId) && p.StartDate >= thirtyDaysAgo)
+            .SelectMany(p => p.Meals)
+            .GroupBy(m => 1)
+            .Select(g => new
+            {
+                TotalMeals = g.Count(),
+                CompletedMeals = g.Count(m => m.CompletedAt != null)
+            })
+            .FirstOrDefaultAsync();
+
+        decimal averageCompliance = 0;
+        if (complianceData != null && complianceData.TotalMeals > 0)
+        {
+            averageCompliance = Math.Round((decimal)complianceData.CompletedMeals / complianceData.TotalMeals * 100, 1);
+        }
+
+        // Get at-risk clients (compliance < 50%)
+        // This is a simplified calculation - in production, you'd calculate per-client compliance
+        var atRisk = 0; // TODO: Implement per-client compliance calculation
+
+        return Ok(new
+        {
+            activePremiumClients,
+            averageCompliance,
+            expiringSoon,
+            atRisk
+        });
     }
 }
+
+// DTOs
+public record AssignPlanRequest(
+    string Name,
+    string? Description,
+    string StartDate,
+    string? EndDate,
+    List<MealRequest> Meals);
+
+public record MealRequest(
+    Guid RecipeId,
+    int DayOfWeek,
+    string MealType,
+    int Servings);

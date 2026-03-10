@@ -24,11 +24,11 @@ public class ListAccessKeysByDietitianQueryHandler
             .Select(ak => new AccessKeyDto
             {
                 Id = ak.Id,
-                Key = ak.Key,
+                Key = ak.KeyValue,
                 DietitianId = ak.DietitianId,
                 ClientId = ak.ClientId,
-                StartDate = ak.StartDate,
-                EndDate = ak.EndDate,
+                StartDate = ak.CreatedAtUtc,
+                EndDate = ak.ExpiresAtUtc,
                 IsActive = ak.IsActive
             })
             .ToListAsync(cancellationToken);

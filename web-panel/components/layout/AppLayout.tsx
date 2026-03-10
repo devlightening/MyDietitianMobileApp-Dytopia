@@ -2,6 +2,8 @@
 
 import { Sidebar } from './Sidebar'
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext'
+import { BrandingProvider } from '@/contexts/BrandingContext'
+import { AuthGuard } from '@/components/auth/AuthGuard'
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const { isLocked } = useSidebar()
@@ -29,9 +31,13 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider>
-      <AppLayoutContent>{children}</AppLayoutContent>
-    </SidebarProvider>
+    <AuthGuard requiredRole="dietitian">
+      <SidebarProvider>
+        <BrandingProvider>
+          <AppLayoutContent>{children}</AppLayoutContent>
+        </BrandingProvider>
+      </SidebarProvider>
+    </AuthGuard>
   )
 }
 

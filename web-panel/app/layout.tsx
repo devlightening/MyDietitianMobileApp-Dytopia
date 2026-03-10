@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
+import { Toaster } from 'react-hot-toast';
 import Providers from "./providers";
 import "./globals.css";
 
@@ -24,6 +25,7 @@ export default async function RootLayout({
         <NextIntlClientProvider messages={messages}>
           <Providers>
             {children}
+            <Toaster position="top-right" />
           </Providers>
         </NextIntlClientProvider>
       </body>

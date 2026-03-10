@@ -8,8 +8,8 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Session check with lightweight endpoint
-    getClients()
+    // Session check with lightweight endpoint (minimal params)
+    getClients({ page: 1, pageSize: 1 })
       .then(() => setIsAuthenticated(true))
       .catch((error) => {
         // Only redirect if it's an auth error (401/403)

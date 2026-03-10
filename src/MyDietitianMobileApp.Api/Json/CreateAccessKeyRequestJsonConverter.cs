@@ -15,8 +15,8 @@ public class CreateAccessKeyRequestJsonConverter : JsonConverter<CreateAccessKey
 
         string? publicUserId = null;
         string? clientIdLegacy = null;
-        string? startDate = null;
-        string? endDate = null;
+        string? createdAtUtc = null;
+        string? expiresAtUtc = null;
 
         while (reader.Read())
         {
@@ -37,11 +37,13 @@ public class CreateAccessKeyRequestJsonConverter : JsonConverter<CreateAccessKey
                 case "clientid":
                     clientIdLegacy = reader.GetString();
                     break;
-                case "startdate":
-                    startDate = reader.GetString();
+                case "createdatutc":
+                case "startdate": // backward compatibility
+                    createdAtUtc = reader.GetString();
                     break;
-                case "enddate":
-                    endDate = reader.GetString();
+                case "expiresatutc":
+                case "enddate": // backward compatibility
+                    expiresAtUtc = reader.GetString();
                     break;
                 default:
                     reader.Skip();
@@ -57,19 +59,18 @@ public class CreateAccessKeyRequestJsonConverter : JsonConverter<CreateAccessKey
         if (string.IsNullOrWhiteSpace(effectivePublicUserId))
             throw new JsonException("publicUserId is required.");
 
-        if (startDate is null || endDate is null)
-            throw new JsonException("startDate and endDate are required.");
+        if (createdAtUtc is null || expiresAtUtc is null)
+            throw new JsonException("createdAtUtc and expiresAtUtc are required.");
 
-        return new CreateAccessKeyRequest(effectivePublicUserId, startDate, endDate);
+        return new CreateAccessKeyRequest(effectivePublicUserId, createdAtUtc, expiresAtUtc);
     }
 
     public override void Write(Utf8JsonWriter writer, CreateAccessKeyRequest value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
         writer.WriteString("publicUserId", value.PublicUserId);
-        writer.WriteString("startDate", value.StartDate);
-        writer.WriteString("endDate", value.EndDate);
+        writer.WriteString("createdAtUtc", value.CreatedAtUtc);
+        writer.WriteString("expiresAtUtc", value.ExpiresAtUtc);
         writer.WriteEndObject();
     }
 }
-

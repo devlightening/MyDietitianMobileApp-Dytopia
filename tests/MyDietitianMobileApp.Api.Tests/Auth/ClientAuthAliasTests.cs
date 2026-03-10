@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Threading.Tasks;
 using System.Text.Json;
 using FluentAssertions;
+using System.Linq;
 using MyDietitianMobileApp.Api.Tests.Infrastructure;
 using Xunit;
 

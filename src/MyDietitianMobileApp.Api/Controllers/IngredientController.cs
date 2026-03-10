@@ -26,19 +26,26 @@ public class IngredientController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> SearchIngredients(
         [FromQuery] string? q = null,
+        [FromQuery(Name = "query")] string? legacyQuery = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
         page = page <= 0 ? 1 : page;
         pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
 
-        if (string.IsNullOrWhiteSpace(q))
+        // Backward-compatible support for both q and query parameters.
+        // If both are provided, q has precedence.
+        var effectiveQuery = !string.IsNullOrWhiteSpace(q)
+            ? q
+            : legacyQuery;
+
+        if (string.IsNullOrWhiteSpace(effectiveQuery))
         {
             return Ok(new { page, pageSize, total = 0, ingredients = Array.Empty<object>() });
         }
 
-        var query = new MyDietitianMobileApp.Application.Queries.SearchIngredientsQuery(q.Trim(), maxResults: pageSize);
-        var result = (MyDietitianMobileApp.Application.Queries.SearchIngredientsResult)await _mediator.Send(query);
+        var searchQuery = new MyDietitianMobileApp.Application.Queries.SearchIngredientsQuery(effectiveQuery.Trim(), maxResults: pageSize);
+        var result = (MyDietitianMobileApp.Application.Queries.SearchIngredientsResult)await _mediator.Send(searchQuery);
         
         // Note: SearchIngredientsQuery currently doesn't support pagination internally,
         // so we'll return all results with pagination metadata

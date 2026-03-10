@@ -1,17 +1,9 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+    using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authorization.Policy;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using MyDietitianMobileApp.Application.Commands;
-using MyDietitianMobileApp.Application.Handlers;
-using MyDietitianMobileApp.Application.Queries;
-using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Services;
@@ -19,19 +11,20 @@ using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Api.Middleware;
 using MyDietitianMobileApp.Api.Services;
-using Microsoft.Extensions.Caching.StackExchangeRedis;
-using Npgsql;
 using System.Text;
 using System.Threading.RateLimiting;
-using System.Threading.Tasks;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
-using MediatR;
 using MyDietitianMobileApp.Domain.Interfaces;
 using MyDietitianMobileApp.Infrastructure.Repositories;
 using System.IdentityModel.Tokens.Jwt;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = Directory.GetCurrentDirectory(),
+    WebRootPath = "wwwroot"
+});
 
 // ====================
 // NETWORK CONFIGURATION
@@ -46,6 +39,11 @@ builder.Services.AddControllers()
     .AddApplicationPart(typeof(MyDietitianMobileApp.Api.Controllers.DashboardController).Assembly);
 builder.Services.AddEndpointsApiExplorer();
 
+// ====================
+// DOMAIN SERVICES
+// ====================
+builder.Services.AddSingleton<MyDietitianMobileApp.Domain.Services.AccessCodeGenerator>();
+builder.Services.AddSingleton<MyDietitianMobileApp.Domain.Services.RecipeMatchService>();
 // ====================
 // SWAGGER
 // ====================
@@ -124,6 +122,28 @@ builder.Services.AddScoped<PasswordHasherService>();
 builder.Services.AddScoped<IHealthCalculationService, HealthCalculationService>();
 builder.Services.AddScoped<IPremiumStatusService, PremiumStatusService>();
 builder.Services.AddScoped<IAlternativeMealDecisionService, AlternativeMealDecisionService>();
+builder.Services.AddScoped<IRecipeRecommendationEngine, RecipeRecommendationEngine>();
+builder.Services.AddScoped<IIngredientNormalizationService, IngredientNormalizationService>();
+builder.Services.AddScoped<IIngredientTaxonomyService, IngredientTaxonomyService>();
+
+// ── LLM Normalization Layer (opt-in, disabled by default) ──────────────────
+var llmOptions = builder.Configuration.GetSection("IngredientLlm").Get<LlmNormalizationOptions>()
+                 ?? new LlmNormalizationOptions();
+builder.Services.AddSingleton(llmOptions);
+builder.Services.AddScoped<IngredientLlmCandidateBuilder>();
+if (llmOptions.Enabled)
+{
+    builder.Services.AddHttpClient("openai", c =>
+    {
+        c.BaseAddress = new Uri("https://api.openai.com/");
+        c.Timeout = TimeSpan.FromSeconds(15);
+    });
+    builder.Services.AddScoped<IIngredientLlmClient, OpenAiIngredientLlmClient>();
+}
+else
+{
+    builder.Services.AddScoped<IIngredientLlmClient, NullIngredientLlmClient>();
+}builder.Services.AddScoped<IBenchmarkRunner, BenchmarkRunner>();
 builder.Services.AddScoped<IComplianceCalculationService, ComplianceCalculationService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
@@ -135,6 +155,7 @@ builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IKitchenNar
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientIdentityResolver, MyDietitianMobileApp.Application.Services.ClientIdentityResolver>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientActivityWriter, MyDietitianMobileApp.Application.Services.ClientActivityWriter>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IComplianceService, MyDietitianMobileApp.Application.Services.ComplianceService>();
+builder.Services.AddScoped<DatabaseSeeder>();
 
 if (premiumWorkerEnabled)
 {
@@ -201,7 +222,7 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
-    // auth-strict policy: auth/register/login gibi endpointler için IP bazlı limit
+    // auth-strict policy: auth/register/login gibi endpointler i�in IP bazl� limit
     options.AddPolicy("auth-strict", httpContext =>
     {
         var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -227,7 +248,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: $"activation:{userId}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,                   // ör: 10 deneme
+                PermitLimit = 10,                   // �r: 10 deneme
                 Window = TimeSpan.FromMinutes(5),   // 5 dakika
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -374,7 +395,7 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.ContentType = "application/problem+json";
 
         var problem = MyDietitianMobileApp.Api.Problems.ApiProblems
-            .TooManyRequests("RATE_LIMITED", "Çok fazla istek gönderdiniz. Lütfen daha sonra tekrar deneyin.");
+            .TooManyRequests("RATE_LIMITED", "�ok fazla istek g�nderdiniz. L�tfen daha sonra tekrar deneyin.");
 
         await context.HttpContext.Response.WriteAsJsonAsync(problem, cancellationToken: token);
     };
@@ -441,6 +462,21 @@ builder.Services.AddAuthorization(options =>
         policy.RequireClaim(ClaimTypes.Role, "Admin");
     });
     
+    // DietitianOnly policy - robust role claim checking for settings endpoints
+    options.AddPolicy("DietitianOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+        {
+            // Support different role claim types (role, Role, ClaimTypes.Role)
+            var roles = ctx.User.FindAll(ClaimTypes.Role).Select(c => c.Value)
+                .Concat(ctx.User.FindAll("role").Select(c => c.Value))
+                .Concat(ctx.User.FindAll("Role").Select(c => c.Value));
+
+            return roles.Any(r => string.Equals(r, "Dietitian", StringComparison.OrdinalIgnoreCase));
+        });
+    });
+    
     // Premium client policy - requires authenticated client with active premium subscription
     options.AddPolicy("RequirePremiumClient", policy =>
     {
@@ -456,6 +492,24 @@ builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemDeta
 var app = builder.Build();
 
 // ====================
+// ENSURE WWWROOT AND UPLOADS DIRECTORIES EXIST
+// ====================
+{
+    var env = app.Services.GetRequiredService<IWebHostEnvironment>();
+    var webRoot = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
+    
+    // Create wwwroot if it doesn't exist
+    Directory.CreateDirectory(webRoot);
+    
+    // Create uploads directory structure
+    var uploadsDir = Path.Combine(webRoot, "uploads", "dietitian-logos");
+    Directory.CreateDirectory(uploadsDir);
+    
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("? Created/verified directory structure: {UploadsDir}", uploadsDir);
+}
+
+// ====================
 // DATABASE CONNECTIVITY CHECK
 // ====================
 if (app.Environment.IsDevelopment())
@@ -467,15 +521,15 @@ if (app.Environment.IsDevelopment())
     {
         var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         if (await appDb.Database.CanConnectAsync())
-            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AppDbContext)");
+            logger.LogInformation("? Successfully connected to PostgreSQL database (AppDbContext)");
 
         var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
         if (await authDb.Database.CanConnectAsync())
-            logger.LogInformation("✅ Successfully connected to PostgreSQL database (AuthDbContext)");
+            logger.LogInformation("? Successfully connected to PostgreSQL database (AuthDbContext)");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "❌ Database connection failed");
+        logger.LogError(ex, "? Database connection failed");
         throw;
     }
 }
@@ -539,7 +593,7 @@ using (var scope = app.Services.CreateScope())
         {
             var id = Guid.NewGuid();
             var name = $"Genel Tarif {i}";
-            var description = "Sistem tarafından tanımlanmış genel tarif.";
+            var description = "Sistem taraf�ndan tan�mlanm�� genel tarif.";
             var recipe = new Recipe(id, null, name, description, isPublic: true);
             seedRecipes.Add(recipe);
         }
@@ -552,7 +606,7 @@ using (var scope = app.Services.CreateScope())
     if (!await appDb.IngredientPacks.AnyAsync(p => p.IsSystem))
     {
         // First, ensure we have basic ingredients
-        var basicIngredientNames = new[] { "Yumurta", "Süt", "Yoğurt", "Tavuk", "Zeytinyağı", "Tuz", "Karabiber", "Yulaf", "Muz", "Domates" };
+        var basicIngredientNames = new[] { "Yumurta", "S�t", "Yo�urt", "Tavuk", "Zeytinya��", "Tuz", "Karabiber", "Yulaf", "Muz", "Domates" };
         var existingIngredients = await appDb.Ingredients
             .Where(i => basicIngredientNames.Contains(i.CanonicalName))
             .ToDictionaryAsync(i => i.CanonicalName, i => i.Id);
@@ -580,7 +634,7 @@ using (var scope = app.Services.CreateScope())
         // Create packs
         var packs = new List<IngredientPack>
         {
-            new IngredientPack(Guid.NewGuid(), "Kahvaltılıklar", isSystem: true, sortOrder: 1),
+            new IngredientPack(Guid.NewGuid(), "Kahvalt�l�klar", isSystem: true, sortOrder: 1),
             new IngredientPack(Guid.NewGuid(), "Temel Baharatlar", isSystem: true, sortOrder: 2),
             new IngredientPack(Guid.NewGuid(), "Fitness Temelleri", isSystem: true, sortOrder: 3)
         };
@@ -593,15 +647,15 @@ using (var scope = app.Services.CreateScope())
 
         // Extract ingredient IDs
         allIngredients.TryGetValue("Yumurta", out var eggId);
-        allIngredients.TryGetValue("Süt", out var milkId);
-        allIngredients.TryGetValue("Yoğurt", out var yogurtId);
+        allIngredients.TryGetValue("S�t", out var milkId);
+        allIngredients.TryGetValue("Yo�urt", out var yogurtId);
         allIngredients.TryGetValue("Yulaf", out var oatsId);
         allIngredients.TryGetValue("Muz", out var bananaId);
         allIngredients.TryGetValue("Tuz", out var saltId);
         allIngredients.TryGetValue("Karabiber", out var pepperId);
         allIngredients.TryGetValue("Tavuk", out var chickenId);
 
-        // Kahvaltılıklar: Yumurta, Süt, Yoğurt, Yulaf, Muz
+        // Kahvalt�l�klar: Yumurta, S�t, Yo�urt, Yulaf, Muz
         if (eggId != Guid.Empty && milkId != Guid.Empty && yogurtId != Guid.Empty && oatsId != Guid.Empty && bananaId != Guid.Empty)
         {
             packItems.AddRange(new[]
@@ -624,7 +678,7 @@ using (var scope = app.Services.CreateScope())
             });
         }
 
-        // Fitness Temelleri: Tavuk, Yulaf, Muz, Yoğurt
+        // Fitness Temelleri: Tavuk, Yulaf, Muz, Yo�urt
         if (chickenId != Guid.Empty && oatsId != Guid.Empty && bananaId != Guid.Empty && yogurtId != Guid.Empty)
         {
             packItems.AddRange(new[]
@@ -662,6 +716,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 
 app.UseCors("Frontend");
+app.UseStaticFiles(); // Serve static files from wwwroot (branding logos, etc.)
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -726,6 +781,15 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
     })
     .AllowAnonymous()
     .WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });
+}
+
+// ====================
+// SEED DATABASE (Development only)
+// ====================
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+    await seeder.SeedAsync();
 }
 
 app.Run();

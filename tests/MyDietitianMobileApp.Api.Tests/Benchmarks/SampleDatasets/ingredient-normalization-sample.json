@@ -1,0 +1,63 @@
+{
+  "name": "Sample Ingredient Normalization Benchmark",
+  "version": "1.0",
+  "description": "Small realistic dataset for testing ingredient normalization",
+  "cases": [
+    {
+      "id": "case-001",
+      "rawInput": "Tomato",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Exact canonical match"
+    },
+    {
+      "id": "case-002",
+      "rawInput": "  TOMATO  ",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Whitespace normalization"
+    },
+    {
+      "id": "case-003",
+      "rawInput": "Domates",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Turkish alias for tomato"
+    },
+    {
+      "id": "case-004",
+      "rawInput": "Yoğurt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Turkish character canonical"
+    },
+    {
+      "id": "case-005",
+      "rawInput": "Yogurt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "ASCII alias for Turkish canonical"
+    },
+    {
+      "id": "case-006",
+      "rawInput": "UnknownIngredient123",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Should not match anything"
+    },
+    {
+      "id": "case-007",
+      "rawInput": "\"Tomato,\"",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "canonical",
+      "difficulty": "medium",
+      "notes": "Punctuation stripping"
+    }
+  ]
+}
