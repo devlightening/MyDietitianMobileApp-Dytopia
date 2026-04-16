@@ -2427,9 +2427,6 @@ video {
 .bg-accent {
   background-color: hsl(var(--accent));
 }
-.bg-accent\/10 {
-  background-color: hsl(var(--accent) / 0.1);
-}
 .bg-accent\/20 {
   background-color: hsl(var(--accent) / 0.2);
 }
@@ -4610,10 +4607,6 @@ a:focus-visible {
   color: var(--brand-emerald);
 }
 
-.hover\:text-accent\/80:hover {
-  color: hsl(var(--accent) / 0.8);
-}
-
 .hover\:text-action:hover {
   color: hsl(var(--action));
 }
@@ -4870,14 +4863,6 @@ a:focus-visible {
 
 .group:hover .group-hover\:bg-\[var\(--surface-glass-hover\)\] {
   background-color: var(--surface-glass-hover);
-}
-
-.group:hover .group-hover\:bg-accent\/20 {
-  background-color: hsl(var(--accent) / 0.2);
-}
-
-.group:hover .group-hover\:bg-primary\/20 {
-  background-color: hsl(var(--primary) / 0.2);
 }
 
 .group:hover .group-hover\:bg-primary\/90 {

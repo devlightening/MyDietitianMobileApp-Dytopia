@@ -1,10 +1,10 @@
 {
   "pages": {
-    "/dashboard/page": [
+    "/dashboard/access-keys/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/dashboard/page.css",
-      "static/chunks/app/dashboard/page.js"
+      "static/css/app/dashboard/access-keys/page.css",
+      "static/chunks/app/dashboard/access-keys/page.js"
     ],
     "/dashboard/layout": [
       "static/chunks/webpack.js",
@@ -18,23 +18,11 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/dashboard/appointments/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/css/app/dashboard/appointments/page.css",
-      "static/chunks/app/dashboard/appointments/page.js"
-    ],
     "/dashboard/plans/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/css/app/dashboard/plans/page.css",
       "static/chunks/app/dashboard/plans/page.js"
-    ],
-    "/dashboard/clients/[clientId]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/css/app/dashboard/clients/[clientId]/page.css",
-      "static/chunks/app/dashboard/clients/[clientId]/page.js"
     ]
   }
 }
