@@ -1,4 +1,4 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 let Constants: any = null;
 try { Constants = require('expo-constants'); } catch { }
@@ -6,155 +6,125 @@ try { Constants = require('expo-constants'); } catch { }
 let Device: any = null;
 try { Device = require('expo-device'); } catch { }
 
-let API_BASE_URL_SOURCE = 'unknown';
+// Populated during resolution; exported only for diagnostic reads (never mutate externally).
+export let API_BASE_URL_SOURCE = 'unknown';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// URL STRATEGY
+//
+// Priority order:
+//   1. EXPO_PUBLIC_API_BASE_URL_FORCE=1 + EXPO_PUBLIC_API_BASE_URL → use as-is
+//   2. EXPO_PUBLIC_API_BASE_URL (no force) → use as-is
+//   3. Auto-detect (dev only):
+//      • Android emulator  → http://10.0.2.2:5000
+//        (10.0.2.2 is Android's special alias for the host machine loopback.)
+//      • iOS simulator     → http://127.0.0.1:5000
+//      • Physical device   → warns; must set FORCE + URL in .env or eas.json
+//
+// Supported URL forms:
+//   • http://10.0.2.2:5000            — Android emulator / adb reverse
+//   • http://192.168.x.x:5000         — LAN (same Wi-Fi)
+//   • https://xxx.trycloudflare.com   — Cloudflare Tunnel (no port needed)
+//   • https://api.mydietitian.com     — production
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Extract hostname from HTTP URL
+ * Validates and normalises a URL.
+ * - HTTPS URLs without an explicit port are left untouched (port 443 is implicit).
+ * - HTTP URLs without an explicit port are auto-corrected to :5000 so the app
+ *   never silently connects to :80 during local development.
  */
-function hostFromHttpUrl(raw: string): string | null {
+function validateAndNormalizeUrl(rawUrl: string, source: string): string {
+  let url = rawUrl.replace(/\/+$/, '');
+
   try {
-    const u = new URL(raw);
-    return u.hostname || null;
+    const u = new URL(url);
+
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      console.error(`❌ [API Config] Unexpected protocol in URL from "${source}": ${url}`);
+    }
+
+    // HTTPS without an explicit port is valid (implicit 443). Only auto-correct HTTP.
+    if (!u.port && u.protocol === 'http:') {
+      console.error(`❌ [API Config] HTTP URL from "${source}" has no explicit port: ${url}`);
+      console.error(`   HTTP defaults to :80 — almost certainly wrong for local dev.`);
+      url = `http://${u.hostname}:5000`;
+      console.warn(`⚠️  [API Config] Auto-corrected URL → ${url} (added :5000)`);
+    }
+
+    return url;
   } catch {
-    return null;
+    console.error(`❌ [API Config] Invalid URL from "${source}": ${rawUrl}`);
+    return url;
   }
 }
 
-/**
- * Extract hostname from debugger host string (e.g., "192.168.1.36:8081")
- */
-function hostFromDebuggerHost(raw: string): string | null {
-  if (!raw) return null;
-  const host = raw.split(':')[0];
-  return host || null;
-}
+function resolveDevBaseUrl(): string {
+  const isForced = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
+  const envUrl   = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-/**
- * Extract hostname from linking URI
- * e.g., exp+mobile-app://expo-development-client/?url=http%3A%2F%2F192.168.1.36%3A8081
- */
-function hostFromLinkingUri(uri: string): string | null {
-  if (!uri) return null;
-  const qIndex = uri.indexOf('?');
-  if (qIndex < 0) return null;
-  const qs = uri.slice(qIndex + 1);
-  const params = new URLSearchParams(qs);
-  const encoded = params.get('url');
-  if (!encoded) return null;
-  const decoded = decodeURIComponent(encoded);
-  return hostFromHttpUrl(decoded);
-}
-
-/**
- * Multi-source Metro host detection
- * Tries 5 different sources in priority order
- */
-export function getMetroHostSync(): string | null {
-  // Source 1: NativeModules.SourceCode.scriptURL (most reliable)
-  const scriptURL = NativeModules?.SourceCode?.scriptURL;
-  const h1 = scriptURL ? hostFromHttpUrl(scriptURL) : null;
-  if (h1) return h1;
-
-  // Source 2: Constants.expoConfig.hostUri
-  const hostUri = Constants?.expoConfig?.hostUri;
-  const h2 = hostUri ? hostFromDebuggerHost(hostUri) : null;
-  if (h2) return h2;
-
-  // Source 3: Constants.manifest.debuggerHost
-  const dbg1 = Constants?.manifest?.debuggerHost;
-  const h3 = dbg1 ? hostFromDebuggerHost(dbg1) : null;
-  if (h3) return h3;
-
-  // Source 4: Constants.manifest2.extra.expoClient.debuggerHost
-  const dbg2 = Constants?.manifest2?.extra?.expoClient?.debuggerHost;
-  const h4 = dbg2 ? hostFromDebuggerHost(dbg2) : null;
-  if (h4) return h4;
-
-  // Source 5: Constants.linkingUri (dev client golden source)
-  const linkingUri = Constants?.linkingUri;
-  const h5 = linkingUri ? hostFromLinkingUri(linkingUri) : null;
-  if (h5) return h5;
-
-  return null;
-}
-
-function resolveDevBaseUrl(): { url: string; source: string; metroHost?: string; envUrl?: string } {
-  const forceEnv = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
-  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-
-  // FORCE mode: env overrides everything
-  if (forceEnv && envUrl) {
-    return { url: envUrl, source: 'FORCED env', envUrl };
+  // ── FORCE mode ────────────────────────────────────────────────────────────
+  // Use the env URL exactly as configured.  No auto-detection, no runtime
+  // override.  This is the authoritative path for adb reverse dev workflow.
+  if (isForced && envUrl) {
+    API_BASE_URL_SOURCE = 'FORCED env (EXPO_PUBLIC_API_BASE_URL)';
+    return validateAndNormalizeUrl(envUrl, 'EXPO_PUBLIC_API_BASE_URL (FORCED)');
   }
 
-  // Primary: Use Metro host (auto-detected)
-  const metroHost = getMetroHostSync();
-  if (metroHost) {
-    const url = `http://${metroHost}:5000`;
-    return { url, source: 'metroHost (multi-source detection)', metroHost };
-  }
-
-  // Metro detection failed - warn but don't crash
-  console.warn('⚠️ Metro host detection failed - falling back to env or platform defaults');
-
-  // Fallback to env if available
+  // ── Non-force: env URL if provided ────────────────────────────────────────
   if (envUrl) {
-    return { url: envUrl, source: 'env (metro detection failed)', envUrl };
+    API_BASE_URL_SOURCE = 'env (EXPO_PUBLIC_API_BASE_URL)';
+    return validateAndNormalizeUrl(envUrl, 'EXPO_PUBLIC_API_BASE_URL');
   }
 
-  // Last resort: Platform defaults
-  if (Platform.OS === 'android') {
-    return { url: 'http://10.0.2.2:5000', source: 'android emulator fallback' };
+  // ── Auto-detect by platform ───────────────────────────────────────────────
+  // Physical device check: if running on a real device, localhost will not work.
+  const isPhysicalDevice = Device?.isDevice ?? false;
+
+  if (Platform.OS === 'android' && !isPhysicalDevice) {
+    // Android emulator: 10.0.2.2 routes to the host machine's 127.0.0.1.
+    // No adb reverse needed — works immediately after `expo run:android`.
+    API_BASE_URL_SOURCE = 'auto (Android emulator → 10.0.2.2)';
+    return 'http://10.0.2.2:5000';
   }
-  return { url: 'http://localhost:5000', source: 'ios simulator fallback' };
+
+  // iOS simulator shares the host network — localhost works directly.
+  API_BASE_URL_SOURCE = 'auto (iOS simulator / default)';
+  return 'http://127.0.0.1:5000';
 }
 
 function getApiBaseUrl(): string {
   if (__DEV__) {
-    const result = resolveDevBaseUrl();
-    API_BASE_URL_SOURCE = result.source;
-
-    const isPhysical = Device?.isDevice ?? Constants?.isDevice ?? false;
-    const isLocalhost = result.url.includes('localhost') || result.url.includes('127.0.0.1');
-
-    // Don't throw - just warn and return fallback
-    if (isPhysical && isLocalhost) {
-      console.error('❌ API Configuration Error: localhost on physical device');
-      console.error('Metro host detection failed. Set EXPO_PUBLIC_API_BASE_URL_FORCE=1');
-      console.error('and EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:5000');
-      // Return non-working but non-crashing URL - LoginScreen will show modal
-      return result.url;
-    }
-
-    return result.url;
+    return resolveDevBaseUrl();
   }
 
   // Production
-  return process.env.EXPO_PUBLIC_API_BASE_URL || Constants?.expoConfig?.extra?.apiBaseUrl || 'https://api.mydietitian.com';
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    Constants?.expoConfig?.extra?.apiBaseUrl ||
+    'https://api.mydietitian.com'
+  );
 }
 
 export const API_BASE_URL = getApiBaseUrl();
 
+// ── Startup log ──────────────────────────────────────────────────────────────
 if (__DEV__) {
-  const result = resolveDevBaseUrl();
-  const scriptURL = NativeModules?.SourceCode?.scriptURL;
-  const linkingUri = Constants?.linkingUri;
+  const isForced  = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
+  const rawEnvUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
   console.log('=== API Configuration ===');
-  console.log('Resolved API_BASE_URL:', API_BASE_URL);
-  console.log('Source:', API_BASE_URL_SOURCE);
-  console.log('Platform:', Platform.OS);
-  console.log('Device.isDevice:', Device?.isDevice ?? Constants?.isDevice ?? '(unknown)');
-  if (result.metroHost) console.log('Metro Host:', result.metroHost);
-  if (result.envUrl) console.log('Env URL:', result.envUrl);
-  console.log('Env EXPO_PUBLIC_API_BASE_URL:', process.env.EXPO_PUBLIC_API_BASE_URL || '(not set)');
-  console.log('Env FORCE:', process.env.EXPO_PUBLIC_API_BASE_URL_FORCE || '(not set)');
-  console.log('SourceCode.scriptURL:', scriptURL || '(not available)');
-  console.log('linkingUri:', linkingUri || '(not available)');
-  console.log('========================');
+  console.log('Resolved URL  :', API_BASE_URL);
+  console.log('Source        :', API_BASE_URL_SOURCE);
+  console.log('Platform      :', Platform.OS);
+  console.log('FORCE=1       :', isForced);
+  console.log('Raw env URL   :', rawEnvUrl ?? '(not set — using auto-detect)');
+  console.log('=========================');
+
+  // Warn about missing port only for HTTP URLs — HTTPS tunnel URLs have no port by design.
+  if (rawEnvUrl && rawEnvUrl.startsWith('http://') && !rawEnvUrl.match(/:\d+\/?$/)) {
+    console.error('❌ EXPO_PUBLIC_API_BASE_URL is HTTP but has no port — stale bundle? Run: npx expo start --clear');
+  }
 }
 
 export default API_BASE_URL;
-
-
-

@@ -47,6 +47,7 @@ public class IngredientNormalizationBenchmarkCaseResult
     public string? FailureReason { get; init; }
     public double Confidence { get; init; }
     public string? Difficulty { get; init; }
+    public double ElapsedMs { get; init; }
 }
 
 /// <summary>
@@ -66,6 +67,7 @@ public class IngredientNormalizationBenchmarkSummary
     public int FuzzyCorrectCount { get; init; }
     public int LlmMatchCount { get; init; }
     public int LlmCorrectCount { get; init; }
+    public double AverageLatencyMs { get; init; }
     public Dictionary<string, IngredientNormalizationBenchmarkSummary>? PerDifficultyBreakdown { get; init; }
 }
 
@@ -76,8 +78,29 @@ public class IngredientNormalizationBenchmarkResult
 {
     public string DatasetName { get; init; } = string.Empty;
     public string DatasetVersion { get; init; } = string.Empty;
+    public string ExecutionLabel { get; init; } = "configured";
+    public bool LlmEnabled { get; init; }
+    public string LlmProvider { get; init; } = "none";
     public IngredientNormalizationBenchmarkSummary Summary { get; init; } = null!;
     public IReadOnlyList<IngredientNormalizationBenchmarkCaseResult> CaseResults { get; init; } = Array.Empty<IngredientNormalizationBenchmarkCaseResult>();
+    public DateTime ExecutedAtUtc { get; init; }
+}
+
+public class IngredientNormalizationBenchmarkComparisonDelta
+{
+    public double AccuracyDelta { get; init; }
+    public int UnmatchedDelta { get; init; }
+    public int AmbiguousDelta { get; init; }
+    public int LlmMatchDelta { get; init; }
+    public int LlmCorrectDelta { get; init; }
+    public double AverageLatencyDeltaMs { get; init; }
+}
+
+public class IngredientNormalizationBenchmarkComparisonResult
+{
+    public IngredientNormalizationBenchmarkResult LlmOff { get; init; } = null!;
+    public IngredientNormalizationBenchmarkResult LlmOn { get; init; } = null!;
+    public IngredientNormalizationBenchmarkComparisonDelta Delta { get; init; } = null!;
     public DateTime ExecutedAtUtc { get; init; }
 }
 
@@ -159,5 +182,144 @@ public class RecipeRecommendationBenchmarkResult
     public string DatasetVersion { get; init; } = string.Empty;
     public RecipeRecommendationBenchmarkSummary Summary { get; init; } = null!;
     public IReadOnlyList<RecipeRecommendationBenchmarkCaseResult> CaseResults { get; init; } = Array.Empty<RecipeRecommendationBenchmarkCaseResult>();
+    public DateTime ExecutedAtUtc { get; init; }
+}
+
+// ============================================================================
+// MULTIMODAL ACQUISITION BENCHMARK MODELS
+// ============================================================================
+
+public class MultimodalAcquisitionBenchmarkCase
+{
+    public string Id { get; init; } = string.Empty;
+    public string Source { get; init; } = string.Empty; // text | barcode | vision
+    public string RawInput { get; init; } = string.Empty;
+    public string? Barcode { get; init; }
+    public string? ProductName { get; init; }
+    public string? Brand { get; init; }
+    public string? CategoriesText { get; init; }
+    public string? ExpectedCanonicalName { get; init; }
+    public string ExpectedMappingType { get; init; } = "Unresolved";
+    public bool ExpectedRequiresConfirmation { get; init; }
+    public bool ExpectedResolved { get; init; }
+}
+
+public class MultimodalAcquisitionBenchmarkDataset
+{
+    public string Name { get; init; } = string.Empty;
+    public string Version { get; init; } = "1.0";
+    public string? Description { get; init; }
+    public IReadOnlyList<MultimodalAcquisitionBenchmarkCase> Cases { get; init; } = Array.Empty<MultimodalAcquisitionBenchmarkCase>();
+}
+
+public class MultimodalAcquisitionBenchmarkCaseResult
+{
+    public string CaseId { get; init; } = string.Empty;
+    public string Source { get; init; } = string.Empty;
+    public string RawInput { get; init; } = string.Empty;
+    public bool IsCorrect { get; init; }
+    public bool CandidateHitAt3 { get; init; }
+    public bool ExpectedResolved { get; init; }
+    public bool ActualResolved { get; init; }
+    public string? ExpectedCanonicalName { get; init; }
+    public string? ActualCanonicalName { get; init; }
+    public string ExpectedMappingType { get; init; } = string.Empty;
+    public string ActualMappingType { get; init; } = string.Empty;
+    public bool ExpectedRequiresConfirmation { get; init; }
+    public bool ActualRequiresConfirmation { get; init; }
+    public IReadOnlyList<string> CandidateCanonicalNames { get; init; } = Array.Empty<string>();
+    public double ElapsedMs { get; init; }
+    public string? FailureReason { get; init; }
+}
+
+public class MultimodalAcquisitionBenchmarkSourceSummary
+{
+    public string Source { get; init; } = string.Empty;
+    public int TotalCases { get; init; }
+    public int Top1CorrectCount { get; init; }
+    public int HitAt3Count { get; init; }
+    public int UnresolvedCount { get; init; }
+    public int ConfirmationCount { get; init; }
+    public double Top1Accuracy { get; init; }
+    public double HitAt3Rate { get; init; }
+    public double UnresolvedRate { get; init; }
+    public double ConfirmationRate { get; init; }
+    public double MedianLatencyMs { get; init; }
+}
+
+public class MultimodalAcquisitionBenchmarkSummary
+{
+    public int TotalCases { get; init; }
+    public int Top1CorrectCount { get; init; }
+    public int HitAt3Count { get; init; }
+    public int UnresolvedCount { get; init; }
+    public int ConfirmationCount { get; init; }
+    public double Top1Accuracy { get; init; }
+    public double HitAt3Rate { get; init; }
+    public double UnresolvedRate { get; init; }
+    public double ConfirmationRate { get; init; }
+    public double MedianLatencyMs { get; init; }
+    public IReadOnlyList<MultimodalAcquisitionBenchmarkSourceSummary> PerSource { get; init; } = Array.Empty<MultimodalAcquisitionBenchmarkSourceSummary>();
+}
+
+public class MultimodalAcquisitionBenchmarkResult
+{
+    public string DatasetName { get; init; } = string.Empty;
+    public string DatasetVersion { get; init; } = string.Empty;
+    public MultimodalAcquisitionBenchmarkSummary Summary { get; init; } = null!;
+    public IReadOnlyList<MultimodalAcquisitionBenchmarkCaseResult> CaseResults { get; init; } = Array.Empty<MultimodalAcquisitionBenchmarkCaseResult>();
+    public DateTime ExecutedAtUtc { get; init; }
+}
+
+// ============================================================================
+// HYBRID RECIPE BENCHMARK MODELS
+// ============================================================================
+
+public class HybridRecipeBenchmarkCase
+{
+    public string Id { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string SourceMix { get; init; } = "hybrid";
+    public IReadOnlyList<string> AvailableCanonicalIngredients { get; init; } = Array.Empty<string>();
+    public string? ExpectedTop1RecipeId { get; init; }
+    public IReadOnlyList<string> AcceptableTop3RecipeIds { get; init; } = Array.Empty<string>();
+}
+
+public class HybridRecipeBenchmarkDataset
+{
+    public string Name { get; init; } = string.Empty;
+    public string Version { get; init; } = "1.0";
+    public string? Description { get; init; }
+    public IReadOnlyList<HybridRecipeBenchmarkCase> Cases { get; init; } = Array.Empty<HybridRecipeBenchmarkCase>();
+}
+
+public class HybridRecipeBenchmarkCaseResult
+{
+    public string CaseId { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string SourceMix { get; init; } = string.Empty;
+    public bool Top1Correct { get; init; }
+    public bool HitAt3 { get; init; }
+    public string? ExpectedTop1RecipeId { get; init; }
+    public string? ActualTop1RecipeId { get; init; }
+    public IReadOnlyList<string> ActualTop3RecipeIds { get; init; } = Array.Empty<string>();
+    public string? FailureReason { get; init; }
+}
+
+public class HybridRecipeBenchmarkSummary
+{
+    public int TotalCases { get; init; }
+    public int Top1CorrectCount { get; init; }
+    public int HitAt3Count { get; init; }
+    public double Top1Precision { get; init; }
+    public double HitAt3Rate { get; init; }
+}
+
+public class HybridRecipeBenchmarkResult
+{
+    public string DatasetName { get; init; } = string.Empty;
+    public string DatasetVersion { get; init; } = string.Empty;
+    public HybridRecipeBenchmarkSummary Summary { get; init; } = null!;
+    public IReadOnlyList<HybridRecipeBenchmarkCaseResult> CaseResults { get; init; } = Array.Empty<HybridRecipeBenchmarkCaseResult>();
     public DateTime ExecutedAtUtc { get; init; }
 }

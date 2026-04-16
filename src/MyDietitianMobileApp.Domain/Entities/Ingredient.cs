@@ -10,6 +10,15 @@ namespace MyDietitianMobileApp.Domain.Entities
         public string CanonicalName { get; private set; }
         public IReadOnlyCollection<string> Aliases => _aliases.AsReadOnly();
         public bool IsActive { get; private set; }
+
+        /// <summary>
+        /// True for pantry helpers (oils, salt, spices, sauces, vinegar, etc.).
+        /// These ingredients contribute to a recipe score but cannot be the sole
+        /// proof of a meaningful "full match" in the recommendation engine.
+        /// </summary>
+        public bool IsCondiment { get; private set; }
+
+        public void SetIsCondiment(bool isCondiment) => IsCondiment = isCondiment;
         
         // Legacy fields - kept for backward compatibility, but should not be used in new code
         // These are recipe-specific, not ingredient-specific

@@ -1,9 +1,9 @@
 'use client';
 
+import { useTheme } from 'next-themes';
 import { ToastContainer, toast as toastify, ToastOptions } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Custom toast wrapper with design system styling
 export const toast = {
   success: (message: string, options?: ToastOptions) => {
     toastify.success(message, {
@@ -32,6 +32,8 @@ export const toast = {
 };
 
 export function ToastProvider() {
+  const { resolvedTheme } = useTheme();
+
   return (
     <ToastContainer
       position="top-right"
@@ -43,9 +45,11 @@ export function ToastProvider() {
       pauseOnFocusLoss
       draggable
       pauseOnHover
-      theme="light"
-      toastClassName="rounded-lg shadow-lg border border-border"
-      bodyClassName="text-sm font-medium"
+      theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+      toastClassName={() =>
+        'rounded-2xl border border-border bg-[var(--surface-overlay)] text-foreground shadow-lg shadow-black/10 dark:shadow-black/40'
+      }
+      bodyClassName={() => 'text-sm font-medium text-foreground'}
       progressClassName="bg-primary/20"
     />
   );

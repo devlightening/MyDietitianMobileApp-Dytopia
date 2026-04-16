@@ -28,51 +28,50 @@ export function ClientsFilters({
   lowCompliance,
   onLowComplianceChange,
   onClearFilters,
-  hasActiveFilters
+  hasActiveFilters,
 }: ClientsFiltersProps) {
   return (
-    <div className="space-y-4">
-      {/* Search and Status Filter Row */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        {/* Search Input */}
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+    <div className="card-sfcos space-y-4 p-4 sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             data-testid="clients-search"
             type="text"
             placeholder="Danışan adı veya e-posta ile ara..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10"
+            className="h-12 rounded-full pl-11"
           />
         </div>
 
-        {/* Status Filter */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 rounded-full bg-surface-overlay p-1.5">
           <Button
             variant={status === 'all' ? 'primary' : 'secondary'}
             onClick={() => onStatusChange('all')}
+            className="h-10 rounded-full px-5"
           >
             Tümü
           </Button>
           <Button
             variant={status === 'premium' ? 'primary' : 'secondary'}
             onClick={() => onStatusChange('premium')}
+            className="h-10 rounded-full px-5"
           >
             Premium
           </Button>
           <Button
             variant={status === 'free' ? 'primary' : 'secondary'}
             onClick={() => onStatusChange('free')}
+            className="h-10 rounded-full px-5"
           >
             Ücretsiz
           </Button>
         </div>
       </div>
 
-      {/* Quick Filters Row */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">Hızlı Filtreler:</span>
+        <span className="text-sm font-medium text-muted-foreground">Hızlı filtreler:</span>
 
         <button
           type="button"
@@ -81,9 +80,9 @@ export function ClientsFilters({
         >
           <Badge
             variant={expiringSoon ? 'primary' : 'secondary'}
-            className="hover:opacity-80 transition pointer-events-none"
+            className="pointer-events-none transition hover:opacity-80"
           >
-            {expiringSoon && '✓ '}Yakında Sona Erecek (7 gün)
+            {expiringSoon ? 'Seçili • ' : ''}Yakında sona erecek (7 gün)
           </Badge>
         </button>
 
@@ -94,9 +93,9 @@ export function ClientsFilters({
         >
           <Badge
             variant={lowCompliance ? 'primary' : 'secondary'}
-            className="hover:opacity-80 transition pointer-events-none"
+            className="pointer-events-none transition hover:opacity-80"
           >
-            {lowCompliance && '✓ '}Düşük Uyum (&lt;60%)
+            {lowCompliance ? 'Seçili • ' : ''}Düşük uyum (&lt;60%)
           </Badge>
         </button>
 
@@ -106,8 +105,8 @@ export function ClientsFilters({
             onClick={onClearFilters}
             className="ml-2"
           >
-            <X className="w-4 h-4 mr-1" />
-            Filtreleri Temizle
+            <X className="mr-1 h-4 w-4" />
+            Filtreleri temizle
           </Button>
         )}
       </div>

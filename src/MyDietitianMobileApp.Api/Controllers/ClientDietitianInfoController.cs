@@ -69,24 +69,20 @@ public class ClientDietitianInfoController : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.DietitianId == dietitianId);
 
+        var brandingPayload = new
+        {
+            clinicName = branding?.ClinicName ?? dietitian.ClinicName ?? dietitian.FullName,
+            logoUrl = branding?.LogoUrl,
+            primaryColorHex = branding?.PrimaryColorHex ?? "#111111",
+            accentColorHex = branding?.AccentColorHex ?? "#22C55E"
+        };
+
         return Ok(new
         {
             dietitianId = dietitian.Id,
             fullName = dietitian.FullName,
             clinicName = dietitian.ClinicName ?? dietitian.FullName,
-            branding = branding != null ? new
-            {
-                clinicName = branding.ClinicName,
-                logoUrl = branding.LogoUrl,
-                primaryColorHex = branding.PrimaryColorHex,
-                accentColorHex = branding.AccentColorHex
-            } : new
-            {
-                clinicName = dietitian.ClinicName ?? dietitian.FullName,
-                logoUrl = (string?)null,
-                primaryColorHex = "#111111",
-                accentColorHex = "#22C55E"
-            }
+            branding = brandingPayload
         });
     }
 }

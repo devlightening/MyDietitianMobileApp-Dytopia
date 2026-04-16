@@ -10,8 +10,10 @@ using MyDietitianMobileApp.Domain.Interfaces;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
+using MyDietitianMobileApp.Api.Time;
 using System.Text.Json.Serialization;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -169,10 +171,12 @@ public class DietitianManagementController : ControllerBase
         var clientsCount = await _appDb.DietitianClientLinks
             .CountAsync(l => l.DietitianId == dietitianId && l.IsActive);
 
-        // Count active plans (published meal plans for today or future)
-        var today = DateTime.UtcNow.Date;
-        var activePlans = await _appDb.MealPlans
-            .Where(p => p.Date >= today && p.Status == Domain.Entities.MealPlanStatus.Published)
+        // Count clients with an active ClientMealPlan assigned by this dietitian
+        var today = AppTime.ToStoredPlanDate(AppTime.LocalToday);
+        var activePlans = await _appDb.ClientMealPlans
+            .Where(p => p.DietitianId == dietitianId &&
+                        p.IsActive &&
+                        (p.EndDate == null || p.EndDate.Value >= today))
             .Select(p => p.ClientId)
             .Distinct()
             .CountAsync();
@@ -188,10 +192,10 @@ public class DietitianManagementController : ControllerBase
 
         return Ok(new
         {
-            clientsCount,
-            activePlans,
-            recipesCount,
-            pendingInvites
+            totalClientsCount = clientsCount,
+            activeClientsCount = activePlans,
+            recipeCount = recipesCount,
+            accessKeyCount = pendingInvites
         });
     }
 
@@ -210,27 +214,35 @@ public class DietitianManagementController : ControllerBase
             return Forbid();
 
         var dietitianId = user.LinkedDietitianId.Value;
+        var safeLimit = Math.Clamp(limit, 1, 100);
 
         // Get recent client links with client names
-        var recentLinks = await (from link in _appDb.DietitianClientLinks
-                                 join client in _appDb.Clients on link.ClientId equals client.Id
-                                 where link.DietitianId == dietitianId && link.IsActive
-                                 orderby link.LinkedAt descending
-                                 select new
-                                 {
-                                     type = "CLIENT_ADDED",
-                                     message = "New client linked: " + client.FullName,
-                                     occurredAt = link.LinkedAt
-                                 })
-                                .Take(limit)
-                                .ToListAsync();
+        var activities = await (from link in _appDb.DietitianClientLinks
+                                join client in _appDb.Clients on link.ClientId equals client.Id
+                                where link.DietitianId == dietitianId
+                                orderby link.LinkedAt descending
+                                select new
+                                {
+                                    id = link.Id.ToString(),
+                                    type = "client_linked",
+                                    clientId = client.Id.ToString(),
+                                    clientName = client.FullName ?? "Danışan",
+                                    timestamp = link.LinkedAt,
+                                    metadata = new
+                                    {
+                                        note = link.IsActive ? "kliniğe bağlandı" : "bağlantısı pasife alındı"
+                                    }
+                                })
+                               .Take(safeLimit)
+                               .ToListAsync();
 
-        return Ok(new { items = recentLinks });
+        return Ok(new { activities });
     }
 
 
     /// <summary>
-    /// Get specific client details by ID (for web panel detail page)
+    /// Get specific client details by ID (for web panel detail page).
+    /// Returns clinical snapshot: latest measurement, active plan, 7-day compliance, demographics.
     /// WEB-CLIENT-03: Client detail endpoint with IDOR prevention
     /// </summary>
     [HttpGet("clients/{clientId}")]
@@ -247,29 +259,154 @@ public class DietitianManagementController : ControllerBase
         // IDOR Prevention: Verify dietitian owns this client
         var link = await _appDb.DietitianClientLinks
             .Include(l => l.Client)
-            .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value 
-                                   && l.ClientId == clientId 
+            .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value
+                                   && l.ClientId == clientId
                                    && l.IsActive);
 
         if (link == null)
             return NotFound(new { message = "Danışan bulunamadı veya erişim yetkiniz yok" });
 
         var client = link.Client;
-        
-        // Get dietitian info for clinic name
-        var dietitian = await _appDb.Dietitians.FindAsync(user.LinkedDietitianId.Value);
+
+        // Parallel queries for clinical snapshot
+        var latestMeasurementTask = _appDb.ClientMeasurements
+            .AsNoTracking()
+            .Where(m => m.ClientId == clientId)
+            .OrderByDescending(m => m.RecordedAtUtc)
+            .Select(m => new { m.WeightKg, m.HeightCm, m.Bmi, m.Bmr, m.RecordedAtUtc })
+            .FirstOrDefaultAsync();
+
+        var activePlanTask = _appDb.ClientMealPlans
+            .AsNoTracking()
+            .Where(p => p.ClientId == clientId && p.IsActive)
+            .OrderByDescending(p => p.StartDate)
+            .Select(p => new { p.Id, p.Name, p.StartDate, p.EndDate })
+            .FirstOrDefaultAsync();
+
+        var sevenDaysAgo = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7));
+        var complianceTask = _appDb.MealCompliances
+            .AsNoTracking()
+            .Where(mc => mc.ClientId == clientId && mc.Date >= sevenDaysAgo)
+            .GroupBy(mc => 1)
+            .Select(g => new
+            {
+                total = g.Count(),
+                done  = g.Count(mc => mc.Status == ComplianceStatus.Done || mc.Status == ComplianceStatus.Alternative)
+            })
+            .FirstOrDefaultAsync();
+
+        var publicUserIdTask = _authDb.UserAccounts
+            .AsNoTracking()
+            .Where(u => u.LinkedClientId == clientId)
+            .Select(u => u.PublicUserId)
+            .FirstOrDefaultAsync();
+
+        await Task.WhenAll(latestMeasurementTask, activePlanTask, complianceTask, publicUserIdTask);
+
+        var m = latestMeasurementTask.Result;
+        var plan = activePlanTask.Result;
+        var comp = complianceTask.Result;
+
+        decimal compliancePct = (comp != null && comp.total > 0)
+            ? Math.Round((decimal)comp.done / comp.total * 100, 1)
+            : 0;
 
         return Ok(new
         {
-            id = client.Id,
-            fullName = client.FullName,
-            email = client.Email,
-            isPremium = client.IsPremium,
-            isActive = client.IsActive,
-            clinicName = dietitian?.ClinicName ?? dietitian?.FullName,
-            linkedAt = link.LinkedAt,
+            id              = client.Id,
+            publicUserId    = publicUserIdTask.Result ?? client.Id.ToString(),
+            fullName        = client.FullName,
+            email           = client.Email,
+            gender          = (int)client.Gender,
+            birthDate       = client.BirthDate.ToString("yyyy-MM-dd"),
+            isPremium       = client.IsPremium,
+            isActive        = client.IsActive,
+            linkedAt        = link.LinkedAt,
             programStartDate = client.ProgramStartDate,
-            programEndDate = client.ProgramEndDate
+            programEndDate   = client.ProgramEndDate,
+            // Clinical snapshot
+            latestWeight           = m?.WeightKg,
+            latestHeight           = m?.HeightCm,
+            latestBmi              = m?.Bmi,
+            latestBmr              = m?.Bmr,
+            lastMeasurementDate    = m?.RecordedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            // Active plan
+            activePlanId   = plan?.Id,
+            activePlanName = plan?.Name,
+            activePlanStartDate = plan?.StartDate.ToString("yyyy-MM-dd"),
+            activePlanEndDate   = plan?.EndDate?.ToString("yyyy-MM-dd"),
+            // Compliance
+            compliancePercent = compliancePct,
+        });
+    }
+
+    /// <summary>
+    /// Get the active meal plan for a specific client with full meal details.
+    /// </summary>
+    [HttpGet("clients/{clientId}/active-plan")]
+    public async Task<IActionResult> GetClientActivePlan(Guid clientId)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var link = await _appDb.DietitianClientLinks
+            .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value
+                                   && l.ClientId == clientId
+                                   && l.IsActive);
+        if (link == null)
+            return NotFound(new { message = "Danışan bulunamadı" });
+
+        var plan = await _appDb.ClientMealPlans
+            .AsNoTracking()
+            .Include(p => p.Meals)
+                .ThenInclude(m => m.Recipe)
+            .Where(p => p.ClientId == clientId && p.IsActive)
+            .OrderByDescending(p => p.StartDate)
+            .FirstOrDefaultAsync();
+
+        if (plan == null)
+            return Ok(new { plan = (object?)null });
+
+        var totalMeals = plan.Meals.Count;
+        var completedMeals = plan.Meals.Count(m => m.CompletedAt != null);
+
+        var dayNames = new[] { "Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt" };
+
+        return Ok(new
+        {
+            plan = new
+            {
+                id              = plan.Id,
+                name            = plan.Name,
+                description     = plan.Description,
+                startDate       = plan.StartDate.ToString("yyyy-MM-dd"),
+                endDate         = plan.EndDate?.ToString("yyyy-MM-dd"),
+                isActive        = plan.IsActive,
+                totalMeals      = totalMeals,
+                completedMeals  = completedMeals,
+                completionPercent = totalMeals > 0 ? Math.Round((decimal)completedMeals / totalMeals * 100, 1) : 0,
+                meals = plan.Meals
+                    .OrderBy(m => m.DayOfWeek).ThenBy(m => m.MealType)
+                    .Select(m => new
+                    {
+                        id          = m.Id,
+                        dayOfWeek   = m.DayOfWeek,
+                        dayName     = dayNames[m.DayOfWeek],
+                        mealType    = m.MealType,
+                        servings    = m.Servings,
+                        isCompleted = m.CompletedAt != null,
+                        recipe = m.Recipe == null ? null : new
+                        {
+                            id   = m.Recipe.Id,
+                            name = m.Recipe.Name,
+                        }
+                    })
+            }
         });
     }
 
@@ -296,16 +433,68 @@ public class DietitianManagementController : ControllerBase
         if (link == null)
             return NotFound(new { message = "Client not found or not linked to this dietitian" });
 
-        // TODO: Implement actual activity tracking
-        // For now, return empty array
-        return Ok(new { items = new object[] { } });
+        // Merge multiple event sources into one unified feed
+        var rawActivities = await _appDb.ClientActivities
+            .AsNoTracking()
+            .Where(a => a.ClientId == clientId)
+            .OrderByDescending(a => a.AtUtc)
+            .Take(40)
+            .Select(a => new
+            {
+                id        = a.Id.ToString(),
+                type      = MapActivityType(a.Type),
+                timestamp = a.AtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                metadata  = (object?)a.MetaJson
+            })
+            .ToListAsync();
+
+        var badgeActivities = await _appDb.ClientAchievementUnlocks
+            .AsNoTracking()
+            .Where(b => b.ClientId == clientId)
+            .OrderByDescending(b => b.UnlockedAtUtc)
+            .Take(20)
+            .Select(b => new
+            {
+                id        = b.ClientId.ToString() + "_" + b.BadgeId,
+                type      = "badge_unlocked",
+                timestamp = b.UnlockedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                metadata  = (object?)new { badgeId = b.BadgeId, level = b.CurrentLevel }
+            })
+            .ToListAsync();
+
+        var measurementActivities = await _appDb.ClientMeasurements
+            .AsNoTracking()
+            .Where(m => m.ClientId == clientId)
+            .OrderByDescending(m => m.RecordedAtUtc)
+            .Take(20)
+            .Select(m => new
+            {
+                id        = m.Id.ToString(),
+                type      = "weight_update",
+                timestamp = m.RecordedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                metadata  = (object?)new { weight = m.WeightKg, bmi = m.Bmi, sourceType = m.SourceType }
+            })
+            .ToListAsync();
+
+        var merged = rawActivities
+            .Cast<object>()
+            .Concat(badgeActivities)
+            .Concat(measurementActivities)
+            .OrderByDescending(a => ((dynamic)a).timestamp)
+            .Take(50)
+            .ToList();
+
+        return Ok(new { activities = merged });
     }
 
     /// <summary>
-    /// Get measurements for a specific client (for client detail page)
+    /// Get unified measurement history for a client (dietitian view).
+    /// Returns ClientMeasurements records ordered newest first.
     /// </summary>
     [HttpGet("clients/{clientId}/measurements")]
-    public async Task<IActionResult> GetClientMeasurements(Guid clientId)
+    public async Task<IActionResult> GetClientMeasurements(
+        Guid clientId,
+        [FromQuery] int lastNDays = 365)
     {
         try
         {
@@ -317,22 +506,195 @@ public class DietitianManagementController : ControllerBase
             if (user?.LinkedDietitianId == null)
                 return Forbid();
 
-            // IDOR Prevention: Verify this client belongs to this dietitian
             var link = await _appDb.DietitianClientLinks
-                .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value && 
-                                         l.ClientId == clientId && 
+                .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value &&
+                                         l.ClientId == clientId &&
                                          l.IsActive);
             if (link == null)
-                return NotFound(new { message = "Client not found or not linked to this dietitian" });
+                return NotFound(new { message = "Danışan bulunamadı veya diyetisyene bağlı değil" });
 
-            // TODO: Implement actual measurements retrieval
-            // For now, return empty array
-            return Ok(new { items = new object[] { } });
+            var cutoff = DateTime.UtcNow.AddDays(-Math.Abs(lastNDays));
+
+            var measurements = await _appDb.ClientMeasurements
+                .AsNoTracking()
+                .Where(m => m.ClientId == clientId && m.RecordedAtUtc >= cutoff)
+                .OrderByDescending(m => m.RecordedAtUtc)
+                .Take(120)
+                .Select(m => new
+                {
+                    id                   = m.Id,
+                    recordedAtUtc        = m.RecordedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    sourceType           = m.SourceType,
+                    weightKg             = m.WeightKg,
+                    heightCm             = m.HeightCm,
+                    bodyFatPercent       = m.BodyFatPercent,
+                    musclePercent        = m.MusclePercent,
+                    waterPercent         = m.WaterPercent,
+                    waistCm              = m.WaistCm,
+                    hipCm                = m.HipCm,
+                    chestCm              = m.ChestCm,
+                    bmi                  = m.Bmi,
+                    bmiCategory          = m.BmiCategory,
+                    bmr                  = m.Bmr,
+                    waistHipRatio        = m.WaistHipRatio,
+                    notes                = m.Notes,
+                    isClinicallyVerified = m.IsClinicallyVerified,
+                    createdAtUtc         = m.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                })
+                .ToListAsync();
+
+            return Ok(new { measurements });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting measurements for client {ClientId}", clientId);
-            return StatusCode(500, new { message = "Failed to retrieve measurements", traceId = HttpContext.TraceIdentifier });
+            return StatusCode(500, new { message = "Ölçümler alınamadı", traceId = HttpContext.TraceIdentifier });
+        }
+    }
+
+    /// <summary>
+    /// Add a clinical measurement for a client (dietitian entry: sourceType = "dietitian").
+    /// </summary>
+    [HttpPost("clients/{clientId}/measurements")]
+    public async Task<IActionResult> AddClientMeasurement(
+        Guid clientId,
+        [FromBody] DietitianAddMeasurementRequest request)
+    {
+        try
+        {
+            var userId = User.GetUserId();
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+            if (user?.LinkedDietitianId == null)
+                return Forbid();
+
+            var link = await _appDb.DietitianClientLinks
+                .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value &&
+                                         l.ClientId == clientId &&
+                                         l.IsActive);
+            if (link == null)
+                return NotFound(new { message = "Danışan bulunamadı" });
+
+            // Compute BMR from client profile
+            decimal? bmr = null;
+            try
+            {
+                var client = await _appDb.Clients
+                    .AsNoTracking()
+                    .Where(c => c.Id == clientId)
+                    .Select(c => new { c.Gender, c.BirthDate })
+                    .FirstOrDefaultAsync();
+
+                if (client != null)
+                    bmr = ClientMeasurement.ComputeBmr(
+                        request.WeightKg,
+                        request.HeightCm,
+                        DateTime.UtcNow.Year - client.BirthDate.Year,
+                        (int)client.Gender);
+            }
+            catch { /* BMR optional */ }
+
+            var entry = new ClientMeasurement(
+                clientId:             clientId,
+                sourceType:           "dietitian",
+                recordedByUserId:     Guid.Parse(userId),
+                recordedAtUtc:        request.RecordedAtUtc,
+                weightKg:             request.WeightKg,
+                heightCm:             request.HeightCm,
+                bodyFatPercent:       request.BodyFatPercent,
+                musclePercent:        request.MusclePercent,
+                waterPercent:         request.WaterPercent,
+                waistCm:              request.WaistCm,
+                hipCm:                request.HipCm,
+                chestCm:              request.ChestCm,
+                bmr:                  bmr,
+                notes:                request.Notes,
+                isClinicallyVerified: request.IsClinicallyVerified);
+
+            _appDb.ClientMeasurements.Add(entry);
+            await _appDb.SaveChangesAsync();
+
+            return Ok(new { id = entry.Id, recordedAtUtc = entry.RecordedAtUtc, bmi = entry.Bmi, bmr = entry.Bmr });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding measurement for client {ClientId}", clientId);
+            return StatusCode(500, new { message = "Ölçüm kaydedilemedi", traceId = HttpContext.TraceIdentifier });
+        }
+    }
+
+    /// <summary>
+    /// Update an existing measurement (dietitian can edit any measurement for their client).
+    /// </summary>
+    [HttpPut("clients/{clientId}/measurements/{measurementId:guid}")]
+    public async Task<IActionResult> UpdateClientMeasurement(
+        Guid clientId,
+        Guid measurementId,
+        [FromBody] DietitianAddMeasurementRequest request)
+    {
+        try
+        {
+            var userId = User.GetUserId();
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+            if (user?.LinkedDietitianId == null)
+                return Forbid();
+
+            var link = await _appDb.DietitianClientLinks
+                .FirstOrDefaultAsync(l => l.DietitianId == user.LinkedDietitianId.Value &&
+                                         l.ClientId == clientId &&
+                                         l.IsActive);
+            if (link == null)
+                return NotFound(new { message = "Danışan bulunamadı" });
+
+            var entry = await _appDb.ClientMeasurements
+                .FirstOrDefaultAsync(m => m.Id == measurementId && m.ClientId == clientId);
+            if (entry == null)
+                return NotFound(new { message = "Ölçüm kaydı bulunamadı" });
+
+            decimal? bmr = null;
+            try
+            {
+                var client = await _appDb.Clients
+                    .AsNoTracking()
+                    .Where(c => c.Id == clientId)
+                    .Select(c => new { c.Gender, c.BirthDate })
+                    .FirstOrDefaultAsync();
+
+                if (client != null)
+                    bmr = ClientMeasurement.ComputeBmr(
+                        request.WeightKg,
+                        request.HeightCm,
+                        DateTime.UtcNow.Year - client.BirthDate.Year,
+                        (int)client.Gender);
+            }
+            catch { /* BMR optional */ }
+
+            entry.Update(
+                weightKg:             request.WeightKg,
+                heightCm:             request.HeightCm,
+                bodyFatPercent:       request.BodyFatPercent,
+                musclePercent:        request.MusclePercent,
+                waterPercent:         request.WaterPercent,
+                waistCm:              request.WaistCm,
+                hipCm:                request.HipCm,
+                chestCm:              request.ChestCm,
+                bmr:                  bmr,
+                notes:                request.Notes,
+                isClinicallyVerified: request.IsClinicallyVerified);
+
+            await _appDb.SaveChangesAsync();
+
+            return Ok(new { id = entry.Id, bmi = entry.Bmi, bmr = entry.Bmr });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating measurement {MeasurementId}", measurementId);
+            return StatusCode(500, new { message = "Ölçüm güncellenemedi", traceId = HttpContext.TraceIdentifier });
         }
     }
 
@@ -827,6 +1189,20 @@ public class DietitianManagementController : ControllerBase
             .Select(_ => chars[random.Next(chars.Length)])
             .ToArray());
     }
+
+    /// <summary>Maps raw internal activity type strings to frontend-recognizable types.</summary>
+    private static string MapActivityType(string raw) => raw?.ToLowerInvariant() switch
+    {
+        "meal_done" or "meal_completed"           => "meal_logged",
+        "measurement_logged" or "weight_update"   => "weight_update",
+        "badge_earned" or "badge_unlocked"         => "badge_unlocked",
+        "streak_increased" or "streak_milestone"  => "streak_milestone",
+        "streak_broken" or "streak_at_risk"       => "streak_at_risk",
+        "plan_assigned" or "plan_started"         => "plan_assigned",
+        "compliance" or "day_fully_completed"     => "compliance",
+        "app_open" or "login"                     => "login",
+        _                                         => raw ?? "unknown"
+    };
 }
 
 // DTOs
@@ -835,3 +1211,15 @@ public record CreateAccessKeyRequest(string PublicUserId, string CreatedAtUtc, s
 public record CreateAccessKeyForClientRequest(string CreatedAtUtc, string ExpiresAtUtc);
 public record ExtendAccessKeyRequest(int ExtensionMonths);
 public record AddClientNoteRequest(string Text);
+public record DietitianAddMeasurementRequest(
+    decimal? WeightKg,
+    decimal? HeightCm,
+    decimal? BodyFatPercent,
+    decimal? MusclePercent,
+    decimal? WaterPercent,
+    decimal? WaistCm,
+    decimal? HipCm,
+    decimal? ChestCm,
+    string? Notes,
+    bool IsClinicallyVerified = true,
+    DateTime? RecordedAtUtc = null);

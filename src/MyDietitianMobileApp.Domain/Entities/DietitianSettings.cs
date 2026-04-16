@@ -41,7 +41,22 @@ public class DietitianSettings
     /// URL/path to clinic logo (nullable if no logo uploaded)
     /// </summary>
     public string? LogoUrl { get; set; }
-    
+
+    /// <summary>
+    /// Dietitian's contact phone number (nullable, max 30 chars)
+    /// </summary>
+    public string? PhoneNumber { get; set; }
+
+    /// <summary>
+    /// Short bio or about text displayed on the profile (nullable, max 500 chars)
+    /// </summary>
+    public string? Bio { get; set; }
+
+    /// <summary>
+    /// Clinic or personal website URL (nullable, max 255 chars)
+    /// </summary>
+    public string? WebsiteUrl { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     

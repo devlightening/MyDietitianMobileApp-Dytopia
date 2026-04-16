@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace MyDietitianMobileApp.Application.Commands
 {
-    public class UpdateIngredientCommand
+    public class UpdateIngredientCommand : IRequest<UpdateIngredientResult>
     {
         public Guid IngredientId { get; }
         public string CanonicalName { get; }

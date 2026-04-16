@@ -1,11 +1,14 @@
 {
   "common": {
+    "appointments": "Appointments",
+    "plans": "Plans",
     "clients": "Clients",
     "recipes": "Recipes",
     "recipeMatch": "Recipe Match",
     "createRecipe": "Create Recipe",
     "accessKeys": "Access Keys",
     "dashboard": "Dashboard",
+    "careHub": "Care Hub",
     "logout": "Logout",
     "welcomeBack": "Welcome back!",
     "refresh": "Refresh",

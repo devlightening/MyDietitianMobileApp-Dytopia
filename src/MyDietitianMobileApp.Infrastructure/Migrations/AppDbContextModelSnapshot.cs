@@ -111,6 +111,37 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("Clients");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientAchievementUnlock", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BadgeId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("CurrentLevel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("LastNotifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UnlockedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ClientId", "BadgeId");
+
+                    b.HasIndex("UnlockedAtUtc")
+                        .IsDescending();
+
+                    b.ToTable("ClientAchievementUnlocks");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -146,6 +177,103 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("ClientActivities");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientAppointmentSummary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AttendanceMarkedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AttendanceStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("pending");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("ScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DietitianId");
+
+                    b.HasIndex("ClientId", "IsCancelled");
+
+                    b.HasIndex("ClientId", "ScheduledAtUtc");
+
+                    b.ToTable("ClientAppointmentSummaries");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientCareMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SenderRole")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "CreatedAtUtc");
+
+                    b.HasIndex("DietitianId", "CreatedAtUtc");
+
+                    b.ToTable("ClientCareMessages");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientDailyTracking", b =>
                 {
                     b.Property<Guid>("ClientId")
@@ -177,6 +305,151 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .IsDescending(false, true);
 
                     b.ToTable("ClientDailyTrackings");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientEngagementEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EventDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MetaJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DietitianId", "EventDate")
+                        .HasFilter("\"DietitianId\" IS NOT NULL");
+
+                    b.HasIndex("ClientId", "EventDate", "EventType");
+
+                    b.ToTable("ClientEngagementEvents");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientGamificationSnapshot", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("AdherenceScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("AlternativeMeals")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BestStreak")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("CareMessageSent")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CurrentStreak")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DoneMeals")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("EngagementScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("KitchenEvents")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("MeasurementLogged")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PlannedMeals")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PrimaryScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("PrimaryTrack")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("QualifiedForStreak")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SkippedMeals")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("WaterGlasses")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("WaterGoalHit")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("ClientId", "Date");
+
+                    b.HasIndex("ClientId", "Date")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("Date", "QualifiedForStreak");
+
+                    b.ToTable("ClientGamificationSnapshots");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientGoalPreference", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CookingTimePreference")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DietStyle")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PrimaryGoal")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ReminderTone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ClientId");
+
+                    b.HasIndex("UpdatedAtUtc");
+
+                    b.ToTable("ClientGoalPreferences");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientIngredientProhibition", b =>
@@ -229,7 +502,8 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.Property<string>("MealType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<Guid>("RecipeId")
                         .HasColumnType("uuid");
@@ -242,6 +516,8 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.HasIndex("ClientMealPlanId");
 
                     b.HasIndex("RecipeId");
+
+                    b.HasIndex("ClientMealPlanId", "DayOfWeek", "MealType");
 
                     b.ToTable("ClientMeals");
                 });
@@ -259,7 +535,8 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("DietitianId")
                         .HasColumnType("uuid");
@@ -272,7 +549,8 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
@@ -282,11 +560,101 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClientId");
+                    b.HasIndex("ClientId", "IsActive");
 
-                    b.HasIndex("DietitianId");
+                    b.HasIndex("DietitianId", "StartDate");
 
                     b.ToTable("ClientMealPlans");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientMeasurement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Bmi")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
+
+                    b.Property<string>("BmiCategory")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("Bmr")
+                        .HasPrecision(7)
+                        .HasColumnType("numeric(7,0)");
+
+                    b.Property<decimal?>("BodyFatPercent")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
+
+                    b.Property<decimal?>("ChestCm")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("HeightCm")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<decimal?>("HipCm")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<bool>("IsClinicallyVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("MusclePercent")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("WaistCm")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<decimal?>("WaistHipRatio")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)");
+
+                    b.Property<decimal?>("WaterPercent")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
+
+                    b.Property<decimal?>("WeightKg")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "RecordedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_ClientMeasurements_ClientId_RecordedAtUtc");
+
+                    b.HasIndex("ClientId", "SourceType")
+                        .HasDatabaseName("IX_ClientMeasurements_ClientId_SourceType");
+
+                    b.ToTable("ClientMeasurements");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientMeasurementEntry", b =>
@@ -322,6 +690,90 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .IsDescending(false, true);
 
                     b.ToTable("ClientMeasurementEntries");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientNotificationPreference", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("HydrationEndLocalTime")
+                        .HasColumnType("time");
+
+                    b.Property<int>("HydrationIntervalMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(120);
+
+                    b.Property<bool>("HydrationRemindersEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<TimeOnly>("HydrationStartLocalTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime>("LastAppOpenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastNotificationSyncAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("MealPlanRemindersEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("MealReminderLeadMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(20);
+
+                    b.Property<int>("MeasurementReminderDayOfWeek")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<TimeOnly>("MeasurementReminderLocalTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("MeasurementRemindersEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("NotificationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("ReengagementDelayHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(48);
+
+                    b.Property<bool>("ReengagementRemindersEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("Europe/Istanbul");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ClientId");
+
+                    b.HasIndex("LastAppOpenAtUtc");
+
+                    b.HasIndex("UpdatedAtUtc");
+
+                    b.ToTable("ClientNotificationPreferences");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientPantryItem", b =>
@@ -372,6 +824,64 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.HasIndex("ClientId", "CreatedAtUtc");
 
                     b.ToTable("ClientProhibitedIngredients");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientShoppingListItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("IngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsChecked")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<decimal?>("Quantity")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("SourceReferenceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IngredientId");
+
+                    b.HasIndex("ClientId", "IngredientId");
+
+                    b.HasIndex("ClientId", "IsChecked", "UpdatedAtUtc");
+
+                    b.ToTable("ClientShoppingListItems");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientWeightEntry", b =>
@@ -445,6 +955,55 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ComplianceScoreConfigs");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ContactMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_ContactMessages_CreatedAt");
+
+                    b.HasIndex("IsRead")
+                        .HasDatabaseName("IX_ContactMessages_IsRead");
+
+                    b.ToTable("ContactMessages");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.DailyComplianceSnapshot", b =>
@@ -701,6 +1260,26 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("DietitianNotes");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.DietitianRecipeFavorite", b =>
+                {
+                    b.Property<Guid>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DietitianId", "RecipeId");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("RecipeId");
+
+                    b.ToTable("DietitianRecipeFavorites");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.DietitianSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -713,6 +1292,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)")
                         .HasDefaultValue("#8FBC8F");
+
+                    b.Property<string>("Bio")
+                        .HasColumnType("text");
 
                     b.Property<string>("ClinicName")
                         .IsRequired()
@@ -736,6 +1318,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
                     b.Property<string>("PrimaryColorHex")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -752,12 +1337,65 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("NOW()");
 
+                    b.Property<string>("WebsiteUrl")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DietitianId")
                         .IsUnique();
 
                     b.ToTable("DietitianSettings");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ImportTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DocumentKind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("HeaderHintsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ParserUsed")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DietitianId", "TemplateKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ImportTemplates_DietitianId_TemplateKey");
+
+                    b.ToTable("ImportTemplates");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.Ingredient", b =>
@@ -780,6 +1418,11 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsCondiment")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsMandatory")
                         .HasColumnType("boolean");
 
@@ -798,6 +1441,73 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.HasIndex("IsActive");
 
                     b.ToTable("Ingredients");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.IngredientAcquisitionLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Confidence")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("ConfirmedByUser")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("InteractionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("LatencyMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MappingType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RawInput")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("RequiredConfirmation")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ResolvedIngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("ResolvedIngredientId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("Source");
+
+                    b.HasIndex("Source", "MappingType");
+
+                    b.ToTable("IngredientAcquisitionLogs");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.IngredientCompatibilityRule", b =>
@@ -907,11 +1617,89 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("IngredientFamilyMembers");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.IngredientImageDetectionLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Confidence")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid?>("ConfirmedIngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImageSource")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("MatchType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("NormalizedLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("PredictedIngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RawLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("UsedOpenAiFallback")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("WasAccepted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("WasAutoSelected")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchType")
+                        .HasDatabaseName("IX_IngredientImageDetectionLogs_MatchType");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("IX_IngredientImageDetectionLogs_SessionId");
+
+                    b.HasIndex("UsedOpenAiFallback")
+                        .HasDatabaseName("IX_IngredientImageDetectionLogs_UsedOpenAiFallback");
+
+                    b.HasIndex("ClientId", "CreatedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_IngredientImageDetectionLogs_ClientId_CreatedAtUtc");
+
+                    b.ToTable("IngredientImageDetectionLogs");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.IngredientNormalizationLog", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int>("AmbiguousCandidateCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CandidateCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("CandidateSummaryJson")
                         .HasColumnType("jsonb");
@@ -925,6 +1713,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("ElapsedTimeMs")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("MatchedBy")
                         .IsRequired()
@@ -1022,6 +1813,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AlternativeRecipeId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("AtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1042,6 +1836,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DietPlanMealId")
+                        .IsUnique();
 
                     b.HasIndex("DietitianId");
 
@@ -1227,6 +2024,97 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("MealPlans");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.MealPlanTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DietitianId")
+                        .HasDatabaseName("IX_MealPlanTemplates_DietitianId");
+
+                    b.ToTable("MealPlanTemplates");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.MealPlanTemplateItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Calories")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("CarbsGrams")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<decimal?>("FatGrams")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<string>("MealType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("ProteinGrams")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<Guid?>("RecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeSpan>("Time")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateId")
+                        .HasDatabaseName("IX_MealPlanTemplateItems_TemplateId");
+
+                    b.ToTable("MealPlanTemplateItems");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.PlanMealItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1240,9 +2128,6 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)");
 
-                    b.Property<Guid?>("CompletionId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -1251,6 +2136,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Property<decimal?>("FatGrams")
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)");
+
+                    b.Property<int>("MealType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
@@ -1266,6 +2154,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)");
 
+                    b.Property<Guid?>("RecipeId")
+                        .HasColumnType("uuid");
+
                     b.Property<TimeSpan>("Time")
                         .HasColumnType("time");
 
@@ -1276,10 +2167,10 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompletionId");
-
                     b.HasIndex("PlanId")
                         .HasDatabaseName("IX_PlanMealItems_PlanId");
+
+                    b.HasIndex("RecipeId");
 
                     b.HasIndex("Time")
                         .HasDatabaseName("IX_PlanMealItems_Time");
@@ -1321,11 +2212,81 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("PremiumAuditLogs");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ProductBarcodeMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Barcode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Brand")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("CanonicalIngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Confidence")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("IsManualOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastVerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MappingType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceProvider")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Barcode")
+                        .IsUnique();
+
+                    b.HasIndex("CanonicalIngredientId");
+
+                    b.HasIndex("LastVerifiedAtUtc");
+
+                    b.HasIndex("MappingType");
+
+                    b.ToTable("ProductBarcodeMappings");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.Recipe", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CaloriesKcal")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("CarbsGrams")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<int?>("CookTimeMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -1333,6 +2294,30 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
 
                     b.Property<Guid?>("DietitianId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("FatGrams")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDemo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDraft")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsHiddenFromProduction")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsPublic")
                         .HasColumnType("boolean");
@@ -1342,13 +2327,327 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int?>("PrepTimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("ProteinGrams")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<int?>("Servings")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("StepsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("StepsJson");
+
+                    b.Property<string>("TagsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("TagsJson");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DietitianId");
 
+                    b.HasIndex("IsArchived");
+
                     b.HasIndex("IsPublic");
 
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("IsDemo", "IsDraft", "IsHiddenFromProduction")
+                        .HasDatabaseName("IX_Recipes_ProductionSafetyFlags");
+
                     b.ToTable("Recipes");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ConfidenceScore")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DetectedRecipeBoundaryMode")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("DietitianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentKind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("FileType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ParsedRecipeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParserUsed")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("TemplateHeaderHintsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("TemplateKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("UnmatchedIngredientCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WarningsJson")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DietitianId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_RecipeImportSessions_DietitianId_CreatedAt");
+
+                    b.ToTable("RecipeImportSessions");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionIngredient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AmountRaw")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("AmountValue")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IssueCodesJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<double>("MatchConfidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("MatchType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("MatchedCanonicalName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("MatchedIngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("NeedsReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("ParseConfidence")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<string>("RawLineText")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("RawName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("SessionRecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UnitNormalized")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionRecipeId")
+                        .HasDatabaseName("IX_RecipeImportSessionIngredients_SessionRecipeId");
+
+                    b.ToTable("RecipeImportSessionIngredients");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionIssue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Hint")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SessionIngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SessionRecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("IX_RecipeImportSessionIssues_SessionId");
+
+                    b.HasIndex("SessionRecipeId")
+                        .HasDatabaseName("IX_RecipeImportSessionIssues_SessionRecipeId");
+
+                    b.ToTable("RecipeImportSessionIssues");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionRecipe", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CookTimeText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DuplicateResolutionMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("ExistingRecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("HasDuplicate")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSkipped")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("NeedsReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("NormalizedTitle")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PrepTimeText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RawSourceBlock")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RawTitle")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ServingsText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StepsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("TagsJson")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("IX_RecipeImportSessionRecipes_SessionId");
+
+                    b.ToTable("RecipeImportSessionRecipes");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeIngredient", b =>
@@ -1472,6 +2771,9 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Property<string>("MissingMandatoryIdsJson")
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("MissingMandatoryNamesJson")
+                        .HasColumnType("text");
+
                     b.Property<bool>("OriginalCookable")
                         .HasColumnType("boolean");
 
@@ -1481,8 +2783,14 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Property<bool>("ProhibitedRejected")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("RejectionReasonSummary")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("SelectedRecipeId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("SubstituteUsageSummaryJson")
+                        .HasColumnType("text");
 
                     b.Property<bool>("UsedSubstitutes")
                         .HasColumnType("boolean");
@@ -1564,6 +2872,57 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.ToTable("UserMeasurements");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.VisionLabelMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("ConfidenceThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 4)
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.69999999999999996);
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("IngredientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsApproved")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("NormalizedLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RawLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IngredientId")
+                        .HasDatabaseName("IX_VisionLabelMappings_IngredientId");
+
+                    b.HasIndex("IsApproved")
+                        .HasDatabaseName("IX_VisionLabelMappings_IsApproved");
+
+                    b.HasIndex("NormalizedLabel")
+                        .HasDatabaseName("IX_VisionLabelMappings_NormalizedLabel");
+
+                    b.ToTable("VisionLabelMappings");
+                });
+
             modelBuilder.Entity("RecipeMandatoryIngredients", b =>
                 {
                     b.Property<Guid>("RecipeId")
@@ -1625,6 +2984,17 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasForeignKey("DietitianId");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientAchievementUnlock", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientActivity", b =>
                 {
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
@@ -1643,7 +3013,83 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Navigation("Dietitian");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientAppointmentSummary", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
+                        .WithMany()
+                        .HasForeignKey("DietitianId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Dietitian");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientCareMessage", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
+                        .WithMany()
+                        .HasForeignKey("DietitianId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Dietitian");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientDailyTracking", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientEngagementEvent", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
+                        .WithMany()
+                        .HasForeignKey("DietitianId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Dietitian");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientGamificationSnapshot", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientGoalPreference", b =>
                 {
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
                         .WithMany()
@@ -1684,7 +3130,7 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Recipe", "Recipe")
                         .WithMany()
                         .HasForeignKey("RecipeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("ClientMealPlan");
@@ -1703,12 +3149,23 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
                         .WithMany()
                         .HasForeignKey("DietitianId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Client");
 
                     b.Navigation("Dietitian");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientMeasurement", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientMeasurementEntry", b =>
@@ -1720,6 +3177,15 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientNotificationPreference", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientPantryItem", b =>
@@ -1754,6 +3220,24 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasForeignKey("IngredientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Ingredient");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ClientShoppingListItem", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Ingredient", "Ingredient")
+                        .WithMany()
+                        .HasForeignKey("IngredientId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Client");
 
@@ -1845,6 +3329,25 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Navigation("Dietitian");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.DietitianRecipeFavorite", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
+                        .WithMany()
+                        .HasForeignKey("DietitianId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Recipe", "Recipe")
+                        .WithMany()
+                        .HasForeignKey("RecipeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dietitian");
+
+                    b.Navigation("Recipe");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.DietitianSettings", b =>
                 {
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
@@ -1854,6 +3357,16 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Dietitian");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.IngredientAcquisitionLog", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Ingredient", "ResolvedIngredient")
+                        .WithMany()
+                        .HasForeignKey("ResolvedIngredientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ResolvedIngredient");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.IngredientCompatibilityRule", b =>
@@ -1920,6 +3433,11 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                         .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.PlanMealItem", null)
+                        .WithOne("Completion")
+                        .HasForeignKey("MyDietitianMobileApp.Domain.Entities.MealCompletion", "DietPlanMealId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", "Dietitian")
                         .WithMany()
@@ -2022,21 +3540,43 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Navigation("Creator");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.MealPlanTemplateItem", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.MealPlanTemplate", "Template")
+                        .WithMany("Items")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Template");
+                });
+
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.PlanMealItem", b =>
                 {
-                    b.HasOne("MyDietitianMobileApp.Domain.Entities.MealCompletion", "Completion")
-                        .WithMany()
-                        .HasForeignKey("CompletionId");
-
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.MealPlan", "Plan")
                         .WithMany("Items")
                         .HasForeignKey("PlanId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Completion");
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Recipe", "Recipe")
+                        .WithMany()
+                        .HasForeignKey("RecipeId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Plan");
+
+                    b.Navigation("Recipe");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.ProductBarcodeMapping", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Ingredient", "CanonicalIngredient")
+                        .WithMany()
+                        .HasForeignKey("CanonicalIngredientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CanonicalIngredient");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.Recipe", b =>
@@ -2044,6 +3584,28 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Dietitian", null)
                         .WithMany("Recipes")
                         .HasForeignKey("DietitianId");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionIngredient", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionRecipe", "SessionRecipe")
+                        .WithMany("Ingredients")
+                        .HasForeignKey("SessionRecipeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SessionRecipe");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionRecipe", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.RecipeImportSession", "Session")
+                        .WithMany("Recipes")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeIngredient", b =>
@@ -2138,6 +3700,14 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Navigation("SubstituteIngredient");
                 });
 
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.VisionLabelMapping", b =>
+                {
+                    b.HasOne("MyDietitianMobileApp.Domain.Entities.Ingredient", null)
+                        .WithMany()
+                        .HasForeignKey("IngredientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("RecipeMandatoryIngredients", b =>
                 {
                     b.HasOne("MyDietitianMobileApp.Domain.Entities.Ingredient", null)
@@ -2228,6 +3798,26 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
             modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.MealPlan", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.MealPlanTemplate", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.PlanMealItem", b =>
+                {
+                    b.Navigation("Completion");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSession", b =>
+                {
+                    b.Navigation("Recipes");
+                });
+
+            modelBuilder.Entity("MyDietitianMobileApp.Domain.Entities.RecipeImportSessionRecipe", b =>
+                {
+                    b.Navigation("Ingredients");
                 });
 #pragma warning restore 612, 618
         }

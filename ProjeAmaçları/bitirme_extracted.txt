@@ -1,0 +1,338 @@
+BİLGİSAYAR MÜHENDİSLİĞİ BÖLÜMÜ
+ Computer Engineering Design / Bitirme Projesi
+ Diyetisyen Destekli Mobil Beslenme
+ Uygulamaları İçin
+Çok Katmanlı Malzeme Standardizasyonu
+ ve Kural Tabanlı Tarif Öneri Sistemi
+Ad Soyad
+Halil İbrahim Yıldırım
+Öğrenci No
+212503009
+Bölüm
+Bilgisayar Mühendisliği
+Ders
+Computer Engineering Design / Bitirme Projesi
+ 2026
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 1
+
+
+BÖLÜM 1
+Giriş
+Bu bitirme tezinin temel amacı, diyetisyen destekli bir mobil beslenme uygulamasında
+kullanıcıların mutfaklarında bulunan malzemeleri serbest metinle girmeleri durumunda ortaya
+çıkan veri tutarsızlığı problemini çözmek ve bu veriyi kullanarak güvenilir bir tarif öneri
+mekanizması geliştirmektir. Çalışmanın uygulama alanı beslenme ve diyet danışmanlığıdır;
+ancak tezin odak noktası yalnızca bir mobil uygulama veya web panel geliştirmek değildir.
+Esas problem, kullanıcı tarafından girilen hatalı, eksik, farklı yazılmış veya belirsiz malzeme
+isimlerinin bilgisayar tarafından doğru şekilde yorumlanması ve standart bir veri yapısına
+dönüştürülmesidir.
+Gerçek kullanımda kullanıcılar aynı malzemeyi çok farklı şekillerde
+yazabilmektedir. Örneğin "süzme yogurt", "suzme yogurt", "yoğurt", "meyveli
+yoğurt" veya "light ton" gibi girdiler doğrudan veri tabanındaki standart isimlerle
+eşleşmeyebilir. Bu durum tarif eşleştirme motorunun başarısını düşürür, öneri
+kalitesini bozar ve sistemin güvenilirliğini azaltır.
+Bu nedenle çalışma, bilgisayar mühendisliği açısından açık bir teknik probleme dayanmaktadır:
+serbest metin malzeme girdilerinin çok katmanlı biçimde normalize edilmesi ve bu normalize
+edilmiş veri üzerinden kural tabanlı öneri üretilmesi. Proje; belirli bir teknik problemi
+modellemeyi, yöntemsel bir çözüm önermeyi ve önerilen çözümün başarısını ölçülebilir
+metriklerle değerlendirmeyi hedeflemektedir.
+BÖLÜM 2
+Problem Tanımı
+Mobil beslenme uygulamalarında danışanlar, evlerinde bulunan malzemeleri sisteme manuel
+olarak girerler. Ancak bu girdiler çoğu zaman aşağıdaki sorunları içermektedir:
+ Yazım hatası içermesi
+ Türkçe karakter kullanılmadan yazılması
+ Aynı malzemenin farklı varyasyonlarını içermesi
+ Belirsiz veya eksik ifadelerle girilmesi
+ Ürün ailesi ve alternatif ilişkileri gözetilmeden kaydedilmesi
+2.1. Malzeme Standardizasyonu Problemi
+Sistemin "yoğurt", "yogurt", "süzme yogurt", "meyveli yoğurt" gibi farklı girdileri yorumlayıp
+hangi standart kimliğe bağlayacağını belirlemesi gerekir. Aynı zamanda "meyveli yoğurt" ile
+"yoğurt" arasında tam eşitlik olmadığını, ancak bunların aynı ürün ailesinde
+değerlendirilebileceğini de bilmesi gerekir.
+2.2. Tarif Önerisi Problemi
+Bir tarifin uygulanabilir olup olmadığı yalnızca isim benzerliğine göre değil; tarifteki
+malzemelerin rolüne göre belirlenmelidir. Sistemin yalnızca "arama" değil, kural tabanlı
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 2
+
+
+değerlendirme ve sıralama yapması gerekmektedir:
+ Bazı malzemeler zorunludur
+ Bazıları opsiyoneldir
+ Bazı malzemeler yasaklı olabilir
+ Bazı malzemeler belirli durumlarda alternatif olarak kabul edilebilir
+BÖLÜM 3
+Tezin Amacı
+Bu tez çalışmasının amacı, diyetisyen destekli bir SaaS beslenme platformunda aşağıdaki teknik
+hedefleri gerçekleştirmektir:
+ 01
+Çok Katmanlı Normalizasyon
+Kullanıcı tarafından girilen serbest metin malzeme girdilerini standart
+malzeme kimliklerine dönüştüren mekanizma.
+ 02
+Taksonomi Yapısı
+Malzemeler arasındaki aile, varyant ve uyumluluk ilişkilerini modelleyen
+hiyerarşik yapı.
+ 03
+Öneri Motoru
+Standartlaştırılmış malzeme verisi üzerinden zorunlu, opsiyonel, yasaklı ve
+alternatif malzemeleri değerlendiren sistem.
+ 04
+Ölçüm ve Benchmark
+Geliştirilen yaklaşımın başarısını loglar, benchmark veri kümeleri ve
+performans metrikleri üzerinden ölçmek.
+ 05
+Sistem Entegrasyonu
+Ortaya çıkan yöntemi mobil uygulama ve web panel aracılığıyla çalışan bir
+sistem içinde göstermek.
+BÖLÜM 4
+Yöntemsel Yaklaşım
+Bu tez kapsamında önerilen çözüm dört ana teknik katmandan oluşmaktadır.
+4.1. Çok Katmanlı Malzeme Eşleme
+Kullanıcı girdisinin standart malzeme kimliğine dönüştürülmesi için çok katmanlı bir yapı
+kullanılır. Bu yapı sayesinde sistem, yalnızca kesin eşleşmelerde değil; hatalı ve gürültülü
+verilerde de başarılı sonuç üretebilir.
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 3
+
+
+1
+Exact Canonical Match
+Kullanıcı girdisi veri tabanındaki standart isimle birebir eşleşiyorsa doğrudan kabul
+edilir.
+2
+Alias Match
+Malzemenin bilinen alternatif yazımları veya eşanlamlıları üzerinden eşleme yapılır.
+3
+Fuzzy Match
+Yazım hataları, eksik karakterler ve Türkçe karakter farkları için benzerlik tabanlı
+eşleme.
+4
+LLM Fallback
+Önceki katmanlar başarısız olduğunda sınırlı aday listesi üzerinden anlamsal
+yorumlama.
+4.2. Ingredient Taxonomy (Malzeme Taksonomisi)
+Malzemeler düz bir liste halinde tutulmaz. Bunun yerine ürün aileleri, aile üyeleri, varyantlar ve
+alternatif/uyumluluk kuralları ayrı tablolar ve ilişkiler halinde modellenir. Bu yapı, sistemin
+yalnızca isim benzerliğine değil, anlamsal ürün ilişkilerine göre karar vermesine olanak sağlar.
+Örnek: "Yoğurt" temel malzeme olabilir, "Süzme Yoğurt" onun varyantı olabilir,
+"Meyveli Yoğurt" ise aynı ailede bulunsa da her tarif için uygun kabul edilmeyebilir.
+4.3. Kural Tabanlı Tarif Öneri Motoru
+Tarifler sisteme yalnızca isim ve açıklama olarak kaydedilmez; her tarif için malzeme rolleri
+tanımlanır. Öneri motoru, kullanıcının elindeki malzemeleri bu rollerle karşılaştırarak çeşitli
+sonuçlar üretir:
+ Rol
+ Açıklama
+ Öneri Sonucu
+Zorunlu
+Tarifin olmazsa olmaz malzemesi
+Eksikse reddedilir
+Opsiyonel
+Bulunursa tarife katkı sağlar
+Yoksa kabul edilir
+Yasaklı
+Belirli diyetlerde uygunsuz
+Bulunursa öneri engellenir
+Alternatif
+Substitute malzeme olarak kabul edilir
+Uyumluluk kuralına göre
+değerlendirilir
+4.4. Ölçme, İzleme ve Benchmark
+Geliştirilen yöntemin başarısını değerlendirmek için sistem içinde normalizasyon logları,
+recommendation logları, benchmark veri kümeleri ve katman bazlı başarı metrikleri
+tutulmaktadır. Bu yönüyle tez, yalnızca bir uygulama geliştirme değil; deneysel olarak
+değerlendirilebilen bir yöntem geliştirme çalışmasıdır.
+ Hangi sorgular exact match ile çözüldü?
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 4
+
+
+ Hangi sorgular alias veya fuzzy katmanına düştü?
+ Kaç sorgu unmatched veya ambiguous kaldı?
+ Tarif öneri motoru hangi senaryolarda başarılı oldu?
+BÖLÜM 5
+Teknoloji Özeti
+Projede kullanılan teknolojiler ve kısa açıklamaları aşağıdaki tabloda özetlenmiştir.
+ Katman
+ Teknoloji / Araç
+ Kısa Açıklama
+Mobil Uygulama
+React Native + Expo
+Danışanın Free/Premium akışlarını yöneten
+mobil istemci.
+Web Panel
+Next.js + Tailwind
+CSS
+Diyetisyen paneli; tarif editörü, danışan
+yönetimi ve ayarlar.
+Backend API
+ASP.NET Core Web
+API
+İş kurallarını, kimlik doğrulamayı ve servis
+akışlarını yönetir.
+Uygulama Yapısı
+MediatR / CQRS
+Komut-sorgu ayrımı ile modüler, sürdürülebilir
+servis mimarisi.
+Veri Erişimi
+Entity Framework
+Core
+DB tabloları ile uygulama modeli arasındaki
+eşlemeleri yönetir.
+Veritabanı
+PostgreSQL
+Kullanıcılar, tarifler, ingredient'ler, access
+key'ler ve loglar.
+Kimlik
+Doğrulama
+JWT tabanlı auth
+Mobil ve web için oturum ve yetki kontrolü.
+Akıllı Eşleme
+Exact/Alias/Fuzzy/LL
+M
+Serbest metin malzeme girdisini standart
+kimliğe dönüştürür.
+Taksonomi
+Families/Members/R
+ules
+Malzeme aileleri, varyantlar ve uyumluluk
+ilişkileri.
+İzleme
+Benchmark + Log
+tabloları
+Normalizasyon ve öneri motoru performansını
+ölçer.
+BÖLÜM 6
+Sistem Mimarisi ve Uygulama Mantığı
+Sistem iki ana kullanıcı tipine göre tasarlanmıştır.
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 5
+
+
+  Diyetisyen Tarafı
+• Kendi tariflerini oluşturur
+• Tariflerdeki malzemelerin rolünü
+belirler
+• Danışanlarını yönetir
+• Premium erişim anahtarları üretir
+• Tarif eşleştirme ve öneri akışını kontrol
+eder
+• Marka/klinik görünümünü
+özelleştirebilir
+  Danışan Tarafı
+• Sahip olduğu malzemeleri girer
+• Premium erişim durumuna göre
+özelliklerden yararlanır
+• Kendisine uygun tarifleri görüntüler
+• Bağlı diyetisyenin özel tarif havuzuna
+erişebilir
+6.3. SaaS ve Çok Kiracılı Yapı
+Bu proje aynı zamanda SaaS mantığında tasarlanmıştır. Sistem, birden fazla diyetisyenin aynı
+platformu kullanabildiği, ancak her diyetisyenin kendi danışanları ve özel tarif havuzu üzerinde
+kontrol sahibi olduğu çok kiracılı bir yapı içerir. Access Key mantığı ile danışan ile diyetisyen
+arasında kontrollü bir bağ kurulur.
+BÖLÜM 7
+Diyetisyen – Danışan Senaryosu
+Aşağıdaki örnek senaryo, sistemin neden geliştirildiğini ve nasıl çalıştığını göstermektedir.
+1
+ 
+Tarif Oluşturma
+Diyetisyen, web panel üzerinden "Yoğurtlu Yulaf Kasesi" tarifini oluşturur. Yoğurt
+ve Yulaf zorunlu, Muz opsiyonel, Meyveli Yoğurt ise uygun olmayan varyant olarak
+tanımlanır.
+2
+ 
+Malzeme Girişi
+Danışan mobil uygulamada: "suzme yogurt", "yulaf", "muz" girdilerini sisteme
+girer.
+3
+ 
+Normalizasyon
+Sistem girdileri normalize eder: "suzme yogurt" → Süzme Yoğurt, "yulaf" → Yulaf,
+"muz" → Muz.
+4
+ 
+Taksonomi & Kural Değerlendirme
+Süzme Yoğurt ile Yoğurt arasında uygun bir substitute ilişkisi varsa malzeme kabul
+edilir.
+5
+ 
+Öneri Sonucu
+Öneri motoru "tam uyum" veya "uygulanabilir" sonucu üretir. "Meyveli yogurt"
+girilseydi, uyumsuzluk nedeniyle alternatif tarif önerilebilirdi.
+BÖLÜM 8
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 6
+
+
+Değerlendirme ve Başarı Ölçütleri
+8.1 Normalizasyon
+Başarısı
+• Exact canonical match
+oranı
+• Alias match oranı
+• Fuzzy match oranı
+• LLM fallback kullanım
+oranı
+• Unmatched oranı
+• Ambiguous oranı
+8.2 Tarif Öneri
+Performansı
+• Tam uyumla eşleşen tarif
+oranı
+• Alternatif malzeme ile
+kabul edilen tarif oranı
+• Yanlış öneri oranı
+• Yasaklı malzeme tespiti
+başarısı
+• Tarif sıralama doğruluğu
+8.3 Sistemsel Başarı
+• Erişim kontrolünün
+doğruluğu
+• Premium / özel tarif
+izolasyonunun doğruluğu
+• Diyetisyen–danışan
+bağının güvenli yönetimi
+• Kullanılabilirlik ve iş akışı
+bütünlüğü
+BÖLÜM 9
+Akademik Katkı
+Bu çalışmanın akademik katkısı aşağıdaki başlıklarda özetlenebilir:
+ Beslenme uygulamaları bağlamında serbest metin malzeme girdisi problemine çok katmanlı
+bir çözüm önermesi
+ Ingredient taksonomisi ve uyumluluk kuralları ile malzemeler arası ilişkileri hiyerarşik ve
+kurallı biçimde modellemesi
+ Tarif önerisini yalnızca metin aramasına değil, açıklanabilir ve deterministik kurallara
+dayandırması
+ Farklı eşleme katmanlarının başarısını benchmark ve log yapılarıyla ölçülebilir hale getirmesi
+ Geliştirilen yöntemi mobil uygulama ve web panel ile çalışan bir ürün içinde göstermesi
+BÖLÜM 10
+Sonuç
+Sonuç olarak bu bitirme projesi, diyetisyen destekli bir mobil beslenme uygulamasının
+arayüzünden çok daha fazlasını hedeflemektedir. Çalışmanın merkezinde, kullanıcıların düzensiz
+ve hatalı malzeme girdilerini standart bir veri yapısına dönüştürme problemi ve bu veri
+üzerinden anlamlı, açıklanabilir ve ölçülebilir tarif önerileri üretme amacı bulunmaktadır.
+Geliştirilen çözüm; çok katmanlı malzeme eşleme, ingredient taksonomisi, kural tabanlı öneri
+motoru, benchmark yapısı ve log temelli değerlendirme mekanizmaları ile desteklenmektedir.
+Mobil uygulama ve web panel ise bu teknik çözümün kullanıcıya sunulan katmanlarıdır.
+Bu proje, yalnızca bir yazılım ürünü geliştirme çalışması değil; bilgisayar
+mühendisliği alanına ait belirli bir problemi yöntemsel olarak ele alan, uygulanabilir
+ve değerlendirilebilir bir tez çalışması niteliği taşımaktadır.
+Çok Katmanlı Malzeme Standardizasyonu ve Kural Tabanlı Tarif Öneri Sistemi
+Bilgisayar Mühendisliği – Bitirme Tezi
+Halil İbrahim Yıldırım  |  212503009
+Sayfa 7

@@ -80,6 +80,9 @@ public class DietitianSettingsController : ControllerBase
             AccentColorHex = settings.AccentColorHex,
             ThemePresetKey = settings.ThemePresetKey,
             LogoUrl = settings.LogoUrl,
+            PhoneNumber = settings.PhoneNumber,
+            Bio = settings.Bio,
+            WebsiteUrl = settings.WebsiteUrl,
             UpdatedAt = settings.UpdatedAt
         });
     }
@@ -131,12 +134,23 @@ public class DietitianSettingsController : ControllerBase
             _context.DietitianSettings.Add(settings);
         }
 
+        // Validate optional profile fields
+        if (!string.IsNullOrEmpty(dto.PhoneNumber) && dto.PhoneNumber.Length > 30)
+            return BadRequest(new { error = "Phone number must be <= 30 characters" });
+        if (!string.IsNullOrEmpty(dto.Bio) && dto.Bio.Length > 500)
+            return BadRequest(new { error = "Bio must be <= 500 characters" });
+        if (!string.IsNullOrEmpty(dto.WebsiteUrl) && dto.WebsiteUrl.Length > 255)
+            return BadRequest(new { error = "Website URL must be <= 255 characters" });
+
         // Update settings
         settings.ClinicName = dto.ClinicName.Trim();
         settings.DietitianDisplayName = dto.DietitianDisplayName.Trim();
         settings.PrimaryColorHex = dto.PrimaryColorHex.ToUpperInvariant();
         settings.AccentColorHex = dto.AccentColorHex.ToUpperInvariant();
         settings.ThemePresetKey = dto.ThemePresetKey;
+        settings.PhoneNumber = string.IsNullOrWhiteSpace(dto.PhoneNumber) ? null : dto.PhoneNumber.Trim();
+        settings.Bio = string.IsNullOrWhiteSpace(dto.Bio) ? null : dto.Bio.Trim();
+        settings.WebsiteUrl = string.IsNullOrWhiteSpace(dto.WebsiteUrl) ? null : dto.WebsiteUrl.Trim();
         settings.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -151,6 +165,9 @@ public class DietitianSettingsController : ControllerBase
             AccentColorHex = settings.AccentColorHex,
             ThemePresetKey = settings.ThemePresetKey,
             LogoUrl = settings.LogoUrl,
+            PhoneNumber = settings.PhoneNumber,
+            Bio = settings.Bio,
+            WebsiteUrl = settings.WebsiteUrl,
             UpdatedAt = settings.UpdatedAt
         });
     }
@@ -246,6 +263,9 @@ public class DietitianSettingsController : ControllerBase
             AccentColorHex = settings.AccentColorHex,
             ThemePresetKey = settings.ThemePresetKey,
             LogoUrl = settings.LogoUrl,
+            PhoneNumber = settings.PhoneNumber,
+            Bio = settings.Bio,
+            WebsiteUrl = settings.WebsiteUrl,
             UpdatedAt = settings.UpdatedAt
         });
     }
@@ -297,6 +317,9 @@ public class DietitianSettingsController : ControllerBase
             AccentColorHex = settings.AccentColorHex,
             ThemePresetKey = settings.ThemePresetKey,
             LogoUrl = settings.LogoUrl,
+            PhoneNumber = settings.PhoneNumber,
+            Bio = settings.Bio,
+            WebsiteUrl = settings.WebsiteUrl,
             UpdatedAt = settings.UpdatedAt
         });
     }

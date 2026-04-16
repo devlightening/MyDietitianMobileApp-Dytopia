@@ -61,11 +61,11 @@ public class DietitianClientAccessSmokeTests : IClassFixture<SmokeWebApplication
         }
 
         var listJson = await listResponse.Content.ReadFromJsonAsync<JsonElement>();
-        listJson.TryGetProperty("clients", out var clientsProp).Should().BeTrue();
+        listJson.TryGetProperty("items", out var clientsProp).Should().BeTrue();
         clientsProp.ValueKind.Should().Be(JsonValueKind.Array);
         clientsProp.GetArrayLength().Should().BeGreaterOrEqualTo(1);
 
-        var firstClientId = clientsProp[0].GetProperty("id").GetGuid();
+        var firstClientId = clientsProp[0].GetProperty("clientId").GetGuid();
 
         var detailResponse = await client.GetAsync($"/api/dietitian/clients/{firstClientId}");
         detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);

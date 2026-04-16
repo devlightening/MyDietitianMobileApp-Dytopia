@@ -13,7 +13,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         {
             _context = context;
         }
-        public Ingredient GetById(Guid id)
+        public Ingredient? GetById(Guid id)
         {
             return _context.Ingredients.FirstOrDefault(i => i.Id == id);
         }
@@ -24,25 +24,26 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 return Enumerable.Empty<Ingredient>();
 
             var normalized = searchTerm.Trim().ToLower();
-            
-            // First, get all active ingredients that match CanonicalName
-            var matchingByName = _context.Ingredients
-                .Where(i => i.IsActive && EF.Functions.ILike(i.CanonicalName, $"%{normalized}%"))
-                .ToList();
-            
-            // Then, filter in memory for aliases match and combine results
-            var matchingByAlias = _context.Ingredients
+
+            // Load all active ingredients once. The alias branch already requires a full
+            // in-memory scan, so consolidating to a single DB round-trip is net-neutral on
+            // PostgreSQL and fixes SQLite compatibility (no provider-specific ILike/functions).
+            var allActive = _context.Ingredients
                 .Where(i => i.IsActive)
-                .ToList()
+                .ToList();
+
+            var matchingByName = allActive
+                .Where(i => i.CanonicalName.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var matchingByAlias = allActive
                 .Where(i => i.Aliases.Any(alias => alias.Contains(normalized, StringComparison.OrdinalIgnoreCase)))
                 .Where(i => !matchingByName.Any(m => m.Id == i.Id)); // Avoid duplicates
-            
-            var allMatches = matchingByName.Concat(matchingByAlias)
+
+            return matchingByName.Concat(matchingByAlias)
                 .OrderBy(i => i.CanonicalName)
                 .Take(maxResults)
                 .ToList();
-            
-            return allMatches;
         }
 
         public IEnumerable<Ingredient> GetAll()

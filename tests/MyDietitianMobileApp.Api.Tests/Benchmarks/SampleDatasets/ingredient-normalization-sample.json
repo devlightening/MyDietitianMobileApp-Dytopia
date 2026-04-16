@@ -1,63 +1,487 @@
 {
   "name": "Sample Ingredient Normalization Benchmark",
-  "version": "1.0",
-  "description": "Small realistic dataset for testing ingredient normalization",
+  "version": "2.0",
+  "description": "Normalization benchmark — 60 cases across 6 categories: 10 exact canonical (easy), 10 alias (medium), 10 Turkish diacritic variants (medium), 10 fuzzy/Levenshtein (medium), 10 ambiguous boundary (hard), 10 LLM fallback (hard). Seeded ingredients: Tomato (alias: Domates), Yogurt (alias: Yogurt), Onion, Garlic.",
   "cases": [
     {
-      "id": "case-001",
+      "id": "can-001",
       "rawInput": "Tomato",
       "expectedCanonicalName": "Tomato",
       "expectedMatchType": "canonical",
       "difficulty": "easy",
-      "notes": "Exact canonical match"
+      "notes": "Exact canonical match — Layer A."
     },
     {
-      "id": "case-002",
+      "id": "can-002",
       "rawInput": "  TOMATO  ",
       "expectedCanonicalName": "Tomato",
       "expectedMatchType": "canonical",
       "difficulty": "easy",
-      "notes": "Whitespace normalization"
+      "notes": "Whitespace trimming + uppercase folding."
     },
     {
-      "id": "case-003",
-      "rawInput": "Domates",
-      "expectedCanonicalName": "Tomato",
-      "expectedMatchType": "alias",
-      "difficulty": "medium",
-      "notes": "Turkish alias for tomato"
-    },
-    {
-      "id": "case-004",
+      "id": "can-003",
       "rawInput": "Yoğurt",
       "expectedCanonicalName": "Yoğurt",
       "expectedMatchType": "canonical",
       "difficulty": "easy",
-      "notes": "Turkish character canonical"
+      "notes": "Turkish canonical with diacritic — ToLowerInvariant preserves ğ."
     },
     {
-      "id": "case-005",
+      "id": "can-004",
+      "rawInput": "Onion",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Exact canonical match for Onion."
+    },
+    {
+      "id": "can-005",
+      "rawInput": "Garlic",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Exact canonical match for Garlic."
+    },
+    {
+      "id": "can-006",
+      "rawInput": "GARLIC",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "All-uppercase canonical — folded to lowercase by NormalizeText."
+    },
+    {
+      "id": "can-007",
+      "rawInput": "  Onion  ",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Leading and trailing whitespace stripped."
+    },
+    {
+      "id": "can-008",
+      "rawInput": "Garlic,",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Trailing comma stripped by TrimPunctuation in NormalizeText."
+    },
+    {
+      "id": "can-009",
+      "rawInput": "(Onion)",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Parentheses stripped from both ends by TrimPunctuation."
+    },
+    {
+      "id": "can-010",
+      "rawInput": "\"Yoğurt\"",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "canonical",
+      "difficulty": "easy",
+      "notes": "Double-quote punctuation stripped, Turkish diacritic preserved."
+    },
+    {
+      "id": "ali-001",
+      "rawInput": "Domates",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Turkish alias Domates → Tomato. Layer B exact alias match."
+    },
+    {
+      "id": "ali-002",
       "rawInput": "Yogurt",
       "expectedCanonicalName": "Yoğurt",
       "expectedMatchType": "alias",
       "difficulty": "medium",
-      "notes": "ASCII alias for Turkish canonical"
+      "notes": "ASCII alias Yogurt → Yoğurt. Registered alias for diacritic canonical."
     },
     {
-      "id": "case-006",
+      "id": "ali-003",
+      "rawInput": "DOMATES",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Uppercase alias — NormalizeText folds to 'domates', matches stored alias 'Domates'."
+    },
+    {
+      "id": "ali-004",
+      "rawInput": "YOGURT",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Uppercase alias Yogurt folded to 'yogurt', matches stored alias."
+    },
+    {
+      "id": "ali-005",
+      "rawInput": "  Domates  ",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Alias with leading/trailing whitespace — trimmed then alias-matched."
+    },
+    {
+      "id": "ali-006",
+      "rawInput": "  Yogurt  ",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Alias with whitespace padding — trimmed then matched."
+    },
+    {
+      "id": "ali-007",
+      "rawInput": "Domates,",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Alias with trailing comma — punctuation stripped, then alias-matched."
+    },
+    {
+      "id": "ali-008",
+      "rawInput": "\"Yogurt\"",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Alias with surrounding double-quotes — stripped to 'yogurt', alias hit."
+    },
+    {
+      "id": "ali-009",
+      "rawInput": "(Domates)",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Alias in parentheses — parens stripped from both ends."
+    },
+    {
+      "id": "ali-010",
+      "rawInput": "Yogurt.",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Alias with trailing period stripped by TrimPunctuation."
+    },
+    {
+      "id": "dia-001",
+      "rawInput": "yogurt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Lowercase ASCII 'yogurt' = NormalizeText(alias 'Yogurt') → alias hit."
+    },
+    {
+      "id": "dia-002",
+      "rawInput": "domates",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "alias",
+      "difficulty": "medium",
+      "notes": "Lowercase 'domates' = NormalizeText(alias 'Domates') → alias hit."
+    },
+    {
+      "id": "dia-003",
+      "rawInput": "soğan",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "Turkish 'onion'. No Turkish alias registered for Onion. TurkishFold sim(soğan,onion)≈0.2 — below threshold. Illustrates alias coverage gap."
+    },
+    {
+      "id": "dia-004",
+      "rawInput": "sarımsak",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "Turkish 'garlic'. No alias registered. TurkishFold sim too low for fuzzy match."
+    },
+    {
+      "id": "dia-005",
+      "rawInput": "sogan",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "ASCII fold of soğan (ğ→g). Still no alias. Lev('sogan','onion')=4, sim≈0.2 — unmatched."
+    },
+    {
+      "id": "dia-006",
+      "rawInput": "SOĞAN",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "Uppercase Turkish onion — folded to 'soğan', no alias, unmatched."
+    },
+    {
+      "id": "dia-007",
+      "rawInput": "Sarımsak",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "Title-case Turkish garlic. No canonical or alias match. Tests missing-alias path."
+    },
+    {
+      "id": "dia-008",
+      "rawInput": "patlıcan",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "Turkish 'eggplant'. Not in seeded DB. ı is a Turkish-specific diacritic."
+    },
+    {
+      "id": "dia-009",
+      "rawInput": "zeytinyağı",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "medium",
+      "notes": "Turkish 'olive oil'. Not seeded. Contains ğ and ı diacritics."
+    },
+    {
+      "id": "dia-010",
+      "rawInput": "yoğurt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "canonical",
+      "difficulty": "medium",
+      "notes": "Lowercase Turkish canonical 'yoğurt' — NormalizeText('Yoğurt')='yoğurt' → canonical hit."
+    },
+    {
+      "id": "fuz-001",
+      "rawInput": "Tomatoo",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Single insertion. Lev('tomatoo','tomato')=1, sim=6/7=0.857 > 0.72 threshold."
+    },
+    {
+      "id": "fuz-002",
+      "rawInput": "Yoghurt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "English variant not in aliases. Lev('yoghurt','yogurt')=1, sim=0.857 > 0.72. Matched via alias fold."
+    },
+    {
+      "id": "fuz-003",
+      "rawInput": "Garlick",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Common misspelling. Lev('garlick','garlic')=1, sim=6/7=0.857 > 0.72."
+    },
+    {
+      "id": "fuz-004",
+      "rawInput": "Tomat",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Single deletion (missing 'o'). Lev('tomat','tomato')=1, sim=5/6=0.833 > 0.72."
+    },
+    {
+      "id": "fuz-005",
+      "rawInput": "Garli",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Single deletion (missing 'c'). Lev('garli','garlic')=1, sim=5/6=0.833 > 0.72."
+    },
+    {
+      "id": "fuz-006",
+      "rawInput": "Tomatoe",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Substitution (o→e at end). Lev('tomatoe','tomato')=1, sim=0.857 > 0.72."
+    },
+    {
+      "id": "fuz-007",
+      "rawInput": "Oniion",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Double 'i' insertion. Lev('oniion','onion')=1, sim=5/6=0.833 > 0.72."
+    },
+    {
+      "id": "fuz-008",
+      "rawInput": "Garlc",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Missing 'i'. Lev('garlc','garlic')=1, sim=5/6=0.833 > 0.72."
+    },
+    {
+      "id": "fuz-009",
+      "rawInput": "Onien",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Substitution e→o. Lev('onien','onion')=1, sim=0.8 > 0.72."
+    },
+    {
+      "id": "fuz-010",
+      "rawInput": "Garloc",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "fuzzy",
+      "difficulty": "medium",
+      "notes": "Substitution o→i. Lev('garloc','garlic')=1, sim=0.857 > 0.72."
+    },
+    {
+      "id": "amb-001",
       "rawInput": "UnknownIngredient123",
       "expectedCanonicalName": null,
       "expectedMatchType": "unmatched",
       "difficulty": "hard",
-      "notes": "Should not match anything"
+      "notes": "Alphanumeric noise. No match in any layer."
     },
     {
-      "id": "case-007",
-      "rawInput": "\"Tomato,\"",
+      "id": "amb-002",
+      "rawInput": "Garlion",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Equidistant to Garlic (Lev 3) and Onion (Lev 3). Both below 0.72 threshold."
+    },
+    {
+      "id": "amb-003",
+      "rawInput": "Tonion",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Closest to Onion (Lev 2, sim=0.667) but below 0.72 threshold. Tests near-miss boundary."
+    },
+    {
+      "id": "amb-004",
+      "rawInput": "Ogion",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Lev('ogion','onion')=2, sim=0.6 < 0.72. Below threshold — unmatched."
+    },
+    {
+      "id": "amb-005",
+      "rawInput": "Yagoort",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Distant from Yogurt (Lev 3 via alias). sim=0.57 < 0.72 threshold."
+    },
+    {
+      "id": "amb-006",
+      "rawInput": "salata",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Turkish word for 'salad'. Not an ingredient in seeded DB."
+    },
+    {
+      "id": "amb-007",
+      "rawInput": "balık",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Turkish for 'fish'. Not in seeded DB. Contains ı diacritic."
+    },
+    {
+      "id": "amb-008",
+      "rawInput": "peynir",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Turkish for 'cheese'. Not seeded. Illustrates DB coverage gap."
+    },
+    {
+      "id": "amb-009",
+      "rawInput": "pirinç",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Turkish for 'rice'. Contains ç diacritic. Not seeded."
+    },
+    {
+      "id": "amb-010",
+      "rawInput": "Gtomat",
+      "expectedCanonicalName": null,
+      "expectedMatchType": "unmatched",
+      "difficulty": "hard",
+      "notes": "Lev('gtomat','tomato')=2, Lev('gtomat','garlic')=4. Tomato sim=0.667 < 0.72. Unmatched."
+    },
+    {
+      "id": "llm-001",
+      "rawInput": "ripe red tomato",
       "expectedCanonicalName": "Tomato",
-      "expectedMatchType": "canonical",
-      "difficulty": "medium",
-      "notes": "Punctuation stripping"
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "Descriptive phrase. No canonical/alias/fuzzy match. LLM would semantically resolve to Tomato. With NullIngredientLlmClient: Unmatched."
+    },
+    {
+      "id": "llm-002",
+      "rawInput": "plain yoghourt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "Descriptive phrase with archaic spelling variant. LLM would resolve to Yoğurt."
+    },
+    {
+      "id": "llm-003",
+      "rawInput": "white onion bulb",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "Compound noun phrase. Canonical/fuzzy fail. LLM would extract 'onion' semantically."
+    },
+    {
+      "id": "llm-004",
+      "rawInput": "fresh garlic clove",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "Multi-word description with qualifier. LLM identifies the core ingredient."
+    },
+    {
+      "id": "llm-005",
+      "rawInput": "tomaten",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "German plural form. Lev('tomaten','tomato')=2, sim=0.667 < 0.72. LLM cross-lingual match."
+    },
+    {
+      "id": "llm-006",
+      "rawInput": "Knoblauch",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "German for 'garlic'. No match via canonical/alias/fuzzy. LLM cross-lingual fallback."
+    },
+    {
+      "id": "llm-007",
+      "rawInput": "ail",
+      "expectedCanonicalName": "Garlic",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "French for 'garlic'. Lev('ail','garlic')=5. LLM cross-lingual fallback."
+    },
+    {
+      "id": "llm-008",
+      "rawInput": "tomate fraîche",
+      "expectedCanonicalName": "Tomato",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "French phrase 'fresh tomato'. No rule-based match possible. LLM semantic fallback."
+    },
+    {
+      "id": "llm-009",
+      "rawInput": "strained yogurt",
+      "expectedCanonicalName": "Yoğurt",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "Description of Greek/strained yogurt variant. LLM would map to Yoğurt."
+    },
+    {
+      "id": "llm-010",
+      "rawInput": "cipolla",
+      "expectedCanonicalName": "Onion",
+      "expectedMatchType": "llm",
+      "difficulty": "hard",
+      "notes": "Italian for 'onion'. No rule-based match. LLM cross-lingual semantic fallback."
     }
   ]
 }

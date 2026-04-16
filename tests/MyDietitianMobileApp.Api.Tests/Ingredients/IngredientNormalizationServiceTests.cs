@@ -194,6 +194,85 @@ public class IngredientNormalizationServiceTests
     }
 
     [Fact]
+    public async Task Duplicate_Canonical_Rows_With_Same_CanonicalIdentity_Are_Collapsed_Deterministically()
+    {
+        using var db = CreateDbContext();
+
+        var richer = new Ingredient(Guid.NewGuid(), "Domates");
+        richer.AddAlias("tomato");
+        richer.AddAlias("kiraz domates");
+
+        var thinner = new Ingredient(Guid.NewGuid(), "Domates");
+        thinner.AddAlias("cherry domates");
+
+        db.Ingredients.AddRange(richer, thinner);
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.NormalizeAsync("Domates");
+
+        result.Status.Should().Be(IngredientMatchStatus.Matched);
+        result.MatchedBy.Should().Be(IngredientMatchedBy.Canonical);
+        result.MatchedCanonicalName.Should().Be("Domates");
+        result.MatchedIngredientId.Should().Be(richer.Id);
+        result.Candidates.Should().HaveCount(2);
+        result.Explanation.Should().Contain("collapsing");
+    }
+
+    [Fact]
+    public async Task Duplicate_Alias_Rows_With_Same_CanonicalIdentity_Are_Collapsed_Deterministically()
+    {
+        using var db = CreateDbContext();
+
+        var richer = new Ingredient(Guid.NewGuid(), "Yogurt");
+        richer.AddAlias("plain yogurt");
+        richer.AddAlias("sade yogurt");
+
+        var thinner = new Ingredient(Guid.NewGuid(), "Yogurt");
+        thinner.AddAlias("plain yogurt");
+
+        db.Ingredients.AddRange(richer, thinner);
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.NormalizeAsync("plain yogurt");
+
+        result.Status.Should().Be(IngredientMatchStatus.Matched);
+        result.MatchedBy.Should().Be(IngredientMatchedBy.Alias);
+        result.MatchedCanonicalName.Should().Be("Yogurt");
+        result.MatchedIngredientId.Should().Be(richer.Id);
+        result.Candidates.Should().HaveCount(2);
+        result.Explanation.Should().Contain("collapsing");
+    }
+
+    [Fact]
+    public async Task Fuzzy_Duplicate_Rows_With_Same_CanonicalIdentity_Are_Collapsed_Deterministically()
+    {
+        using var db = CreateDbContext();
+
+        var richer = new Ingredient(Guid.NewGuid(), "Yoğurt");
+        richer.AddAlias("yogurt");
+        richer.AddAlias("plain yogurt");
+
+        var thinner = new Ingredient(Guid.NewGuid(), "Yoğurt");
+        thinner.AddAlias("yogurt");
+
+        db.Ingredients.AddRange(richer, thinner);
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.NormalizeAsync("yogrt");
+
+        result.Status.Should().Be(IngredientMatchStatus.Matched);
+        result.MatchedBy.Should().Be(IngredientMatchedBy.Fuzzy);
+        result.MatchedCanonicalName.Should().Be("Yoğurt");
+        result.MatchedIngredientId.Should().Be(richer.Id);
+    }
+
+    [Fact]
     public async Task Canonical_Match_Takes_Precedence_Over_Alias_Match()
     {
         using var db = CreateDbContext();

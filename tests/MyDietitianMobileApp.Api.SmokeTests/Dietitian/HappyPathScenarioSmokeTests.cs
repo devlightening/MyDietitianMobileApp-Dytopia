@@ -56,11 +56,11 @@ public class HappyPathScenarioSmokeTests : IClassFixture<SmokeWebApplicationFact
         listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var listJson = await listResponse.Content.ReadFromJsonAsync<JsonElement>();
-        listJson.TryGetProperty("clients", out var clientsProp).Should().BeTrue();
+        listJson.TryGetProperty("items", out var clientsProp).Should().BeTrue();
         clientsProp.ValueKind.Should().Be(JsonValueKind.Array);
         clientsProp.GetArrayLength().Should().BeGreaterOrEqualTo(2); // DietitianA sees 2 clients
 
-        var firstClientId = clientsProp[0].GetProperty("id").GetGuid();
+        var firstClientId = clientsProp[0].GetProperty("clientId").GetGuid();
 
         // DietitianA can view own client detail
         var detailResponse = await client.GetAsync($"/api/dietitian/clients/{firstClientId}");

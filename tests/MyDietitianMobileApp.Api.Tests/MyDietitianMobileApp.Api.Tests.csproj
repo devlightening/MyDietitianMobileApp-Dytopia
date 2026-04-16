@@ -24,5 +24,9 @@
     <ProjectReference Include="..\..\src\MyDietitianMobileApp.Api\MyDietitianMobileApp.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Benchmarks\SampleDatasets\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
 

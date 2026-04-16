@@ -16,7 +16,7 @@ export function ClientsPagination({
   pageSize,
   total,
   onPageChange,
-  onPageSizeChange
+  onPageSizeChange,
 }: ClientsPaginationProps) {
   const totalPages = Math.ceil(total / pageSize)
   const startItem = total === 0 ? 0 : (page - 1) * pageSize + 1
@@ -26,8 +26,7 @@ export function ClientsPagination({
   const canGoNext = page < totalPages
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
-      {/* Results Count */}
+    <div className="card-sfcos flex flex-col items-center justify-between gap-4 border-none p-4 sm:flex-row">
       <div className="text-sm text-muted-foreground">
         {total > 0 ? (
           <>
@@ -43,15 +42,13 @@ export function ClientsPagination({
         )}
       </div>
 
-      {/* Pagination Controls */}
-      <div className="flex items-center gap-4">
-        {/* Page Size Selector */}
+      <div className="flex flex-col items-center gap-4 sm:flex-row">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Sayfa başına:</span>
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="px-3 py-1.5 text-sm border rounded-md bg-background"
+            className="h-10 rounded-full border border-border bg-white px-4 text-sm text-foreground outline-none transition focus:border-primary/30 focus:ring-2 focus:ring-primary/10"
           >
             <option value={10}>10</option>
             <option value={25}>25</option>
@@ -60,19 +57,19 @@ export function ClientsPagination({
           </select>
         </div>
 
-        {/* Page Navigation */}
         <div className="flex items-center gap-2">
           <Button
             data-testid="clients-prev"
             variant="secondary"
             onClick={() => onPageChange(page - 1)}
             disabled={!canGoPrev}
+            className="px-4"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="h-4 w-4" />
             Önceki
           </Button>
 
-          <span className="text-sm text-muted-foreground px-2">
+          <span className="px-2 text-sm text-muted-foreground">
             Sayfa {page} / {totalPages || 1}
           </span>
 
@@ -81,9 +78,10 @@ export function ClientsPagination({
             variant="secondary"
             onClick={() => onPageChange(page + 1)}
             disabled={!canGoNext}
+            className="px-4"
           >
             Sonraki
-            <ChevronRight className="w-4 h-4 ml-1" />
+            <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
       </div>

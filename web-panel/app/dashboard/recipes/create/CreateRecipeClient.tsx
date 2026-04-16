@@ -14,10 +14,11 @@ interface RecipeIngredient {
   ingredientId: string;
   ingredientName: string;
   isMandatory: boolean;
+  isFlavoring: boolean;
   isProhibited: boolean;
 }
 
-type IngredientRole = 'mandatory' | 'optional' | 'prohibited';
+type IngredientRole = 'mandatory' | 'optional' | 'flavoring' | 'prohibited';
 
 const ROLE_CONFIG: Record<IngredientRole, { label: string; className: string; nextRole: IngredientRole }> = {
   mandatory: {
@@ -28,6 +29,11 @@ const ROLE_CONFIG: Record<IngredientRole, { label: string; className: string; ne
   optional: {
     label: 'İsteğe Bağlı',
     className: 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20',
+    nextRole: 'flavoring',
+  },
+  flavoring: {
+    label: 'Lezzetlendirici',
+    className: 'bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200/70',
     nextRole: 'prohibited',
   },
   prohibited: {
@@ -39,12 +45,17 @@ const ROLE_CONFIG: Record<IngredientRole, { label: string; className: string; ne
 
 function getRole(ing: RecipeIngredient): IngredientRole {
   if (ing.isProhibited) return 'prohibited';
+  if (ing.isFlavoring) return 'flavoring';
   if (ing.isMandatory) return 'mandatory';
   return 'optional';
 }
 
-function roleToFlags(role: IngredientRole): Pick<RecipeIngredient, 'isMandatory' | 'isProhibited'> {
-  return { isMandatory: role === 'mandatory', isProhibited: role === 'prohibited' };
+function roleToFlags(role: IngredientRole): Pick<RecipeIngredient, 'isMandatory' | 'isFlavoring' | 'isProhibited'> {
+  return {
+    isMandatory: role === 'mandatory',
+    isFlavoring: role === 'flavoring',
+    isProhibited: role === 'prohibited',
+  };
 }
 
 interface CreateRecipePayload {
@@ -53,6 +64,7 @@ interface CreateRecipePayload {
   isPublic: boolean;
   mandatoryIngredients: string[];
   optionalIngredients: string[];
+  flavoringIngredients: string[];
   prohibitions: string[];
 }
 
@@ -64,7 +76,7 @@ export default function CreateRecipeClient() {
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
-    { ingredientId: '', ingredientName: '', isMandatory: true, isProhibited: false },
+    { ingredientId: '', ingredientName: '', isMandatory: true, isFlavoring: false, isProhibited: false },
   ]);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -105,7 +117,7 @@ export default function CreateRecipeClient() {
   }
 
   function addIngredient() {
-    setIngredients(prev => [...prev, { ingredientId: '', ingredientName: '', isMandatory: true, isProhibited: false }]);
+    setIngredients(prev => [...prev, { ingredientId: '', ingredientName: '', isMandatory: true, isFlavoring: false, isProhibited: false }]);
   }
 
   function removeIngredient(idx: number) {
@@ -124,14 +136,16 @@ export default function CreateRecipeClient() {
     const mandatoryIngredients = ingredients
       .filter(ing => ing.isMandatory && !ing.isProhibited).map(ing => ing.ingredientId);
     const optionalIngredients = ingredients
-      .filter(ing => !ing.isMandatory && !ing.isProhibited).map(ing => ing.ingredientId);
+      .filter(ing => !ing.isMandatory && !ing.isFlavoring && !ing.isProhibited).map(ing => ing.ingredientId);
+    const flavoringIngredients = ingredients
+      .filter(ing => ing.isFlavoring && !ing.isProhibited).map(ing => ing.ingredientId);
     const prohibitions = ingredients
       .filter(ing => ing.isProhibited).map(ing => ing.ingredientId);
     if (mandatoryIngredients.length === 0) {
       setApiError('En az bir zorunlu malzeme eklenmelidir.');
       return;
     }
-    mutation.mutate({ name: name.trim(), description: description.trim(), isPublic, mandatoryIngredients, optionalIngredients, prohibitions });
+    mutation.mutate({ name: name.trim(), description: description.trim(), isPublic, mandatoryIngredients, optionalIngredients, flavoringIngredients, prohibitions });
   };
 
   const canSubmit = name.trim() && description.trim() &&
@@ -230,7 +244,7 @@ export default function CreateRecipeClient() {
         <Card className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Malzemeler</h2>
-            <p className="text-xs text-muted-foreground">Role tıklayarak değiştir: Zorunlu → Opsiyonel → Yasak</p>
+            <p className="text-xs text-muted-foreground">Role tıklayarak değiştir: Zorunlu → Opsiyonel → Lezzetlendirici → Yasak</p>
           </div>
 
           <div className="space-y-3">

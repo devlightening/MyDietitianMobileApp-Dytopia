@@ -1,0 +1,2973 @@
+﻿ 
+  
+
+              Dinamik Mutfak: Uygulama Navigasyon ve Freemium Yapısı                         Verilen kaynaklara ve projenin "Freemium" (Ücretsiz + Premium) stratejisine dayanarak; uygulamanın alt menüsü (Bottom Navigation Bar), kullanıcının statüsüne göre dinamik olarak içerik değiştiren             5 ana sekmeden            oluşmalıdır.   
+
+                  Uygulamanın kalbi olan             "Mutfak"            sekmesi merkezde yer almalı ve tasarımıyla diğerlerinden ayrışmalıdır. İşte detaylı sekme yapısı ve işlevleri:   
+
+                  1. Sol 1: ANA SAYFA (Home)   
+
+                    Kullanıcının durum özeti ve yönlendirme merkezi.   
+
+                  Bu sekme, kullanıcının sisteme giriş yaptığı anda gördüğü ilk ekrandır ve kullanıcı tipine göre (Free/Premium) tamamen farklı bir deneyim sunar  
+         ,.  
+ 
+
+                  •             Free Kullanıcılar İçin (Keşif ve Takip):   
+
+                      ◦             Hero Alanı:            Kişisel ilerleme grafiği (Kilo hedefi, su takibi vb.).   
+
+                      ◦             İçerik:            Genel sağlık ipuçları veya blog tarzı hap bilgiler.   
+
+                      ◦             Kritik İşlev (Upsell):            Ekranın belirgin bir yerinde             "Premium'a Geç / Diyetisyen Kodunu Gir"              
+         banner'ı  
+          bulunur. Bu alan, kullanıcıyı Access Key girmeye teşvik eder.   
+
+                  •             Premium Kullanıcılar İçin (Klinik Takip):   
+
+                      ◦             Markalama:            Üst kısımda bağlı olunan diyetisyenin/kliniğin logosu ve ismi yer alır (Örn: "Dyt. Elif ile Sağlıklı Yaşam")  
+         ,.  
+ 
+
+                      ◦             Hero Alanı (Uyum Skoru):            Danışanın plana ne kadar sadık kaldığını gösteren "Uyum Durumu: %85" grafiği.   
+
+                      ◦             Sıradaki Öğün:            Diyetisyenin planına göre o an yenmesi gereken öğün kartı (Örn: "15:00 - Ara Öğün").   
+
+                  2. Sol 2: TARİFLER (Recipes)   
+
+                    Kütüphane ve içerik havuzu.   
+
+                  Kullanıcının veritabanındaki yemeklere göz attığı liste görünümüdür.   
+
+                  •             Free Kullanıcılar İçin:   
+
+                      ◦             Veri Kaynağı:                       /api/public/recipes           . Sisteme            IsPublic=true            olarak kaydedilmiş, herkesin erişimine açık genel tarifler listelenir.   
+
+                      ◦             Amaç:            Kullanıcının uygulama boş hissetmemesini sağlamak.   
+
+                  •             Premium Kullanıcılar İçin:   
+
+                      ◦             Veri Kaynağı:            Diyetisyenin özel havuzu.   
+
+                      ◦             İçerik:            Diyetisyenin kendi panelinden girdiği             "İmza Tarifler"            (Örn: Elif'in Detoks Çorbası) ve klinik onaylı listeler.   
+
+                      ◦             Filtreler:            Diyetisyenin belirlediği etiketlere göre (Glutensiz, Yüksek Protein) kategorize edilmiş görünüm.   
+
+                  3. MERKEZ (Hero): MUTFAK (Kitchen)   
+
+                    Uygulamanın kalbi ve en büyük aksiyon butonu.   
+
+                  Bu sekme, diğer ikonlardan daha büyük, yukarı taşan (Floating Action Button) ve dikkat çekici bir tasarıma sahip olmalıdır. Kullanıcı "Ne yiyeceğim?" dediği an buraya basar  
+         ,.  
+ 
+
+                  •             Kiler Yönetimi (Envanter):   
+
+                      ◦ Kullanıcı evindeki malzemeleri buradan seçer. Kaynaklarda belirtilen "sepet girişi emek ister" sorununu aşmak için "Hızlı Ekle" paketleri (Kahvaltılıklar vb.) burada sunulur.   
+
+                      ◦             Malzeme Sözlüğü:            Kullanıcı ne yazarsa yazsın (domates, çeri domates), arka planda standart bir veri yapısına dönüştürülür.   
+
+                  •             "Birleştir" Butonu:   
+
+                      ◦ Ekranın altında sabit duran dev buton. Basıldığında             "Karşılaştırma Motoru"            çalışır.   
+
+                  •             Kutu Açılışı (Gamification):   
+
+                       ◦ Butona basıldığında sıkıcı bir liste yerine, bir hediye paketi animasyonu (Unboxing) devreye girer. "Bugünün en uygun öğünü bulundu            🎁           " mesajıyla sonuçlar (Tam Uyum / 1 Eksik) kartlar halinde sunulur  
+         ,,.  
+ 
+
+                  4. Sağ 1: GELİŞİM (Progress) / DİYETİSYEN   
+
+                    Motivasyon ve raporlama alanı.   
+
+                  •             Free Kullanıcılar İçin (Gelişim):   
+
+                      ◦ Tamamen bireysel takip ekranıdır. Kilo değişimi, bel/kalça ölçümleri ve adım sayısı grafikleri yer alır.   
+
+                  •             Premium Kullanıcılar İçin (Diyetisyen & Uyum):   
+
+                      ◦             Hesap Verebilirlik:            "Bu hafta 5 öğün tarifle yapıldı" gibi diyetisyenin de gördüğü raporlar burada sergilenir.   
+
+                      ◦             Rozetler:            "3 Günlük Seri", "Protein Canavarı" gibi kazanılan oyunlaştırma rozetleri ve başarılar listelenir  
+         ,.  
+ 
+
+                      ◦             İletişim:            Diyetisyenden gelen notlar veya (ileride eklenecekse) chat   
+         modülü  
+          burada bulunur.   
+
+                  5. Sağ 2: PROFİL (Profile)   
+
+                    Ayarlar ve aktivasyon kapısı.   
+
+                  •             İşlev:            Hesap yönetimi, şifre değişimi, alerjen filtreleri (laktoz, gluten vb.).   
+
+                  •             Kritik Özellik (Aktivasyon):   
+
+                      ◦ Free kullanıcılar için             "Premium'u Aktifleştir" (Access Key Gir)            alanı burada en belirgin ayar olarak durmalıdır  
+         ,.  
+ 
+
+                      ◦ Kullanıcı diyetisyeninden aldığı kodu buraya girerek uygulamasını "Free Mod"dan "Premium Mod"a yükseltir.   
+
+                  --------------------------------------------------------------------------------   
+
+                   Yazılımcı (Cursor) İçin Tasarım Notu:            Kodlama sırasında            AppStartRouter            yapısını kullanarak, giriş yapan kullanıcının            isPremium            durumunu kontrol etmeli ve kullanıcıyı            FreeStack            (Kısıtlı menü) veya            PremiumStack            (Tam menü) navigasyonuna yönlendirmelisiniz  
+         ,.  
+          Ancak             "Mutfak"            butonu her iki durumda da merkezde ve sabit kalmalıdır.   
+
+                                  
+
+             
+
+               Diyetisyen ve Danışan Arasında Senkronize Veri Akış Mimarisi :                                 Verilen kaynaklar ve projenin teknik mimarisine göre; Diyetisyen ve Danışan arasındaki veri paylaşımı, basit bir dosya transferi değil,             "Access Key" (Erişim Anahtarı)            üzerinden kurulan             çift yönlü ve senkronize bir veri akışı            ile yönetilir.   
+
+                  Bu süreç teknik olarak şu dört ana katmanda gerçekleşir:   
+
+                  1. Bağlantının Kurulması (Handshake Mekanizması)   
+
+                  Veri akışının başlaması için önce güvenli bir "tünel" oluşturulur.   
+
+                  •             Access Key (Anahtar):            Diyetisyen panelinden 6 haneli bir kod üretir. Bu kod, veritabanındaki             DietitianClientLinks            tablosunda bir kayıt oluşturur.   
+
+                  •             Aktivasyon:            Danışan bu kodu mobil uygulamaya girdiğinde, sistem arka planda            /api/client/activate-premium            servisini çağırır. Başarılı olursa, danışanın profili            isPremium=true            olarak güncellenir ve            activeDietitianId            (bağlı olduğu diyetisyenin kimliği) sisteme işlenir  
+         ,.  
+ 
+
+                  2. Diyetisyenden Danışana Veri Akışı (Kural ve İçerik Seti)   
+
+                  Diyetisyen, danışanın uygulamasını yönetmek için "statik veri" değil, "yapılandırılmış kurallar" gönderir.   
+
+                  •             Özel Tarif Havuzu (Private Repository):            Diyetisyen kendi panelinden tarif girdiğinde, bu veriler            DietitianId            ile etiketlenir. Danışan "Birleştir" butonuna bastığında, sistem genel havuzu (           Public Recipes           ) değil, diyetisyenin özel havuzunu tarar  
+         ,.  
+ 
+
+                  •             Mantıksal Kurallar (Logic Injection):            Diyetisyen sadece "Salata" tarifi göndermez; o tarifin arkasındaki mantığı da gönderir (Örn: "Bu danışan için laktoz yasak", "Bu tarifte ton balığı zorunlu"). Uygulama, danışanın telefonunda çalışırken bu kuralları             filtre            olarak kullanır  
+         ,.  
+ 
+
+                  •             Plan Verisi:            Diyetisyenin takviminde oluşturduğu öğün planı (Örn: Salı 19:00 - Akşam Yemeği), danışanın ana ekranına "Sıradaki Öğün" kartı olarak push edilir.   
+
+                  3. Danışandan Diyetisyene Veri Akışı (Telemetri ve Uyum)   
+
+                  Danışanın uygulama üzerindeki aksiyonları, diyetisyen paneline anlık rapor olarak döner.   
+
+                  •             Uyum Skoru (Compliance Data):            Danışan önerilen bir tarifi yapıp "Yaptım" butonuna bastığında, bu veri            ClientActivities            veya benzeri bir log tablosuna işlenir. Diyetisyen panelde "Mert bu hafta 5 öğünü tarifle yaptı, Uyum: %85" verisini görür  
+         ,.  
+ 
+
+                  •             Envanter ve Tüketim:            Danışanın hangi malzemeleri kullandığı veya hangi öğünleri atladığı bilgisi, diyetisyenin bir sonraki planı yapması için veri sağlar.   
+
+                  4. Teknik Güvenlik ve İzolasyon (Backend Politikaları)   
+
+                  Verilerin karışmaması ve güvenliği için backend tarafında katı kurallar uygulanır.   
+
+                  •             Veri İzolasyonu:            Bir diyetisyenin tariflerini, başka bir diyetisyenin danışanı göremez. API çağrılarında            RequirePremiumClient            politikası uygulanır ve her sorguda            activeDietitianId            kontrol edilir  
+         ,.  
+ 
+
+                  •             Zamanlayıcı (Expiration):            Veri paylaşımı sonsuza kadar sürmez. Access Key ile tanımlanan süre (Örn: 3 Ay) dolduğunda, sistem otomatik olarak            isPremium            flag'ini            false            yapar ve veri akışını keserek danışanı "Free" moda düşürür  
+         ,.  
+ 
+
+                  Özetle; teknik altyapı, diyetisyenin             "Aklını" (Kurallar ve Tarifler)            danışanın cebine gönderir; karşılığında danışandan             "Kanıt" (Uyum Verisi)            toplar.   
+
+      
+
+             
+
+               Mutfak İçin Hızlı Ekleme Paketleri Tasarım Rehberi :                          Verilen kaynaklara, özellikle teknik kısıtları aşma stratejilerine ve kullanıcı deneyimi hedeflerine dayanarak;             "Hızlı Ekle" (Quick Add)            paketleri, kullanıcının tek tek malzeme arama zahmetini ortadan kaldıran, görsel olarak zengin ve             yatay kaydırılabilir (horizontal scroll)            bir bileşen olarak sunulmalıdır.   
+
+                  Mutfak sekmesindeki bu özelliğin tasarım ve işleyiş detayları şöyledir:   
+
+                  1. Konumlandırma ve Yerleşim   
+
+                  Kullanıcı "Mutfak" sekmesine girdiği anda, boş bir liste veya sadece arama çubuğu ile karşılaşmamalıdır.   
+
+                  •             Konum:            Ekranın en üstünde, Arama Çubuğunun (Search Bar) hemen altında yer almalıdır.   
+
+                  •             Format:            Sağa doğru kaydırılabilir             "Yatay Kartlar" (Carousel)            şeklinde sunulmalıdır. Bu sayede dikey alanı işgal etmeden birçok seçenek gösterilebilir.   
+
+                  2. Paket İçerikleri ve Senaryolar   
+
+                  Kaynaklarda belirtilen "Sepet girişi emek ister" sorununu çözmek için, paketler gerçek hayat senaryolarına göre gruplanmalıdır:   
+
+                  •             Temel Kahvaltı Paketi:            (İkon:            🍳           )   
+
+                      ◦              İçerik:            Yumurta, Peynir, Zeytin, Tereyağı, Ekmek.   
+
+                      ◦              Mantık:            Türk kullanıcısının evinde %90 ihtimalle olanlar.   
+
+                  •             Salata Bazı:            (İkon: 🥗)   
+
+                      ◦              İçerik:            Marul, Domates, Salatalık, Zeytinyağı, Limon.   
+
+                      ◦              Mantık:            Diyet yapanların en sık kullandığı demirbaşlar.   
+
+                  •             Öğrenci / Pratik:            (İkon:            🐟           )   
+
+                      ◦              İçerik:            Ton Balığı, Makarna, Ketçap, Yumurta.   
+
+                  •             Tatlı Krizi:            (İkon:            🍫           )   
+
+                      ◦              İçerik:            Kakao, Süt, Muz, Yulaf, Bal.   
+
+                  3. Görsel Tasarım (UI)   
+
+                  Kullanıcının iştahını açacak ve hızlı etkileşime teşvik edecek bir kart tasarımı uygulanmalıdır:   
+
+                  •             Kart Yapısı:            Kare veya hafif dikdörtgen kartlar.   
+
+                  •             Görsel:            Kartın ortasında paketi temsil eden büyük bir             Emoji            veya             İkon            (Örn:            🛒            veya            🍳           ).   
+
+                  •             Başlık:            Altında kısa isim (Örn: "Klasik Kahvaltı").   
+
+                  •             Aksiyon:            Kartın sağ alt köşesinde küçük bir            +            butonu.   
+
+                  4. Etkileşim ve Animasyon (UX)   
+
+                  Kullanıcı pakete tıkladığında "ekleme hissi" tatmin edici olmalıdır.   
+
+                  •             Aksiyon:            Kullanıcı "Kahvaltı Paketi"ne tıkladığında, 5 malzeme birden aşağıdaki "Sepetim" listesine animasyonla (uçarak) eklenmelidir.   
+
+                  •             Düzenleme:            Paket eklendikten sonra kullanıcı, "Evde zeytin yok" diyerek sadece zeytini listeden tek hareketle silebilmelidir (Swipe to delete). Yani paket "ya hep ya hiç" değil, "hızlı başlangıç" işlevi görmelidir.   
+
+                  5. Free ve Premium Ayrımı   
+
+                  Bu özellik de Freemium stratejinizin bir parçası olabilir:   
+
+                  •             Free Kullanıcılar:            Yukarıdaki standart paketleri (Kahvaltı, Salata) görür.   
+
+                  •             Premium Kullanıcılar:            Diyetisyeninin hazırladığı             "Özel Sepetleri"            görür.   
+
+                      ◦              Örnek:            "Elif'in Detoks Sepeti" (Yeşil Elma, Kereviz, Maydanoz, Zencefil). Diyetisyen bu malzemeleri tek tıkla danışanın mutfağına yükleyebilir.   
+
+                  Özet: Yazılımcı (Cursor) İçin Direktif   
+
+                  Bu yapıyı kurarken şu mantığı kullanabilirsiniz:   
+
+                  •             Component:                       QuickAddCarousel            bileşeni oluştur.   
+
+                   •             Data Structure:                       PresetPacks            array'i içinde            { id: 'breakfast', items: ['egg', 'cheese', 'olive'] }            gibi statik veriler tut.   
+
+                  •             Action:            Tıklandığında            UserPantry            state'ine            bulkAdd            işlemi yap ve mükerrer kayıtları (duplicate) önle.   
+
+                  Bu yaklaşım, kaynağınızda belirtilen             "Sepet girişi emek ister"            bariyerini yıkarak, kullanıcının "Birleştir" butonuna saniyeler içinde ulaşmasını sağlar.   
+
+      
+
+             
+
+               Akıllı Veri Standardizasyonu: Malzeme Sözlüğü Yapısı :                          Verilen kaynaklara ve projenin teknik dokümantasyonuna göre;             Malzeme Sözlüğü (Ingredient Dictionary)           , kullanıcıların serbestçe girdiği veya farklı şekillerde isimlendirdiği malzemeleri (örn: "salkım domates", "çeri domates") arka planda             standart bir veri kimliğine (ID)            dönüştüren bir filtreleme katmanı olarak çalışır.   
+
+                  Bu yapı, veri karmaşasını önlemek ve algoritmanın doğru çalışmasını sağlamak için şu             3 temel mekanizmayı            kullanır:   
+
+                  1. Standartlaştırma (Normalization)   
+
+                  Danışanlar aynı malzemeyi farklı kelimelerle ifade edebilir. Sözlük, bu farklı girdileri tek bir "Çatı Kavram" altında toplar.   
+
+                  •             Sorun:            Bir kullanıcı "domates", diğeri "çeri domates", bir başkası "salkım domates" yazabilir. Eğer standartlaştırma olmazsa, sistem bunları 3 farklı malzeme sanar ve "Domatesli Salata" tarifini eşleştiremez.   
+
+                  •             Çözüm:            Kullanıcı ne yazarsa yazsın, sistem arka planda bu girdiyi tek bir            IngredientID            (Örneğin:            ID_Domates           ) ile eşleştirir. Böylece veri dağılmaz ve tarif motoru hatasız çalışır.   
+
+                  2. Hiyerarşik Yapı (Parent-Child İlişkisi)   
+
+                  Sözlük, malzemeleri düz bir liste olarak değil, bir ağaç yapısı (Tree Structure) olarak tutar.   
+
+                  •             Ana Kök (Parent):            Genel kategoriyi temsil eder. (Örn:             Yoğurt           )   
+
+                  •             Varyasyonlar (Children):            O malzemenin alt türlerini temsil eder.   
+
+                      ◦ Süzme Yoğurt   
+
+                      ◦ Laktozsuz Yoğurt   
+
+                      ◦ Ev Yoğurdu   
+
+                  •             İşleyiş:            Tarifte "Yoğurt" istendiğinde, kullanıcı sepetine "Süzme Yoğurt" da atsa, "Laktozsuz Yoğurt" da atsa sistem bunu kabul eder çünkü hepsi aynı köke bağlıdır.   
+
+                  3. Akıllı Alternatif Eşleşmesi (Cross-Reference)   
+
+                  Sözlük sadece neyin ne olduğunu değil, neyin neyin yerine geçebileceğini de bilir. Bu, "1 Eksikle Olur" algoritmasının temelidir.   
+
+                  •             Mantık:            Sistemde tanımlı "Alternatif Grupları" vardır.   
+
+                  •             Örnek:            Sözlükte "Yoğurt" ve "Kefir" birbirine alternatif olarak tanımlanmıştır.   
+
+                  •             Sonuç:            Eğer tarifte "Yoğurt" zorunluysa ama kullanıcının dolabında sadece "Kefir" varsa, sistem tarifi elemek yerine;              "Yoğurt yok ama Kefir ile yapabilirsin"            diyerek öneride bulunur  
+         ,.  
+ 
+
+                   Özetle;            Malzeme Sözlüğü, kullanıcının girdiği kaotik veriyi ("domates", "salkım", "  
+         kırmızı biber  
+         ") alır ve sistemin anlayacağı düzenli veriye (           TOMATO_STD           ,            PEPPER_RED           ) dönüştürerek algoritmanın %100 doğrulukla çalışmasını sağlar.   
+
+                    
+
+             
+
+               Diyet Sürecinde Oyunlaştırma ve Motivasyon Stratejileri :                          Verilen kaynaklara ve geliştirdiğimiz proje   
+         vizyonuna  
+          göre; mobil uygulamanızdaki oyunlaştırma (gamification) yapısı, diyet sürecindeki en büyük düşman olan             "karar verme yorgunluğunu"            ortadan kaldırıp, yerine             "keşfetme heyecanı"            ve             "başarı hissi"            koyarak motivasyonu artırır.   
+
+                  Bu yapı, danışanın uygulamayı sadece bir "takip aracı" olarak değil, bir "oyun alanı" olarak görmesini sağlar. İşte   
+         motivasyonu  
+          artıran 5 temel mekanizma:   
+
+                  1. "Angaryayı" "Hediyeye" Dönüştürme: Kutu Açılışı (Unboxing)   
+
+                  Diyet yapanların en büyük stres kaynağı, dolabı açıp "Bu malzemelerle ne yapacağım?" diye düşündüğü andır. Uygulamanızdaki "Birleştir" butonu bu stresli anı psikolojik bir ödüle dönüştürür.   
+
+                  •             Mekanizma:            Kullanıcı malzemeleri seçip butona bastığında, ekrana sıkıcı bir liste gelmez. Bunun yerine bir             hediye paketi animasyonu            (Unboxing) devreye girer  
+         ,.  
+ 
+
+                  •             Motivasyon Etkisi:            Beyin bu süreci bir "sorumluluk" değil, bir "sürpriz" olarak algılar. "Bugünün en uygun öğünü bulundu            🎁           " mesajı, kullanıcının dopamin salgılamasını sağlar ve merak duygusunu tetikler.   
+
+                  2. Zinciri Kırmama Psikolojisi: Günlük Seriler (Streaks)   
+
+                  Kullanıcının uygulamayı her gün açması için görsel bir zincir oluşturulur.   
+
+                  •             Mekanizma:            Kullanıcı "Birleştir" özelliğini kullanarak öğün oluşturduğunda veya plana uyduğunda, ana ekranda             "            🔥             3 Günlük Seri"            gibi sayaçlar ilerler  
+         ,.  
+ 
+
+                  •             Motivasyon Etkisi:            Kullanıcılar, oluşturdukları bu zinciri bozmamak için (Loss Aversion) uygulamaya girip basit bir etkileşimde bulunmaya motive olurlar. Bu, diyeti bir zorunluluktan çıkarıp günlük bir "meydan okumaya" (challenge) dönüştürür.   
+
+                  3. Kimlik İnşası: Başarı Rozetleri (Badges)   
+
+                  Kullanıcının davranışlarını onaylayan ve ona pozitif sıfatlar yükleyen sanal ödüllerdir.   
+
+                  •             Mekanizma:            Belirli aksiyonlar tekrarlandığında kullanıcıya özel rozetler verilir:   
+
+                      ◦ Hızlı tarifleri seçenlere:             "5 Dakikacı"   
+
+                      ◦ Protein hedefini tutturanlara:             "Protein Canavarı"   
+
+                      ◦ Sebze ağırlıklı beslenenlere:             "Sebze Dostu"           .   
+
+                  •             Motivasyon Etkisi:            Bu rozetler danışana "Ben sağlıklı beslenen biriyim" kimliğini kazandırır. Küçük başarıların kutlanması, büyük hedefe (kilo verme) giden yolda tükenmişliği önler.   
+
+                  4. İlerleme ve Ödül: Yeni İçerik Kilidi Açma (Unlock)   
+
+                  Sadece rozet vermek yetmez, somut bir fayda sunulmalıdır.   
+
+                  •             Mekanizma:            Kullanıcı haftalık hedeflerine ulaştığında (Örn: "Bu hafta 4 öğünü uygulamadan seç"), diyetisyenin havuzundaki             "yeni ve özel tariflerin"            kilidi açılır  
+         ,.  
+ 
+
+                  •             Motivasyon Etkisi:            Bu özellik, oyunlardaki "Level Atlama" mantığıyla çalışır. Kullanıcı, iyi performans gösterdikçe daha "Premium" içeriklere erişeceğini bilir ve çabasını artırır.   
+
+                  5. Diyetisyen Gözetimi: Hesap Verebilirlik (Accountability)   
+
+                  Premium kullanıcılar için oyunlaştırma, sadece eğlence değil, aynı zamanda bir "karne" niteliği taşır.   
+
+                  •             Mekanizma:            Danışanın kazandığı rozetler, seriler ve "Uyum Skoru" (Örn: %85), anlık olarak diyetisyenin paneline yansır  
+         ,.  
+ 
+
+                  •             Motivasyon Etkisi:            Danışan, performansının diyetisyeni (koçu) tarafından görüldüğünü bilir. "Diyetisyenime karşı mahcup olmayayım" veya "Ondan bir 'Aferin' alayım" düşüncesi, diyete sadakati (compliance) ciddi oranda artırır.   
+
+                    Özetle:            Uygulamanızın oyunlaştırma yapısı; diyet yapmayı             "yasaklar listesine uymak"            gibi negatif bir eylemden,             "malzemeleri birleştirip hediye kazanmak ve seviye atlamak"            gibi pozitif bir deneyime dönüştürür.   
+
+                    
+
+             
+
+               Diyetisyen ve Danışan Arasında Çift Yönlü Veri Senkronizasyonu:                          Verilen kaynaklara ve projenin teknik mimarisine göre;             Premium modda            diyetisyen ve danışan arasındaki veri paylaşımı, tek taraflı bir bilgi akışı değil,             çift yönlü ve gerçek zamanlı bir etkileşim            üzerine kuruludur.   
+
+                  Bu süreç, sistemde             "DietitianClientLinks"            tablosu ve             "Access Key"            (Erişim Anahtarı) mekanizması üzerinden yönetilir. Veri paylaşımı şu üç ana başlıkta gerçekleşir:   
+
+                  1. Diyetisyenden Danışana Akış (Yönetim ve Kural Seti)   
+
+                  Diyetisyen, danışanın cebindeki uygulamayı kendi "dijital kliniğine" dönüştürmek için şu verileri paylaşır:   
+
+                  •             İmza Tarifler ve İçerik Havuzu:            Diyetisyen, kendi panelinde oluşturduğu özel tarifleri (Signature Recipes) sadece kendisine bağlı ("Premium") danışanların erişimine açar  
+         ,.  
+          Danışan "Birleştir" butonuna bastığında, sistem genel internet tariflerini değil,             diyetisyeninin veri havuzunu            tarar  
+         ,.  
+ 
+
+                  •             Klinik Kurallar ve Yasaklar (The Logic):            Diyetisyen sadece yemek tarifi değil, mantıksal kurallar seti gönderir. Örneğin; "Mert için laktoz yasak" veya "Bu tarifte ton balığı zorunlu" gibi kurallar veritabanına işlenir. Danışan evdeki malzemeleri seçtiğinde, sistem bu kuralları             filtre            olarak kullanır  
+         ,.  
+ 
+
+                  •             Kişiselleştirilmiş Diyet Planı:            Diyetisyen, hangi gün hangi öğünün yeneceğini (Örn: Salı - Akşam: Ton Balıklı Salata) sisteme girer. Bu veri, danışanın ana ekranına "Sıradaki Öğün" kartı olarak yansır  
+         ,.  
+ 
+
+                  •             Motivasyon ve İletişim:            Diyetisyenin belirlediği notlar ve hatırlatmalar, uygulama içindeki yapay zeka (AI) anlatıcısı aracılığıyla danışana "diyetisyenin ses tonuyla" iletilir  
+         ,.  
+ 
+
+                  2. Danışandan Diyetisyene Akış (Hesap Verebilirlik ve Takip)   
+
+                  Danışan uygulamayı kullandıkça, diyetisyenin paneline             "Uyum Verisi" (Compliance Data)            akar. Bu sayede diyetisyen, danışanına sürekli "Ne yedin?" diye sormak zorunda kalmaz.   
+
+                  •             Aktivite ve Teyit:            Danışan önerilen tarifi yapıp "Yaptım/Yedim" butonuna bastığında, bu işlem diyetisyen paneline anlık olarak düşer (Örn: "Mert, dün 19:30'da Ton Balıklı Salata yaptı")  
+         ,.  
+ 
+
+                  •             Uyum Skoru:            Danışanın plana ne kadar sadık kaldığı sistem tarafından hesaplanır (Örn: "Bu hafta 5 öğün tarifle yapıldı", "Uyum Durumu: %85") ve diyetisyene raporlanır.   
+
+                  •             Ölçüm ve Sağlık Verileri:            Danışanın girdiği kilo, bel/kalça ölçümleri ve su tüketim verileri, sadece telefonunda kalmaz; diyetisyenin takip ekranı ile senkronize edilir.   
+
+                  3. Teknik Yönetim: "Aktif Bağlantı" (Active Link) Mekanizması   
+
+                  Bu veri trafiğinin güvenliği ve yönetimi arka planda (Backend) şu kurallarla sağlanır:   
+
+                  •             Yetkilendirme (Auth):            Sistem,            /api/client/me            servisi üzerinden danışanın            activeDietitianId            bilgisini kontrol eder. Eğer geçerli bir bağ varsa,             "Premium Stack"            (Özel Arayüz) yüklenir  
+         ,.  
+ 
+
+                  •             Veri İzolasyonu:            Diyetisyenin tarifleri ve danışan verileri "Private" (Özel) olarak işaretlenir. Başka bir diyetisyenin danışanı veya ücretsiz kullanıcılar bu verileri göremez. Bu yetki yönetimi            RequirePremiumClient            politikası ile korunur.   
+
+                  •             Zaman Kısıtı:            Veri paylaşımı, Access Key ile tanımlanan süre (Örn: 3 Ay) boyunca aktiftir. Süre dolduğunda (           EndDate            geçtiğinde), sistem otomatik olarak veri akışını keser ve danışanı "Free" moda düşürür.   
+
+                  Özetle; Premium modda diyetisyen             "Akıl ve Kural"            (Rules & Content) gönderir, karşılığında danışandan             "Eylem ve Kanıt"            (Action & Proof) alır.   
+
+                                    Freemium Kullanıcı Dönüşümü ve Native Reklam Stratejileri :                          Verilen kaynaklara ve geliştirdiğimiz "Freemium" teknik mimarisine dayanarak; Free kullanıcıları Premium'a (yani bir diyetisyene bağlanmaya) yönlendiren reklam alanları, rahatsız edici "Pop-up" reklamlar yerine,             kullanıcının akışını bozmayan ama merak uyandıran "Doğal (Native)" alanlar            olarak tasarlanmalıdır.   
+
+                  Kaynaklarda belirtilen "Access Key" (Erişim Anahtarı)   
+         mekanizması,  
+          ve "Karar Yorgunluğu" psikolojisi kullanılarak tasarlanması gereken 4 stratejik alan şunlardır:   
+
+                  1. Ana Ekran "Bağlantı" Banner'ı (Home Screen Banner)   
+
+                  Free kullanıcının uygulamayı her açtığında gördüğü, ancak operasyonunu engellemeyen sabit alandır.   
+
+                  •             Konum:            Hero (İlerleme Grafiği) alanı ile İçerik Akışı (Genel Tarifler) arasına yerleştirilmelidir.   
+
+                  •             Tasarım:   
+
+                      ◦ Uygulamanın ana renklerinden farklı, dikkat çekici ama yumuşak bir renk (Örn:            Motivation Coral            - Mercan/Turuncu tonları).   
+
+                      ◦ Sol tarafta bir "Anahtar            🔑           " veya "Link            🔗           " ikonu.   
+
+                  •             Metin (Copy):   
+
+                      ◦              Başlık:            "Bir Diyetisyenle mi Çalışıyorsunuz?"   
+
+                      ◦              Alt Metin:            "Size özel planı yüklemek için diyetisyen kodunuzu girin."   
+
+                  •             Aksiyon:            Tıklandığında doğrudan            ActivatePremiumScreen            açılır.   
+
+                  2. Tarif Listesi İçinde "Kilitli/Bulanık" Kartlar (In-Feed Teaser)   
+
+                  Kullanıcı "Genel Tarifler" (Public Recipes) arasında gezinirken, Premium içeriğin değerini hissettiren en güçlü alandır.   
+
+                  •             Tasarım:   
+
+                      ◦ Liste akarken araya serpiştirilmiş (örneğin her 5. sırada) bir tarif kartı.   
+
+                      ◦ Görseli %50 oranında             bulanıklaştırılmış (Blur Effect)           .   
+
+                      ◦ Üzerinde yarı şeffaf bir "Kilit            🔒           " ikonu.   
+
+                  •             Metin:   
+
+                      ◦              Başlık:            "Diyetisyen İmzalı Özel Tarif"   
+
+                      ◦              Mesaj:            "Bu ve buna benzer 50+ klinik onaylı tarifi görmek için Premium'a geçin."   
+
+                  •             Psikoloji:            Kullanıcıya "Burada daha değerli bir içerik var ama erişemiyorum" hissi vererek merak uyandırır (Curiosity Gap).   
+
+                  3. "Mutfak" Sonuç Ekranı (Upsell after Action)   
+
+                  Kullanıcı "Birleştir" butonuna basıp genel sonuçları gördükten sonra, "Daha iyisi var" mesajı verilmelidir.   
+
+                  •             Konum:            Sonuç listesinin (Tarif Kartlarının) en altına yerleştirilen bir kart.   
+
+                  •             Tasarım:   
+
+                      ◦ Kartın kenarları "Altın Sarısı" (           #F4D35E           ) ile çerçevelenmiş.   
+
+                  •             Metin:   
+
+                      ◦              Mesaj:            "Sonuçlardan emin değil misiniz? Diyetisyeninizle bağlanın, yasaklı besinleri otomatik eleyelim ve size %100 uyumlu 'Kutu Açılışı' deneyimini sunalım."   
+
+                  •             Dayanak:            Kaynaklarda belirtilen "Yasaklar" ve "Zorunlu Malzemeler" filtresinin sadece Premium'da tam kapasite çalışması bu alanın satış argümanıdır  
+         ,.  
+ 
+
+                  4. Profil Menüsü "Aktivasyon" Butonu (Persistent CTA)   
+
+                  Kullanıcı kodu girmek istediğinde bunu nerede bulacağını her zaman bilmelidir.   
+
+                  •             Konum:            Profil sekmesinin en üstünde veya "Ayarlar" listesinin ilk sırasında  
+         ,.  
+ 
+
+                  •             Tasarım:   
+
+                       ◦ Standart bir menü öğesi yerine, çerçeveli (Outlined Button) veya içi dolu (Filled Button) bir buton.   
+
+                  •             Metin:            "Premium Anahtarı Kullan            🔑           " veya "Klinik Hesabını Bağla".   
+
+                  Tasarım İpuçları (Yazılımcı İçin Notlar)   
+
+                  •             Agresif Olmayın:            Kullanıcı uygulamayı açar açmaz tam ekran reklam göstermeyin. Kaynak, Free kullanıcının "login sonrası direkt kullanım" yapabilmesi gerektiğini vurgular. Aktivasyon opsiyonel olmalıdır.   
+
+                  •             Terminoloji:            "Satın Al" (Buy) yerine             "Bağla" (Connect)            veya             "Aktifleştir" (Activate)            kelimelerini kullanın. Çünkü sistemde son kullanıcı doğrudan ödeme yapmaz, diyetisyeninden aldığı kodu girer.   
+
+                  •             Görsel Hiyerarşi:            Reklam alanları, uygulamanın ana fonksiyonu olan "Mutfak" butonundan daha baskın olmamalıdır.   
+
+      
+
+             
+
+               Freemium Mimari ve Ana Ekran Tasarım Şeması :                           Verilen kaynaklara ve geliştirdiğimiz "Freemium" teknik mimarisine dayanarak; Premium ve Free modların ana ekran tasarımları, kullanıcının             psikolojik   
+          motivasyonunu  
+          ve             ürünün ticari hedeflerini            yansıtacak şekilde birbirinden keskin çizgilerle ayrılmalıdır.   
+
+                  Aşağıda, yazılımcınıza (Cursor) ve tasarımcınıza iletebileceğiniz detaylı bir             Ana Ekran (Home Screen) Tasarım Şeması            bulunmaktadır.   
+
+                  1. Tasarım Felsefesi ve Temel Ayrım   
+
+                  •             Free Mod (B2C): "Keşfet ve Yüksel"   
+
+                      ◦             Amaç:            Kullanıcıyı içeride tutmak (retention) ve Premium'a geçmeye ikna etmek (upsell).   
+
+                      ◦             Hissiyat:            Dostane, genel bir sağlık koçu, hafif ve ferah.   
+
+                  •             Premium Mod (B2B2C): "Uygula ve Bağlı Kal"   
+
+                      ◦             Amaç:            Diyetisyenin otoritesini hissettirmek ve plana sadakati (compliance) artırmak.   
+
+                      ◦             Hissiyat:            Kurumsal, kişiye özel, "Elite" ve klinik bir güven hissi.   
+
+                                                                                          3. Detaylı Tasarım Özellikleri   
+
+                  A. Free Home Tasarımı (B2C)   
+
+                  Bu ekranda kullanıcı "kendi kendine" diyet yapmaya çalışmaktadır.   
+
+                  1.             Header:            Standart uygulama markası görünür. Sağ üstte "Ayarlar" ikonu bulunur.   
+
+                  2.             Hero Alanı (İlerleme):   
+
+                      ◦ Grafik: "Hedef kilona %12 kaldı" gibi basit bir çizgi grafik veya su takip sayacı.   
+
+                      ◦ Mesaj: Genel   
+         motivasyon  
+         . "Bugün suyu ihmal etme!"   
+
+                  3.             Kritik Alan (Activation Banner):   
+
+                      ◦ Ekranın en görünür yerinde (Hero'nun hemen altında) renkli bir şerit:   
+
+                      ◦              Metin:            "Bir diyetisyenle mi çalışıyorsun? Hesabını bağla ve sana özel planı gör."   
+
+                      ◦              Buton:                        "Premium Kodu Gir"            (Bu buton            ActivatePremiumScreen            sayfasına yönlendirir).   
+
+                  4.             İçerik (Public Recipes):   
+
+                      ◦ Yatay kaydırılabilir kartlar:            /api/public/recipes            endpoint'inden gelen "Genel Tarifler".   
+
+                       ◦              Görsel Hile:            Aralara 1-2 tane "bulanık" (blurred) kart koyun ve üzerine kilit ikonu ekleyin. "Bu tarif sadece Premium üyeler içindir" yazarak merak uyandırın.   
+
+                  B. Premium Home Tasarımı (B2B2C)   
+
+                  Bu ekranda kullanıcı, diyetisyenin "dijital ofisindedir".   
+
+                  1.             Header (White-Label Etkisi):   
+
+                      ◦ Sistem, bağlı olunan diyetisyenin bilgilerini (           activeDietitianId           ) çeker.   
+
+                      ◦ Header rengi diyetisyenin marka rengine (varsa) döner. Sol üstte diyetisyenin adı yazar.   
+
+                  2.             Hero Alanı (Hesap Verebilirlik):   
+
+                      ◦ Grafik:             Halka Grafik (Donut Chart)           . Ortasında kocaman bir puan: "85".   
+
+                      ◦              Metin:            "Harikasın Mert! Dyt. Elif'in planına bugün tam uyum sağladın.".   
+
+                  3.             Aksiyon (Operasyonel):   
+
+                      ◦ Diyetisyenin yazdığı planda o an hangi öğün varsa o kart gösterilir.   
+
+                      ◦              Kart:            "Akşam Yemeği: Ton Balıklı Salata". Üzerinde "Yedim/Yaptım" butonu bulunur. Bu buton basıldığında diyetisyene veri gider.   
+
+                  4.             Oyunlaştırma (Gamification):   
+
+                      ◦ "3 Günlük Seri            🔥           " veya "Protein Rozeti 🥩" gibi kazanımlar burada sergilenir. Kutu açılışından çıkan ödüller burada listelenir.   
+
+                  --------------------------------------------------------------------------------   
+
+                  4. Ortak Öğe: "Mutfak & Birleştir" Butonu   
+
+                  Her iki ekranın da alt menüsünün (Bottom Nav) tam ortasında             "MUTFAK"            butonu yer alır. Ancak işlevi arka planda farklılaşır:   
+
+                  •             Free Modda:            Butona basılınca genel algoritma çalışır, animasyon standarttır.   
+
+                  •             Premium Modda:            Butona basılınca             "Kutu Açılışı" (Unboxing)            animasyonu devreye girer. Kullanıcıya "Elif'ten sana özel bir hediye geldi" hissi verilir.   
+
+                  5. Yazılımcı (Cursor) İçin Özet Direktif   
+
+                  Tasarımı koda dökerken şu mantığı kullanmasını isteyin:   
+
+                  •             Component:                       HomeScreen            tek bir dosya olmamalı.   
+         FreeHome.js  
+          ve            PremiumHome.js            olarak iki ayrı bileşen oluştur.   
+
+                  •             Logic:                       AppStartRouter            içinde            isPremium            kontrolü yaparak kullanıcıyı ilgili            Stack           'e yönlendir.   
+
+                  •             API:   
+
+                      ◦            FreeHome            ->            GET /api/public/recipes            ve            GET /api/client/measurements            kullanır.   
+
+                      ◦            PremiumHome            ->            GET /api/client/plan            ve            GET /api/dietitian/info            kullanır.   
+
+                  Bu ayrım, uygulamanızı basit bir sayaç olmaktan çıkarıp, hem son kullanıcıyı cezbeden hem de kliniklere satılabilir profesyonel bir SaaS ürününe dönüştürecektir.   
+
+      
+
+             
+
+               Freemium Beslenme Uygulaması Arayüz ve Navigasyon Stratejisi :                          Verilen kaynaklara ve geliştirdiğimiz Freemium (Ücretsiz + Premium) stratejisine göre, mobil uygulamanın alt menüsünü (Bottom Navigation)             kullanıcı deneyimini (UX)            ve             ticari hedefleri            destekleyecek şekilde 5 ana bölüme ayırmalıyız.   
+
+                  Uygulamanın kalbi             "Mutfak (Hero)"            sekmesidir; diğer sekmeler onu destekler. İşte detaylı ayrıştırma ve tasarım rehberi:   
+
+                  1. Merkez (Hero) Sekme: MUTFAK (Kitchen)   
+
+                    Uygulamanın en önemli, en büyük ve fark yaratan butonu.   
+
+                  •             Tasarım:            Standart ikonlardan %20-30 daha büyük, yukarı doğru taşan (Floating Action Button) ve dikkat çekici bir renkte (örneğin koyu yeşil) tasarlanmalıdır.   
+
+                  •             İşlev:            "Tek Tuşla Çözüm" felsefesinin hayat bulduğu yerdir.   
+
+                  •             Akış:   
+
+                      1.             Kiler Yönetimi:            Kullanıcı evindeki malzemeleri (yumurta, yoğurt, ton balığı vb.) buradan seçer veya "Hızlı Ekle" paketlerini kullanır.   
+
+                      2.             Birleştir Butonu:            Dev bir buton ile "Elimdekilerle ne yapabilirim?" sorusunu tetikler.   
+
+                      3.             Kutu Açılışı (Gamification):            Butona basıldığında bir hediye paketi açılır ve kullanıcıya uygun tarif kartları sunulur.   
+
+                  •             Free vs Premium Farkı:   
+
+                      ◦              Free:            Genel havuzdan (Public Library) basit eşleşmeleri görür.   
+
+                      ◦              Premium:            Diyetisyenin "İmza Tariflerini" ve "Yasaklılar" filtresi uygulanmış sonuçları görür.   
+
+                  --------------------------------------------------------------------------------   
+
+                  2. Sol 1: ANA SAYFA (Home)   
+
+                    Kullanıcının durum özeti ve yönlendirme merkezi.   
+
+                  •             İşlev:            Kullanıcıya o anki durumunu gösterir ve bir sonraki adıma yönlendirir.   
+
+                  •             Free Kullanıcı İçin Tasarım (B2C):   
+
+                      ◦             Başlık:            "Merhaba Mert            👋           " (Standart selamlama).   
+
+                      ◦             Hero Kartı:            Kişisel İlerleme (Örn: "Hedef kilona %10 kaldı").   
+
+                      ◦             İçerik:            "Haftanın Popüler Genel Tarifleri" ve Blog yazıları.   
+
+                      ◦             Kritik Öğe:                        "Premium'a Geç"            veya             "Diyetisyen Kodunu Gir"              
+         banner'ı  
+          burada yer almalıdır.   
+
+                  •             Premium Kullanıcı İçin Tasarım (B2B2C):   
+
+                      ◦             Başlık:            Diyetisyenin Markası/Logosu (Örn:             "Dyt. Elif ile Sağlıklı Yaşam"           ).   
+
+                      ◦             Hero Kartı:                        Uyum Skoru (Compliance)           . "Bugün plana %85 uydun".   
+
+                      ◦             İçerik:            Diyetisyenden gelen   
+         motivasyon  
+          notları ve "Sıradaki Öğün" kartı.   
+
+                  --------------------------------------------------------------------------------   
+
+                  3. Sol 2: TARİFLER (Recipes)   
+
+                    Kütüphane ve keşif alanı.   
+
+                  •             İşlev:            Kullanıcının veritabanındaki yemeklere göz attığı, arama yaptığı liste görünümü.   
+
+                  •             Free Kullanıcı İçin:   
+
+                      ◦             Veri Kaynağı:                       /api/public/recipes           .   
+
+                      ◦             İçerik:            Herkese açık, anonim, temel tarifler.   
+
+                      ◦             Strateji:            Aralara "kilitli" premium tarifler koyarak (blur   
+         efekti  
+         ) kullanıcıyı meraklandırabilirsiniz.   
+
+                  •             Premium Kullanıcı İçin:   
+
+                      ◦             Veri Kaynağı:            Bağlı olduğu diyetisyenin özel havuzu.   
+
+                      ◦             İçerik:            "Elif'in Detoks Çorbaları", "Düşük Karbonhidratlılar" gibi özel kategorize edilmiş, diyetisyen onaylı listeler.   
+
+                   --------------------------------------------------------------------------------   
+
+                  4. Sağ 1: GELİŞİM (Progress)   
+
+                    Takip ve   
+           motivasyon  
+            ekranı.   
+
+                  •             İşlev:            Sayısal verilerin ve başarıların sergilendiği yer.   
+
+                  •             Free Kullanıcı İçin (Kişisel Takip):   
+
+                      ◦ Kilo grafiği, su takip sayacı, bel/kalça ölçümleri.   
+
+                      ◦ Veriler sadece kullanıcının telefonunda kalır, bir uzmana raporlanmaz.   
+
+                  •             Premium Kullanıcı İçin (Hesap Verebilirlik):   
+
+                      ◦             Rozetler:            "Protein Canavarı", "3 Günlük Seri" gibi oyunlaştırma öğeleri.   
+
+                      ◦             Rapor:            "Diyetisyenin bu hafta seni %90 başarılı buldu" gibi geri bildirimler.   
+
+                  --------------------------------------------------------------------------------   
+
+                  5. Sağ 2: PROFİL (Profile)   
+
+                    Ayarlar ve Aktivasyon Kapısı.   
+
+                  •             İşlev:            Hesap yönetimi.   
+
+                  •             Ortak Özellikler:            Alerjen seçimleri (laktoz, gluten vb.), şifre değişimi, çıkış.   
+
+                  •             En Kritik Özellik (Aktivasyon):   
+
+                      ◦ Free kullanıcılar için             "Access Key Gir" (Premium Aktivasyon)            butonu burada en belirgin ayar olarak durmalıdır. Kullanıcı diyetisyeninden aldığı kodu buraya girerek arayüzü Premium'a dönüştürür.   
+
+                  --------------------------------------------------------------------------------   
+
+                  Teknik Olarak Nasıl Ayırmalısınız? (Yazılımcı İçin Not)   
+
+                  Bu sekmeleri kodlarken "dinamik routing" (yönlendirme) kullanmalısınız. Cursor veya yazılımcınıza şu mantığı verin:   
+
+                  1.             Router Yapısı:            Login işleminden sonra            /api/client/me            servisini çağır.   
+
+                  2.             Karar Mekanizması:   
+
+                      ◦ Eğer            isPremium == false            ise            FreeStack            navigasyonunu yükle. (Home'da "Premium'a Geç"   
+         banner'ı  
+          göster, Tarifler'de Public API kullan).   
+
+                      ◦ Eğer            isPremium == true            ise            PremiumStack            navigasyonunu yükle. (Home'da Diyetisyen logosu göster, Tarifler'de Private API kullan).   
+
+                  3.             Hero Buton (Mutfak):            Her iki stack'te de ortada sabittir, ancak tıkladığında çalıştırdığı algoritma (Genel vs. Özel Havuz) kullanıcının statüsüne göre değişir.   
+
+                    
+
+             
+
+               Freemium Beslenme ve İçerik Stratejisi Modeli :                          Verilen kaynaklara ve geliştirdiğimiz "Freemium" (Ücretsiz + Premium) teknik mimarisine dayanarak;             Ücretsiz (B2C)            ve             Premium (B2B2C)            kullanıcılar için ayrıştırılmış içerik stratejileri aşağıda detaylandırılmıştır.   
+
+                  Bu stratejinin temel amacı: Ücretsiz kullanıcıyı             "içeride tutmak" (retention)            ve Premium kullanıcıya             "özel hissettirerek" (exclusivity)            diyetisyenine bağlılığını artırmaktır.   
+
+                  1. İçerik Havuzu Stratejisi: "Genel vs. İmza" Ayrımı   
+
+                  Sistemin veritabanında tarifler, erişim seviyesine göre ikiye ayrılarak sunulmalıdır.   
+
+                  •             Ücretsiz Kullanıcı İçin: "Public Library" (Halk Kütüphanesi)   
+
+                      ◦             İçerik:            Sisteme            DietitianId           si            null            olan veya            IsPublic=true            olarak işaretlenmiş, herkesin erişebileceği temel tarifler eklenmelidir.   
+
+                      ◦             Nitelik:            Standart, riski düşük ve genel kabul görmüş sağlıklı tarifler (Örn: "Klasik Yulaf Lapası", "Mevsim Salatası").   
+
+                      ◦             Amaç:            Kullanıcının uygulamaya girdiğinde "boş bir ekranla" karşılaşmamasını sağlamak ve temel "Birleştir" fonksiyonunu deneyimlemesine izin vermektir.   
+
+                  •             Premium Kullanıcı İçin: "Signature Recipes" (İmza Tarifler)   
+
+                      ◦             İçerik:            Diyetisyenin kendi panelinden girdiği, sadece kendi danışanlarına ("Access Key" sahiplerine) açtığı özel reçetelerdir.   
+
+                      ◦             Nitelik:            Diyetisyenin klinik yaklaşımını yansıtan, makro değerleri hesaplanmış içeriklerdir.   
+
+                      ◦             Görsel Fark:            Bu tarifler "Birleştir" sonucunda çıktığında üzerinde             "Diyetisyen Onaylı"            veya             "Elif'in Özel Tarifi"            gibi altın/yeşil rozetler bulunur.   
+
+                  2. "Birleştir" Motoru ve Algoritma Stratejisi   
+
+                  Uygulamanın kalbi olan "Birleştir" butonu her iki tarafta çalışır ancak             sonuçların kalitesi ve güvenliği            farklılaşır.   
+
+                  •             Ücretsiz Deneyim: "Keşif Odaklı"   
+
+                      ◦ Algoritma,             Genel Havuz           'daki tarifler arasından, sadece "Eldeki malzemeler tarifte var mı?" kontrolü yaparak eşleşme sağlar.   
+
+                      ◦             Kısıt:            Diyetisyenin belirlediği katı "Yasaklar" (örneğin laktoz intoleransı filtresi) burada devreye girmez veya sadece kullanıcının manuel seçtiği basit filtrelerle çalışır.   
+
+                  •             Premium Deneyim: "Klinik ve Güvenli"   
+
+                      ◦ Algoritma,             Diyetisyenin Havuzu           'nu tarar.   
+
+                      ◦             Akıllı Filtre:            Diyetisyenin panelden girdiği "Yasaklar" ve "Zorunlu Malzemeler" kuralları (%100 klinik uyum) devreye girer.   
+
+                      ◦             Sonuç:            Kullanıcıya sadece "lezzetli" değil, aynı zamanda diyetisyenin o hafta izin verdiği ve tıbbi olarak güvenli seçenekler sunulur.   
+
+                  3. Yapay   
+         Zeka  
+          (AI) ve Dil Stratejisi   
+
+                  AI, tarifleri anlatırken kullanılan tonlama (Tone of Voice) ile kullanıcı statüsünü vurgulamalıdır.   
+
+                  •             Ücretsiz İçin: "Genel Asistan"   
+
+                      ◦ AI, Wikipedia tarzı objektif ve bilgilendirici bir dil kullanır.   
+
+                      ◦              Örnek:            "Bu salata lif bakımından zengindir ve tok tutar."   
+
+                      ◦ Eğitim içerikleri (Blog/Mini Rehberler) genel beslenme bilgileri üzerine kuruludur (Örn: "Kalori nedir?").   
+
+                  •             Premium İçin: "Diyetisyenin Sesi (Koç)"   
+
+                      ◦ AI, diyetisyenin ağzından konuşuyormuş gibi motive edici ve kişisel bir dil kullanır.   
+
+                      ◦              Örnek:            "Mert, Elif Hanım'ın listesindeki bu tarif tam senlik! Protein hedefini tutturman için harika bir seçim."   
+
+                       ◦ Bu strateji, diyetisyen fiziksel olarak orada olmasa bile danışanın kendini takip ediliyor hissetmesini sağlar.   
+
+                  4. Oyunlaştırma ve Motivasyon Stratejisi   
+
+                  •             Ücretsiz İçin: "Kişisel Yarış"   
+
+                      ◦ Hedef: Kendi rekorunu kırmak.   
+
+                      ◦ Metrikler: Kilo takibi grafiği, su içme serisi gibi bireysel veriler.   
+
+                  •             Premium İçin: "Hesap Verebilirlik (Accountability)"   
+
+                      ◦ Hedef: Diyetisyene karşı mahcup olmamak ve "Aferin" almak.   
+
+                      ◦             Kutu Açılışı:            Premium kullanıcılara özel "Birleştir" sonrası hediye paketi animasyonu ile ödüllendirme yapılır.   
+
+                      ◦             Rozetler:            "Protein Canavarı" gibi rozetler kazanıldığında bu bilgi diyetisyen paneline de "başarı" olarak yansır.   
+
+                  5. Geçiş (Upsell) Stratejisi: "Köprüyü Kurmak"   
+
+                  Ücretsiz kullanıcıları Premium'a dönüştürmek için içeriği bir "teaser" (  
+         fragman  
+         ) olarak kullanmalısınız.   
+
+                  •             Kilitli İçerik:            Ücretsiz kullanıcı "Birleştir" sonuçlarını listelerken, araya 1-2 adet             kilitli/bulanık kart            serpiştirin.   
+
+                      ◦              Mesaj:            "Bu malzeme ile yapılan Diyetisyen İmzalı 3 özel tarif daha var. Görmek için diyetisyen kodunu gir.".   
+
+                  •             Banner Alanları:            Free Home ekranında, "Kendi diyetisyeninizle çalışıyor musunuz? Hesabınızı bağlayın ve size özel planlara erişin" mesajları yer almalıdır.   
+
+                                                 
+
+                   Bu strateji, teknik olarak backend tarafında            Recipe             tablosundaki            IsPublic             alanı ve frontend tarafındaki            isPremium             kontrolü ile kolayca yönetilebilir.   
+
+                     
+
+               Freemium Mobil Uygulama Kullanıcı Deneyimi ve Arayüz Stratejisi :                          Verilen kaynaklara ve projenin yeni "Freemium" (Ücretsiz + Premium) stratejisine göre; mobil uygulamanın arayüzü, kullanıcının statüsüne (           isPremium           ) göre köklü bir değişim geçirir.   
+
+                  Uygulamanın arayüz farklarını,             Kullanıcı Deneyimi (UX)            ve             Görsel Tasarım (UI)            açısından maddeler halinde aşağıda detaylandırdım:   
+
+                  1. Navigasyon ve Akış Farkı (Routing)   
+
+                  En temel fark, kullanıcının uygulama içinde gezindiği ekran setlerinin (Stack) değişmesidir.   
+
+                  •             Ücretsiz Kullanıcı (Free Stack):   
+
+                      ◦ Giriş yaptıktan sonra doğrudan             "Free Home"            ekranına düşer.   
+
+                      ◦ Ana menüsünde             Genel Tarifler            ve             Kişisel Takip            sekmeleri bulunur.   
+
+                      ◦ Erişim Anahtarı (Access Key) ekranı zorunlu değildir; sadece bir menü seçeneğidir.   
+
+                  •             Premium Kullanıcı (Premium Stack):   
+
+                      ◦ Erişim anahtarını girdikten sonra arayüz             "Premium Home"            yapısına dönüşür.   
+
+                      ◦ Menüye             "Diyetisyenim"           ,             "Diyet Planı"            ve             "Uyum Başarısı"            sekmeleri eklenir.   
+
+                  2. Ana Ekran (Home Screen) Tasarımı   
+
+                  Ana ekran, kullanıcının "kendi kendine mi" yoksa "bir otorite gözetiminde mi" diyet yaptığını hissettirecek şekilde farklılaşır.   
+
+                                                               
+
+                  3. "Birleştir" ve Tarif Ekranları   
+
+                  Uygulamanın kalbi olan "Birleştir" özelliği her iki tarafta da vardır ancak             içerik havuzu            farklıdır.   
+
+                  •             Ücretsiz Arayüz:   
+
+                      ◦             Tarif Kaynağı:                        "Public Recipe Library"            (Genel Tarif Havuzu). Sistemdeki herkese açık, anonim tarifler listelenir.   
+
+                      ◦             Birleştir Sonucu:            Genel tarifler arasından öneri yapılır.   
+
+                  •             Premium Arayüz:   
+
+                      ◦             Tarif Kaynağı:                        "Private / Signature Recipes"           . Diyetisyenin kendi oluşturduğu, sadece kendi danışanlarına açtığı özel tarifler.   
+
+                      ◦             Etiketleme:            Tarif kartlarında "Elif'in Özel Tarifi" veya "Diyetisyen Onaylı" gibi güven rozetleri bulunur.   
+
+                      ◦             Yasaklar:            Diyetisyenin belirlediği "Yasaklı Malzemeler" filtresi arka planda çalışarak riskli tariflerin görünmesini engeller.   
+
+                  4. Takip ve Planlama Modülleri   
+
+                  •             Ücretsiz Arayüz (Manuel Takip):   
+
+                       ◦ Kullanıcı kendi yediğini             manuel            olarak işaretler ("Basit Planlama").   
+
+                      ◦ Su, kilo ve bel/kalça ölçümü gibi verileri kendisi girer ve sadece kendi görür.   
+
+                  •             Premium Arayüz (Otomatik Plan & Denetim):   
+
+                      ◦             Kişiye Özel Plan:            Takvim yapısında, diyetisyenin atadığı gün/gün öğünler görünür.   
+
+                      ◦             Hesap Verebilirlik:            Girilen veriler ve "Öğünü Tamamla" işaretleri anlık olarak diyetisyen paneline raporlanır (Compliance Tracking).   
+
+                  5. Profil ve Aktivasyon Ekranı   
+
+                  •             Aktivasyon Ekranı (ActivatePremiumScreen):   
+
+                      ◦ Ücretsiz kullanıcılar için   
+         profil  
+          sekmesinde veya ana sayfada             "Diyetisyen Kodun Var mı?"            butonu bulunur.   
+
+                      ◦ Bu butona basıldığında açılan ekranda "Access Key" girilir. Başarılı olursa uygulama havai fişek/konfeti   
+         efektiyle  
+                      Premium Arayüze            (Theme Switch) geçiş yapar.   
+
+                   Özetle:            Ücretsiz arayüz             "Keşfet ve Takip Et"            mantığıyla çalışırken; Premium arayüz             "Uygula ve Bağlı Kal"            disiplini üzerine kuruludur. Görsel olarak Premium taraf, kullanıcının bir kliniğin "dijital şubesinde" olduğu hissini vermelidir.   
+
+                           
+
+             
+
+               Freemium Mobil Uygulama Tasarımı ve Kullanıcı Deneyimi Rehberi :                          Verilen kaynaklara ve projenin teknik dönüşümüne (Freemium modele geçiş) dayanarak; mobil uygulamanızın tasarımı,             "Ücretsiz Kullanıcıyı Cezbeden"            ama             "Premium Kullanıcıya Özel Hissettiren"            dinamik bir yapıda olmalıdır.   
+
+                  İşte uygulamanın ana ekran tasarımı ve kullanıcı arayüzü (UI/UX) için kapsamlı rehber:   
+
+                  1. Tasarım Felsefesini Belirleme   
+
+                  Uygulamanın görsel dili             "Klinik Güven"            ile             "Mutfak Sıcaklığı"            arasında bir denge kurmalıdır.   
+
+                  •             Renk Paleti:            Daha önceki sohbetimizde belirlediğimiz             Adaçayı Yeşili (#4A7C59)            ana renk,             Koyu Orman Yeşili (#2F5233)            aksiyon rengi (Birleştir butonu) ve             Mercan/Somon (#FF8C61)              
+         motivasyon  
+          rengi olarak kullanılmalıdır.   
+
+                  •             Tipografi:            Okunabilirliği yüksek, modern sans-serif fontlar (Örn:              Poppins            veya              Montserrat           ).   
+
+                  •             Hissiyat:            Temiz, ferah, sıkışık olmayan (White-space kullanımı yoğun) bir arayüz.   
+
+                  --------------------------------------------------------------------------------   
+
+                  2. Navigasyon Yapısı (Bottom Navigation Bar)   
+
+                  Uygulamanın iskeleti 5 sekmeli bir alt menü üzerine kurulmalıdır. Merkezde uygulamanın kalbi olan "Mutfak" yer alır.   
+
+                                                                      •             MUTFAK Butonu:            Diğer ikonlardan daha büyük, hafif yukarı taşan (Raised) ve koyu yeşil renkte tasarlanmalıdır. Kullanıcıyı sürekli "Malzeme seçip birleştirmeye" teşvik eder.   
+
+                  --------------------------------------------------------------------------------   
+
+                  3. Dinamik Ana Ekran (Home Screen) Tasarımı   
+
+                  Sistemin backend'inden gelen            isPremium            verisine göre ekran iki farklı moda bürünmelidir.   
+
+                  A. Senaryo 1: Free User Home (Keşif ve Takip Modu)   
+
+                    Amaç: Kullanıcıyı içeride tutmak ve Premium'a heveslendirmek.   
+
+                  1.             Üst Başlık (Header):   
+
+                      ◦ "Merhaba Mert            👋           "   
+
+                      ◦ Sağ üstte belirgin ama nazik bir buton:             "Diyetisyen Kodu Gir             🔑            "           .   
+
+                  2.             Durum Kartı (Hero Card):   
+
+                      ◦ Basit bir ilerleme grafiği: "Hedef kilona %12 yaklaştın." veya "Bugün 1.5L su içtin."   
+
+                  3.             İçerik Akışı:   
+
+                      ◦             "Haftanın Popülerleri":            Genel tarif havuzundan (Public Library) seçilmiş, herkesin erişebileceği tariflerin yatay kaydırılabilir listesi.   
+
+                      ◦             Blog/Bilgi:            "Protein neden önemli?" gibi mini kartlar.   
+
+                  4.             Upsell Banner (Satış Alanı):   
+
+                      ◦ Alt kısımda veya aralarda:              "Kendi diyetisyeninizle çalışıyor musunuz? Hesabınızı bağlayın."   
+
+                  B. Senaryo 2: Premium User Home (Klinik / Odak Modu)   
+
+                    Amaç: Uyum (Compliance), Bağlılık ve Diyetisyen Otoritesi.   
+
+                  1.             Markalı Üst Başlık (Branded Header):   
+
+                       ◦ Kullanıcı uygulamayı açtığında diyetisyeninin markasını görür.   
+
+                      ◦ Sol üstte Diyetisyenin Logosu/Adı:             "Dyt. Elif ile Sağlıklı Yaşam"           .   
+
+                  2.             Uyum Kartı (Compliance Card):   
+
+                      ◦ Free moddaki kilo grafiği yerine, burada             "Plana Uyum Skoru"            yer alır.   
+
+                      ◦ Görsel: %85 dolu yeşil bir halka.              "Harika gidiyorsun Mert, bugün tam uyumdasın!"           .   
+
+                  3.             Sıradaki Öğün (Next Meal):   
+
+                      ◦ Diyetisyenin planına göre o an yenmesi gereken öğün.   
+
+                      ◦ Örn:              "Akşam Yemeği: Ton Balıklı Salata - 19:00"   
+
+                  4.             Motivasyon ve Rozetler:   
+
+                      ◦ Oyunlaştırma öğeleri burada sergilenir.              "             🔥              3 Günlük Seri"            veya              "Protein Canavarı Rozeti"           .   
+
+                  --------------------------------------------------------------------------------   
+
+                  4. "Mutfak" ve "Birleştir" Arayüzü (Merkez Sekme)   
+
+                  Burası uygulamanın en çok etkileşim alan yeridir.   
+
+                  1.             Malzeme Seçimi (Pantry):   
+
+                      ◦ Arama çubuğu en üstte.   
+
+                      ◦ Altında hızlı seçim ikonları: "Yumurta", "Süt", "Domates" (Sık kullanılanlar).   
+
+                      ◦ Seçilenler aşağıda "Sepetim" barında birikir.   
+
+                  2.             BİRLEŞTİR Butonu:   
+
+                      ◦ Ekranın altında sabit (Sticky), tam genişlikte dev bir buton.   
+
+                      ◦ Metin:             "Lezzetleri Birleştir             ✨            "   
+
+                  3.             Sonuç Ekranı (Kutu Açılışı):   
+
+                      ◦ Butona basılınca 1-2 saniyelik "Hediye Paketi Açılıyor" Lottie animasyonu girer.   
+
+                      ◦ Ardından kartlar sıralanır:   
+
+                          ▪             Yeşil Kart:            "Tam Uyum            ✅           " (En üste)   
+
+                          ▪             Sarı Kart:            "1 Eksikle Olur            ⚠️           " (Altına)   
+
+                          ▪ Kartların üzerinde AI tarafından üretilmiş kısa   
+         motivasyon  
+          metni:              "Protein deposu ve sadece 5 dakika!"           .   
+
+                  --------------------------------------------------------------------------------   
+
+                  5. Yazılımcı (Cursor) İçin Özet Direktifler   
+
+                  Bu tasarımı hayata geçirmek için yazılımcınıza şu "Prompt" mantığını verebilirsiniz:   
+
+                  •             Routing:                       AppStartRouter            kullanarak login sonrası            api/client/me            sonucuna bak.            isPremium=false            ise            FreeStack           ,            true            ise            PremiumStack            navigasyonunu yükle.   
+
+                  •             Theme:            Renk paletini            constants/  
+         Colors.js  
+          dosyasına tanımla (Primary: #4A7C59). Premium modda Header rengini diyetisyenin marka rengine (varsa) override et.   
+
+                  •             Components:                       RecipeCard            bileşeni yap; Free modda "Genel Tarif", Premium modda "Diyetisyen İmzalı Tarif" etiketini dinamik göster.   
+
+                  •             Gamification:                       UnboxingAnimation            bileşenini sadece "Birleştir" işlemi sonucunda modal olarak çağır.   
+
+                  Bu yapı, kaynaklarda hedeflenen             "Sürdürülebilir İlişki"            ve             "İş Yükünü Hafifletme"            hedeflerine tam hizmet eden profesyonel bir arayüz sunacaktır.   
+
+      
+
+             
+
+               Akıllı Tarif Eşleştirme Algoritması ve Çalışma Mantığı :                          Verilen kaynaklara ve proje dokümantasyonuna göre; mobil uygulamadaki "Birleştir" özelliği, rastgele bir öneri sistemi değil,             yapılandırılmış veri            ve             mantıksal filtreleme            kurallarına dayalı bir             "Karşılaştırma Motoru" (Comparison Engine)            olarak çalışır.   
+
+                  Algoritmanın teknik işleyişi adım adım şu şekildedir:   
+
+                  1. Veri Standardizasyonu: Malzeme Sözlüğü (The Dictionary)   
+
+                  Algoritmanın doğru çalışabilmesi için önce kullanıcının seçtiği malzemeler ile veritabanındaki malzemelerin aynı dilde konuşması gerekir.   
+
+                  •             Sorun:            Danışan "salkım domates", tarif ise "çeri domates" isteyebilir.   
+
+                  •             Çözüm:            Kullanıcı arayüzde ne yazarsa yazsın, arka planda bu girdiler             "Malzeme Sözlüğü" (Ingredient Dictionary)            üzerinden standart bir ID'ye (Kimlik) dönüştürülür  
+         ,.  
+ 
+
+                      ◦              Örnek:            "Süzme Yoğurt" ve "Laktozsuz Yoğurt", sistemde            ParentID: Yogurt            altında işlenir. Bu sayede algoritma esnek eşleştirme yapabilir.   
+
+                  2. Akıllı Tarif Şeması (Veri Yapısı)   
+
+                  Algoritma, tarifleri düz bir metin olarak değil,             parçalanmış bir veri seti            olarak okur. Diyetisyen tarif girerken malzemeleri şu kategorilere ayırır  
+         ,:  
+ 
+
+                  •             Zorunlu Malzemeler (Mandatory):            Tarifin oluşması için şarttır (Örn: Ton balığı).   
+
+                  •             Opsiyonel Malzemeler (Optional):            Lezzet katar ama yokluğu tarifi bozmaz (Örn: Dereotu).   
+
+                  •             Alternatifler (Substitutes):            "X yoksa Y olur" mantığı (Örn: Yoğurt -> Kefir).   
+
+                  •             Yasaklar (Prohibitions):            Tarifin kimlere gösterilmemesi gerektiği (Örn: Laktoz hassasiyeti).   
+
+                  3. Karşılaştırma Motoru (The Engine)   
+
+                  Kullanıcı "Birleştir" butonuna bastığında, sistem            UserBasket            (Kullanıcı Sepeti) ile            RecipeDatabase            (Tarif Havuzu) arasında şu mantıksal sorguyu çalıştırır:   
+
+                   Adım A: Eleme (Yasaklar)   
+
+                  •             Sorgu:            "Danışanın   
+         profilindeki  
+          yasaklı besinler (alerji vb.) veya tarifin 'Yasaklar' listesindeki maddeler sepette veya kullanıcı profilinde var mı?"   
+
+                  •             Aksiyon:            Eşleşme varsa, o tarif             doğrudan elenir            ve sonuçlarda gösterilmez.   
+
+                   Adım B: Zorunluluk Kontrolü (Mandatory Check)   
+
+                  •             Sorgu:            "Tarifin zorunlu malzemeleri sepette var mı?"   
+
+                  •             Mantık:   
+
+                      ◦ Hepsi var →             Tam Puan.   
+
+                      ◦ Eksik var ama 'Alternatif' tanımlı ve o alternatif sepette var →             Tam Puan (Alternatifle).   
+
+                      ◦ 1 tane eksik var →             Ceza Puanı (Eksikli Göster).   
+
+                      ◦ Çok fazla eksik var →             Elenir.   
+
+                   Adım C: Skorlama (Opsiyoneller)   
+
+                  •             Sorgu:            "Opsiyonel malzemeler sepette ne kadar mevcut?"   
+
+                  •             Mantık:            Sepetteki her opsiyonel malzeme, tarifin "Uygunluk Skorunu" (Matching Score) artırır. En yüksek skorlu tarif en üstte çıkar.   
+
+                  4. Sonuçların Sınıflandırılması (Output)   
+
+                  Motorun hesaplaması sonucunda tarifler kullanıcıya üç farklı statüde sunulur  
+         ,:  
+ 
+
+                  1.             Tam Uyum (Green             ✅            ):            Zorunlu malzemelerin hepsi (veya alternatifleri) sepette mevcuttur.   
+
+                  2.             1 Eksikle Olur (Yellow             ⚠️            ):            Kritik olmayan bir eksik vardır veya opsiyoneller eksiktir. Sistem burada "X eksik ama Y ile de yapabilirsin" önerisi sunar.   
+
+                  3.             Uygun Değil (Red             ❌            ):            Yasaklı malzeme içeriyor veya ana malzemelerden çoğu yok. Bu tarifler genellikle listelenmez veya en sonda pasif olarak görünür.   
+
+                  5. Yapay   
+         Zekanın  
+          Rolü (Narrator)   
+
+                  Teknik olarak             algoritma (karar verici)            ile             yapay   
+          zeka  
+           (anlatıcı)            birbirinden ayrılmıştır.   
+
+                  • Kararı (hangi tarifin uyumlu olduğunu) matematiksel algoritma verir.   
+
+                   • Yapay Zeka (LLM), seçilen bu tarifi diyetisyenin dil tonuna uygun olarak             özetler ve motive edici bir metne döker  
+         ,.  
+ 
+
+                      ◦              Örnek:            Algoritma "Ton Balıklı Salata"yı seçer; AI ise "Bu tarif protein açısından zengin ve elindeki malzemelerle sadece 5 dakikada hazır!" cümlesini kurar.   
+
+                  Özetle algoritma;             kullanıcının elindekilerle (Input)           ,             diyetisyenin kurallarını (Rules)            çarpıştırarak en yüksek skoru alan yemeği matematiksel bir kesinlikle bulur.   
+
+      
+
+             
+
+               Akıllı Mutfak Uygulaması Menü Yapısı ve Kullanıcı Deneyimi :                          Verilen kaynaklara, teknik yol haritasına ve "Free/Premium" ayrımına dayalı olarak; uygulamanın alt navigasyon çubuğu (Bottom Navigation Bar)             5 ana sekmeden            oluşmalıdır.   
+
+                  Kullanıcı deneyimini merkeze alan ve "Birleştir" özelliğini öne çıkaran ideal sekme yapısı şöyledir:   
+
+                  Alt Menü Yapısı (Bottom Navigation Bar)   
+
+                  Uygulamanın kalbi olan "Mutfak" ortada, diğer destekleyici özellikler yanlarda konumlanır.   
+
+                                                 
+
+                  --------------------------------------------------------------------------------   
+
+                  Sekme Detayları ve İçerik Farklılaşması   
+
+                  "Free" ve "Premium" kullanıcılar aynı sekmeleri görür ancak içerikler statülerine göre dinamik olarak değişir.   
+
+                  1. Sekme: Ana Sayfa (Home / Akış)   
+
+                  Burası kullanıcının "durum özeti" ekranıdır.   
+
+                  •             Premium Kullanıcı:            Diyetisyenin logosu ve "Hoş geldin Mert" mesajı ile açılır. "Sıradaki Öğün" kartı ve günlük "Uyum Durumu (%85)" göstergesi yer alır.   
+
+                  •             Free Kullanıcı:            Genel   
+         motivasyon  
+          mesajı, kilo grafiği özeti ve "Premium'a Geç" (Upsell) banner'ı bulunur.   
+
+                  2. Sekme: Tarifler (Recipes / Kütüphane)   
+
+                  Kullanıcının veritabanındaki içeriklere göz attığı alandır.   
+
+                  •             Premium Kullanıcı:                        "Elif'in İmza Tarifleri"            en üstte listelenir. Diyetisyene özel listeler (Örn: "Düşük Karbonhidratlılar") burada yer alır.   
+
+                  •             Free Kullanıcı:                        "Genel Tarif Havuzu"            (Public Library) gösterilir. "Haftanın Popülerleri" gibi kategoriler sunulur.   
+
+                  3. Sekme: MUTFAK (Kitchen / Core Feature) -             Merkez Odak   
+
+                  Uygulamanın en önemli, en büyük ve muhtemelen             "Yüzen Buton" (Floating Action Button)            olarak tasarlanması gereken sekmesidir. Tüm sihir burada gerçekleşir.   
+
+                  •             İşlev:            Kullanıcı evindeki malzemeleri (Envanter) buradan seçer.   
+
+                  •             Aksiyon:            Dev             "Birleştir"            butonu buradadır.   
+
+                  •             Sonuç:            Butona basıldığında             "Kutu Açılışı"            animasyonu oynar ve yapay   
+         zeka  
+          destekli öneri kartları (Tam Uyum / 1 Eksik) burada listelenir.   
+
+                  4. Sekme: Gelişim (Free) veya Diyetisyenim (Premium)   
+
+                  Bu sekme kullanıcı tipine göre tamamen şekil değiştirir.   
+
+                  •             Premium Kullanıcı (Diyetisyenim):            Diyetisyenle mesajlaşma alanı, klinik notları ve randevu hatırlatmaları buradadır. Haftalık başarı raporları ve kazanılan rozetler (Örn: Protein Canavarı) görüntülenir.   
+
+                  •             Free Kullanıcı (Gelişim):            Kişisel takip ekranıdır. Su tüketimi, adım sayısı, kilo takibi grafikleri ve vücut ölçüleri yer alır.   
+
+                  5. Sekme: Profil (Profile)   
+
+                  Ayarlar ve hesap yönetimi ekranıdır.   
+
+                  •             Ortak Özellikler:            Yasaklı besinler (Alerji filtresi), şifre değişimi, çıkış.   
+
+                   •             Aktivasyon Alanı:            Free kullanıcılar için             "Diyetisyen Kodunu Gir" (Activate Premium)            alanı burada belirgin bir şekilde yer alır.   
+
+                  --------------------------------------------------------------------------------   
+
+                  Tasarım İpucu (Cursor/Yazılımcı İçin Not)   
+
+                  Bu yapıyı kodlarken            AppStartRouter            mantığını kullanarak sekmelerin içini dinamik doldurmalısınız.   
+
+                  •             Orta Buton (Mutfak):            Diğer ikonlardan daha büyük,            #2F5233            (Action Green) renginde ve yukarı doğru hafif taşan (raised) bir tasarımda olmalıdır. Bu, kullanıcıyı sürekli "Birleştir" özelliğini kullanmaya teşvik eder.   
+
+                    
+
+             
+
+               Dijital Diyet Asistanı Görsel Kimlik ve Tasarım Rehberi :                          Mevcut kaynaklara, "Birleştir" özelliğinin doğasına ve projenin hem son kullanıcıya (B2C) hem de kliniklere (B2B) hitap eden yapısına dayanarak; uygulamanız için             güven veren, iştah açan ve profesyonel            bir görsel kimlik önerisi hazırladım.   
+
+                  Projenin merkezinde "sağlıklı beslenme", "kiler yönetimi" ve "diyetisyen takibi" olduğu için tasarım dili             Temiz (Clinical)           ,             Taze (Fresh)            ve             Motive Edici (Engaging)            olmalıdır.   
+
+                  Aşağıda             Cursor/Yazılımcınıza            doğrudan iletebileceğiniz teknik renk kodları ve tasarım kararları yer almaktadır.   
+
+                  --------------------------------------------------------------------------------   
+
+                  1. Renk Paleti (Color Palette)   
+
+                  Tasarım felsefesi:             "Doğal Denge"           . Neon veya yapay renklerden kaçınıp, doğada bulunan (sebze, tahıl, toprak) tonları kullanacağız.   
+
+                  A. Ana Renkler (Primary Colors)   
+
+                  Uygulamanın kimliğini oluşturan renkler.   
+
+                  •             Primary Green (Adaçayı Yeşili):                       #4A7C59   
+
+                      ◦              Kullanım:            Üst barlar, aktif ikonlar, başlıklar. Güven ve sağlık hissi verir.   
+
+                  •             Action Green (Koyu Orman Yeşili):                       #2F5233   
+
+                      ◦              Kullanım:            Kaynaklarda geçen meşhur             "Birleştir" butonu           , "Öğünü Tamamla" butonları. Kullanıcıyı eyleme geçirir.   
+
+                  B. İkincil ve Vurgu Renkleri (Secondary & Accents)   
+
+                  Oyunlaştırma (Gamification) ve "Kutu Açılışı" anları için enerji veren renkler.   
+
+                  •             Motivation Coral (Mercan/Somon):                       #FF8C61   
+
+                      ◦              Kullanım:            "Kutu Açılışı" hediye paketi, bildirim balonları, "3 Günlük Seri" alev ikonu. İştah açıcıdır ve yeşilin tamamlayıcısıdır.   
+
+                  •             Golden Harvest (Altın Sarısı):                       #F4D35E   
+
+                      ◦              Kullanım:            Yıldızlar, "Premium" taç ikonları, başarı rozetleri.   
+
+                  C. Zemin ve Nötr Renkler (Backgrounds & Neutrals)   
+
+                  "Clinical" (klinik) hissi korumak için temiz ama göz yormayan tonlar.   
+
+                  •             Oat Milk (Yulaf Beyazı):                       #F9F7F2   
+
+                      ◦              Kullanım:            Uygulama genel arka planı. (Saf beyaz            #FFFFFF            yerine bunu kullanmak daha modern ve sıcak bir his verir).   
+
+                  •             Text Dark (Kömür Grisi):                       #2D3436   
+
+                      ◦              Kullanım:            Ana metinler. (Simsiyah            #000000            kullanmaktan kaçının, sert durur).   
+
+                  •             Soft Grey (Bulut Grisi):                       #E3E8E5   
+
+                      ◦              Kullanım:            Kart sınırları, pasif butonlar.   
+
+                  --------------------------------------------------------------------------------   
+
+                  2. Logo Tasarımı ve İkonografi   
+
+                  Logo,             "Birleşme"            ve             "Denge"            kavramlarını sembolize etmelidir.   
+
+                   Öneri: "Harmonia   
+          Kasesi  
+          " (The Harmony Bowl)   
+
+                  •             Sembol:   
+
+                      ◦ İki soyut yaprak veya elin birleşerek ortada bir   
+          kase  
+           (bowl)            formu oluşturması.   
+
+                      ◦ Kasenini ortasında küçük bir "check" (onay) işareti veya bir kalp figürü.   
+
+                      ◦              Anlamı:            Malzemelerin birleşmesi (  
+         Kase  
+         ) + Diyetisyenin onayı (Check) + Sağlık (Yaprak).   
+
+                  •             Tipografi:   
+
+                      ◦ Font:             "Poppins"            veya             "Montserrat"           . (Yuvarlak hatlı, modern sans-serif).   
+
+                      ◦ Stil:             Kalın (Bold)            ve küçük harf kullanımı samimiyet yaratır. Örn:             diyet           asistan.   
+
+                  •             Uygulama İkonu (App Icon):   
+
+                      ◦            #4A7C59            (Adaçayı) zemin üzerine beyaz veya            #F4D35E            (Altın) renkte sembol.   
+
+                   --------------------------------------------------------------------------------   
+
+                  3. Ekran Bazlı Renk Uygulaması (UI Application)   
+
+                  Sohbet geçmişimizdeki "Free" ve "Premium" ayrımını görsel olarak da hissettirmelisiniz.   
+
+                  A. Free Home (Standart Mod)   
+
+                  •             Tema:            Daha hafif, ferah.   
+
+                  •             Arka Plan:                       #F9F7F2            (Yulaf).   
+
+                  •             Kartlar:            Beyaz kartlar, ince gri gölgeler.   
+
+                  •             CTA:            "Premium'a Geç" butonu            #FF8C61            (Mercan) renginde olmalı ki dikkat çeksin.   
+
+                  B. Premium Home (Klinik Modu - Access Key Girildiğinde)   
+
+                  •             Tema:            Daha "Elite" ve "Kurumsal".   
+
+                  •             Header (Üst Kısım):            Diyetisyenin markası buraya gelir. Arka plan rengi            #4A7C59            (Primary Green) olur, yazı beyazdır.   
+
+                  •             Kartlar:            Diyetisyenin özel tarifleri veya mesajları hafif bir             Altın Çerçeve            (           #F4D35E           ) veya yeşil bir şerit ("Elif'in Tarifi" etiketi) ile ayrışır.   
+
+                  •             Kutu Açılışı Ekranı:   
+
+                      ◦ Arka plan hafif karartılır (           Overlay           ).   
+
+                      ◦ Ortada            #FF8C61            (Mercan) ve            #F4D35E            (Altın) renklerinde parlayan bir hediye kutusu belirir.   
+
+                  C. "Birleştir" ve Sonuç Ekranı   
+
+                  •             Buton:            Ekranın altında geniş,            #2F5233            (Action Green) renginde, içinde beyaz yazıyla "Birleştir".   
+
+                  •             Sonuç Kartları (Trafik Işığı Mantığı):   
+
+                      ◦             Tam Uyum:            Sol kenarda            #27AE60            (Yeşil) şerit.   
+
+                      ◦             1 Eksik:            Sol kenarda            #F2C94C            (Sarı) şerit.   
+
+                      ◦             Uygun Değil:            Sol kenarda            #EB5757            (Kırmızı) şerit veya opaklık düşürülmüş görünüm.   
+
+                  --------------------------------------------------------------------------------   
+
+                  4. White-Label (Markalama) Stratejisi   
+
+                  Diyetisyenler kendi markalarını görmek isteyecektir. Bu yüzden renk paletini kodlarken (CSS/React Native Theme) "değişken" kullanmalısınız.   
+
+                  •             Sabit Renkler:            Başarı (Yeşil), Hata (Kırmızı), Uyarı (Sarı) ve Nötr Griler. (Bunlar değişmemeli, UX standardıdır).   
+
+                  •             Değişken Renk (Brand Color):   
+
+                      ◦ Varsayılan:            #4A7C59            (Sizin yeşiliniz).   
+
+                      ◦ Diyetisyen Ayarı: Eğer Dyt. Elif panelden "Mor" rengini seçerse, sadece             Header           ,             Primary Button            ve             Aktif Tab            renkleri mora döner.   
+
+                      ◦              Teknik Not:            Yazılımcınıza            primaryBrandColor            değişkenini dinamik yapmasını söyleyin.   
+
+                  Bu renk paleti ve tasarım dili, uygulamanızı basit bir "kalori sayacı" olmaktan çıkarıp, kaynaklarda hedeflenen             "Profesyonel Dijital Asistan"            algısına taşıyacaktır.   
+
+                    
+
+             
+
+
+            Diyet Uyum Asistanı: Proje Master Planı ve Tasarım Dokümanı :          Formun Üstü   
+
+                  Mevcut metin tabanlı bir yapay zeka olduğum için doğrudan indirilebilir   
+         bir            .pdf  
+          dosyası oluşturamıyorum. Ancak,             tüm sohbet geçmişimize, teknik dönüşüm kararlarımıza ve kaynaklardaki verilere dayanarak           , bu projeyi profesyonel bir             "Ürün Tasarım Dokümanı" (PRD - Product Requirement Document)            formatında aşağıda hazırladım.   
+
+                  Bu içeriği kopyalayıp bir Word veya Google Docs dosyasına yapıştırarak             "Diyet_Uyum_Asistanı_Master_  
+          Plan.pdf  
+          "            olarak kaydedebilirsiniz. Bu doküman, hem yazılımcınıza (Cursor) vereceğiniz komutları hem de yatırımcı/müşteri sunumunuzu kapsayan nihai rehberdir.   
+
+                  --------------------------------------------------------------------------------   
+
+                  📄            DİYET UYUM ASİSTANI: PROJE MASTER PLANI & TASARIM DOKÜMANI   
+
+                   Tarih:            24.05.2024             Sürüm:            2.0 (Freemium Pivot & Mobile UX Design)             Platform:            B2B SaaS (Web Panel) & B2C/B2B2C Mobile App   
+
+                  --------------------------------------------------------------------------------   
+
+                  1. YÖNETİCİ ÖZETİ (EXECUTIVE SUMMARY)   
+
+                   Problem:            En iyi diyet planları bile danışan mutfakta yalnız kaldığında ("Evde malzeme yok", "Ne pişireceğim?") başarısız olmaktadır. Diyetisyenler sürekli aynı operasyonel sorularla boğuşurken, danışanlar malzeme eksikliğinden diyetten kopmaktadır.   
+
+                   Çözüm:            Danışanın evindeki malzemeleri (kiler) diyetisyenin kurallarıyla eşleştiren, yapay   
+         zeka  
+          destekli bir mobil asistan.   
+
+                   İş Modeli:            Hibrit (Freemium)   
+
+                  1.             Free (B2C):            Herkesin kullanabileceği, genel tarifler ve kişisel takip içeren ücretsiz mod.   
+
+                  2.             Premium (B2B2C):            Diyetisyenlerin danışanlarına "Access Key" ile sunduğu, kişiselleştirilmiş klinik deneyimi.   
+
+                  --------------------------------------------------------------------------------   
+
+                  2. KULLANICI DENEYİMİ VE AKIŞ (UX FLOW)   
+
+                  Projenin en kritik teknik dönüşümü burada yapılmıştır. Uygulama artık açılışta "Access Key" zorunluluğu koymaz.   
+
+                  A. Giriş ve Yönlendirme (Routing)   
+
+                  •             Adım 1:            Kullanıcı Kayıt/Giriş yapar.   
+
+                  •             Adım 2:            Sistem arka planda            /api/client/me            servisini çağırır.   
+
+                  •             Adım 3 (Karar Mekanizması):   
+
+                      ◦ Eğer            isPremium = false            ise ->             Free Home            (Varsayılan)   
+
+                      ◦ Eğer            isPremium = true            ise ->             Premium Home            (Klinik Modu)   
+
+                  B. Free Stack (Ücretsiz Kullanıcı Deneyimi)   
+
+                    Bu modun amacı kitle toplamak ve Premium'a yönlendirmektir.   
+
+                  1.             Free Home (Ana Ekran):   
+
+                      ◦             Üst Banner:            "Merhaba Mert, hedefine %12 yaklaştın."   
+
+                      ◦             Orta Alan:            "Haftanın Popüler Tarifleri" (Genel Havuzdan).   
+
+                      ◦             CTA (Eylem Çağrısı):            "Diyetisyen kodun var mı? Premium'a Geç" butonu (Dikkat çekici ama rahatsız etmeyen tasarım).   
+
+                   2.             Kiler & Birleştir:   
+
+                      ◦ Kullanıcı kendi malzemelerini seçer.   
+
+                      ◦ Sadece "Genel Tarif Havuzu"ndan (Public Library) öneri alır.   
+
+                  3.             Takip (Tracking):   
+
+                      ◦ Su takibi, Kilo grafiği.   
+
+                  C. Premium Stack (Klinik / Diyetisyen Deneyimi)   
+
+                    Bu mod, Access Key girildikten sonra aktif olur.   
+
+                  1.             Premium Home (Diyetisyen Markalı Arayüz):   
+
+                      ◦             Markalama:            Sol üstte diyetisyenin logosu/ismi (Örn: "Dyt. Elif ile Sağlıklı Yaşam").   
+
+                      ◦             Status Card:            "Bugünkü Planın: %80 Uyumdasın."   
+
+                      ◦             Sonraki Öğün:            Diyetisyenin yazdığı sıradaki öğün kartı.   
+
+                  2.             Gelişmiş "Birleştir" Motoru:   
+
+                      ◦ Kullanıcı malzemeleri seçer.   
+
+                      ◦ Sistem,             Diyetisyenin İmza Tariflerini            ve             Yasaklılar Listesini            (Örn: Laktozsuz)   
+         baz  
+          alarak sonuç üretir.   
+
+                  3.             İletişim & Rapor:   
+
+                      ◦ Diyetisyen notları ve haftalık başarı rozetleri.   
+
+                  --------------------------------------------------------------------------------   
+
+                  3. MOBİL UYGULAMA TASARIM DETAYLARI (UI SPECS)   
+
+                  1. Ekran: "Mutfağım" (Inventory)   
+
+                  •             Sorun:            Tek tek malzeme girmek zor.   
+
+                  •             Çözüm:            "Hızlı Ekle" paketleri.   
+
+                      ◦              Tasarım:            "Kahvaltılıklar" (Yumurta, Peynir, Zeytin) veya "Temel Kiler" (Yağ, Salça, Soğan) gibi ikonlu paket butonları. Tek tıkla 10 malzeme eklenir.   
+
+                  •             Arama:            Akıllı "Ingredient Dictionary" (Malzeme Sözlüğü)   
+         entegreli  
+          arama çubuğu. "Domates" yazınca -> Çeri, Salkım, Püre seçenekleri çıkar.   
+
+                  2. Ekran: "Birleştir" ve Kutu Açılışı (Gamification)   
+
+                  Bu uygulamanın "kalbi" burasıdır.   
+
+                  •             Aksiyon:            Kullanıcı malzemeleri seçer ve dev bir yeşil "Birleştir" butonuna basar.   
+
+                  •             Animasyon (Unboxing):            Ekrana bir hediye kutusu gelir, sallanır ve konfetilerle açılır.   
+
+                  •             Mesaj:            "Mert, Dyt. Elif senin için harika bir seçenek buldu!            🎁           "   
+
+                  •             Sonuç Kartları (Card UI):   
+
+                      ◦             Kart 1 (Yeşil - Tam Uyum):            "Ton Balıklı Salata" -              Eksik yok.   
+
+                      ◦             Kart 2 (Sarı - 1 Eksik):            "Yulaflı   
+         Kase  
+         " -              Sadece muz eksik (Alternatif: Elma).   
+
+                      ◦             Kart 3 (Kırmızı - Uygun Değil):                         Yasaklı malzeme içeriyor (Gösterilmez veya silik gösterilir).   
+
+                  3. Ekran: Tarif Detayı & AI Anlatıcı   
+
+                  •             Görsel:            Tarifin yüksek kaliteli fotoğrafı.   
+
+                  •             AI Kutusu (Chat Bubble):            Diyetisyen tonunda kısa metin.   
+
+                      ◦              Metin:            "Bu tarif tam senlik! Protein ihtiyacını karşılarken seni tok tutacak. Eğer evde dereotu yoksa nane de kullanabilirsin."   
+
+                  •             Aksiyon:            "Yaptım / Yedim" butonu (Veri toplamak için).   
+
+                   --------------------------------------------------------------------------------   
+
+                  4. DİYETİSYEN PANELİ (WEB BACKOFFICE)   
+
+                  A. Tarif Yönetimi (Akıllı Şema)   
+
+                  Diyetisyen tarifi rastgele yazmaz, yapılandırılmış veri girer:   
+
+                  •             Zorunlu Malzemeler:            (Bunlar yoksa tarif önerilmez).   
+
+                  •             Opsiyonel Malzemeler:            (Varsa puan artırır).   
+
+                  •             Yasaklar/Etiketler:            "Glutensiz", "Laktoz İntoleransı İçin Yasak".   
+
+                  B. Danışan Yönetimi & Access Key   
+
+                  •             Fonksiyon:            "Yeni Danışan Ekle" -> "Mert Yılmaz".   
+
+                  •             Aksiyon:            "Premium Anahtar Üret" -> Süre: 3 Ay.   
+
+                  •             Çıktı:            Sistem 6 haneli bir kod üretir (Örn:            ELIF-9X2A           ). Diyetisyen bu kodu Mert'e verir.   
+
+                  C. Raporlama (Dashboard)   
+
+                  •             Metrikler:            "Mert bu hafta 5 öğünü uygulama ile yaptı.", "Uyum Oranı: %85".   
+
+                  •             İçgörü:            "Danışanların en çok 'Akşam Yemeği'nde zorlanıyor."   
+
+                  --------------------------------------------------------------------------------   
+
+                  5. TEKNİK ALTYAPI VE VERİ MODELİ   
+
+                  Backend (.NET Core)   
+
+                  •             Auth:            JWT tabanlı (Client, Dietitian, Admin rolleri).   
+
+                  •             Endpoints:   
+
+                      ◦            GET /api/client/me           :            isPremium           ,            activeDietitianId           ,            premiumEndDate            döner.   
+
+                      ◦            POST /api/client/activate-premium           : Access Key doğrular ve hesabı yükseltir.   
+
+                      ◦            POST /api/recipes/match           : (Birleştir Motoru) Envanter vs Tarif eşleşmesini hesaplar.   
+
+                  Database (PostgreSQL)   
+
+                  •             Tables:   
+
+                      ◦            Users            (Free/Premium flag burada değil, hesaplanan bir değerdir).   
+
+                      ◦            Dietitians            (Klinik bilgileri).   
+
+                      ◦            Recipes            (Public ve Private/DietitianId alanları var).   
+
+                      ◦            Ingredients            (Standart sözlük).   
+
+                      ◦            AccessKeys            (Kod, Süre, Kullanım Durumu).   
+
+                      ◦            DietitianClientLinks            (Kim kime bağlı, aktif mi?).   
+
+                  --------------------------------------------------------------------------------   
+
+                  6. SATIŞ VE PAZARLAMA STRATEJİSİ (GO-TO-MARKET)   
+
+                  Diyetisyenlere Satış (B2B)   
+
+                  •             Slogan:            "Siz planı yazın, biz mutfakta uygulatalım."   
+
+                  •             Değer:            "Danışanınızın 'Ne yiyeceğim?' sorularıyla vakit kaybetmeyin. Kendi dijital asistanınızı kiralayın."   
+
+                  •             Fiyatlandırma:            "Anahtar Başına Ödeme" veya "Aylık Abonelik".   
+
+                  Kullanıcı Kazanımı (B2C -> B2B)   
+
+                  • Uygulama marketlerde "Ücretsiz Diyet Asistanı" olarak yer alır.   
+
+                  • Kullanıcılar "Free" özellikleri kullanır.   
+
+                  • Uygulama içi: "Daha profesyonel sonuçlar için diyetisyeninizden kod isteyin" diyerek diyetisyenlere talep yaratır.   
+
+                  --------------------------------------------------------------------------------   
+
+                  7. CURSOR / YAZILIMCI İÇİN GÖREV LİSTESİ (ROADMAP)   
+
+                   Aşağıdaki görevler teknik dönüşüm için önceliklidir:   
+
+                  1.             Task: Free-First Routing:            Login sonrası            AccessKeyScreen            zorunluluğunu kaldır.            /api/client/me            sonucuna göre            FreeStack            veya            PremiumStack            navigasyonuna yönlendir.   
+
+                  2.             Task: Public Recipes:            Veritabanına            DietitianId           si            null            olan 50 adet "Genel Tarif" ekle ve Free kullanıcıların bunları görmesini sağla.   
+
+                  3.             Task: Premium Activation:            Profil sekmesine "Premium'u Aktifleştir" butonu koy. Başarılı kod girişinde kullanıcıyı anında Premium arayüze geçir.   
+
+                  4.             Task: Gamification UI:            "Birleştir" butonuna basıldığında Lottie animasyonu (Kutu Açılışı) oynat ve sonuçları kart yapısında listele.   
+
+                  --------------------------------------------------------------------------------   
+
+                    Bu doküman, projenizin mevcut durumunu, hedeflenen yapıyı ve teknik gereksinimleri eksiksiz bir şekilde özetlemektedir.   
+
+         
+
+                   
+
+                 Dijital Beslenme SaaS Gelişim ve Ölçeklendirme Stratejisi            :                               Harika bir noktadasınız. Sohbet geçmişimiz ve paylaştığınız kaynaklar (özellikle son teknik yol haritası), projenin             "Access Key zorunluluğu"           darboğazından kurtulup, ölçeklenebilir bir             "Free + Premium" (Freemium)           modeline evrildiğini gösteriyor. Bu, projenin ticari başarısı için en kritik adımdı.   
+
+                Mevcut dokümantasyonunuzdaki boşlukları doldurmak ve projeyi profesyonel bir SaaS ürününe dönüştürmek için             Kullanıcı Deneyimi (UX)          ,             İçerik Stratejisi          ,             Teknik Altyapı           ve             Hukuki/Ticari           açılardan eksik kalan yönleri kapatacak önerilerim şunlardır:   
+
+                1. "Boş Kiler" Sendromunu Önlemek (Onboarding UX İyileştirmesi)   
+
+                Kaynak'da belirtilen "Sepet girişi emek ister" tespiti çok doğru. Kullanıcı uygulamayı ilk açtığında boş bir ekranla karşılaşırsa "Evde ne var?" sorusuna cevap vermek için tek tek "tuz", "yağ", "yumurta" girmekten sıkılıp uygulamayı silebilir.   
+
+                •             Öneri (Hızlı Kurulum):           Onboarding (karşılama) ekranına             "Mutfağımı Kur"           adımı ekleyin. Kullanıcıya tek tek ürün seçtirmek yerine; "Standart Türk Mutfağı Paketi" (Yağ, Tuz, Salça, Un, Yumurta, Soğan vb.) gibi hazır setler sunun. Kullanıcı tek tıkla mutfağının %80'ini doldursun, sadece eksikleri çıkarsın veya ekstraları eklesin.   
+
+                •             Öneri (Barkod/Ses):           İleri aşamada (MVP sonrası), kullanıcıların barkod okutarak veya sesli komutla ("buzdolabımda süt, yumurta ve brokoli var") malzeme eklemesini sağlayın.   
+
+                2. "Free" Kullanıcı İçin İçerik Üretimi (Cold Start Problemi)   
+
+                Kaynak'te "Public Recipes" (Genel Tarifler) özelliğinden bahsediliyor. Ancak sistemde henüz diyetisyen yoksa veya diyetisyenler tariflerini "Halka Açık" yapmazsa, Free kullanıcılar boş bir kütüphane ile karşılaşır.   
+
+                •             Öneri (Admin Tarif Havuzu):           Sistemin veritabanını boş bırakmayın. Siz (Admin olarak), diyetisyenlerden bağımsız, telif hakkı sorunu olmayan 50-100 adet temel ve sağlıklı tarifi             "Sistem Tarifi"           olarak "Public Library" tablosuna baştan yükleyin. Free kullanıcılar içeri girdiği an dolu bir içerikle karşılaşmalı.   
+
+                •             Öneri (Topluluk Seçimi):           Free kullanıcıların en çok "yaptım" işaretlediği tarifleri algoritma ile öne çıkararak "Haftanın Popülerleri" alanı yaratın.   
+
+                3. AI Maliyet ve Performans Yönetimi (Caching Strategy)   
+
+                Kaynak'te AI'nın bir "anlatıcı" olduğu belirtiliyor. Her kullanıcı "Ton Balıklı Salata"yı seçtiğinde AI'ya tekrar tekrar metin yazdırmak hem maliyetli (API call) hem de yavaştır.   
+
+                •             Öneri (Statik AI Açıklamaları):           AI metinlerini             gerçek zamanlı değil, asenkron           üretin. Diyetisyen tarifi sisteme ilk girdiğinde AI metni bir kez oluşturulsun ve veritabanına kaydedilsin. Kullanıcı tıkladığında veritabanından saniyesinde gelsin.   
+
+                •             Öneri (Dinamik Dokunuş):           Sadece "Eksik Malzeme" senaryolarında (Örn: Yoğurt yoksa ne yapayım?) canlı AI isteği gönderin.   
+
+                4. Geri Bildirim Döngüsü ve "Kanıt" (Proof of Action)   
+
+                Kaynak'de diyetisyenin "Bu hafta 5 öğün yapıldı" verisini gördüğü yazıyor. Ancak kullanıcının gerçekten yiyip yemediğini bilmiyoruz. Sadece butona basmış olabilir.   
+
+                •             Öneri (Fotoğraflı Teyit - Opsiyonel):           Premium kullanıcılarda "Öğünü Tamamla" butonuna bastıklarında tabak fotoğrafı yükleme seçeneği sunun. Bu, diyetisyen için müthiş bir veri, kullanıcı için ise ekstra bir "hesap verme" (accountability)   
+        motivasyonu  
+         olur.   
+
+                •             Öneri (Lezzet Puanı):           Kullanıcı yemeği yedikten sonra "Doydun mu?", "Beğendin mi?" gibi basit (emoji   
+        bazlı  
+        ) geri bildirim versin. Diyetisyen bu veriye göre "Danışanım balıklı tarifleri sevmiyor" çıkarımını yapabilir.   
+
+                5. Hukuki Güvenlik (Disclaimer & Liability)   
+
+                Uygulamanız sağlık alanında faaliyet gösteriyor ve AI kullanıyor. Kaynak'te AI'nın tıbbi tavsiye vermemesi gerektiği belirtilmiş, ancak bu yeterli değil.   
+
+                 •             Öneri (Feragatname):           Uygulama açılışına ve "Birleştir" sonuç ekranının altına mutlaka şu uyarıyı ekleyin:             "Bu öneriler eldeki malzemelere göre oluşturulmuştur ve tıbbi beslenme tedavisi yerine geçmez. Alerjen risklerini kontrol ediniz."   
+
+                •             Öneri (Alerjen Yönetimi):           Kaynak'deki "Yasaklar" filtresini sadece diyetisyen kontrolüne bırakmayın. Free kullanıcılar da   
+        profil  
+         ayarlarından "Gluten Alerjisi" veya "Fıstık Alerjisi" gibi hayati filtreleri kendileri seçebilmeli.   
+
+                6. Ödeme ve SaaS Gelir Modeli (Business Logic)   
+
+                Kaynaklarınızda "Access Key" mantığı var ama diyetisyenin bu anahtarları nasıl satın alacağı detayı eksik.   
+
+                •             Öneri (Kredi Sistemi):           Diyetisyen paneline basit bir "Cüzdan/Kredi" yapısı kurun. Diyetisyen toplu olarak 50 Anahtar Kredisi alsın. Her yeni danışan eklediğinde 1 kredi düşsün. Bu, aylık abonelikten (Subscription) daha az riskli ve daha kolay satılabilir bir modeldir (Pay-as-you-grow).   
+
+                7. Bildirim Stratejisi (Retention)   
+
+                Kaynak'de oyunlaştırmadan bahsediliyor ancak kullanıcı uygulamayı açmayı unutabilir.   
+
+                •             Öneri (Akıllı Push Bildirimleri):           Sadece "yemek ye" demek yerine, kullanıcının   
+        envanterindeki  
+         verilere dayalı bildirim atın:             "Mert, dolabındaki ıspanaklar bozulmadan sana 15 dakikalık bir tarif önerelim mi?"           Bu, kişiselleştirilmiş bir deneyim sunar.   
+
+                Özetle;   
+
+                Elinizdeki teknik yapı (Backend/Mobile/Web) gayet sağlam. Eksik olan kısım,             "içerik doluluğu"           ve             "kullanıcının ilk 5 dakikadaki deneyimi"          .   
+
+                Eğer bu önerileri (özellikle             Mutfağı Kur           ve             Başlangıç Tarif Havuzu          ) eklerseniz, uygulamanız sadece bir "bitirme projesi" olmaktan çıkıp, yatırım alabilecek potansiyelde profesyonel bir SaaS ürününe dönüşür.   
+
+                             
+
+                   
+
+                 Diyet Yönetiminde Kutu Açılışı ve Oyunlaştırma Stratejisi            :                                         Verilen kaynaklara ve proje dokümantasyonuna göre; Premium üyelerin “Birleştir” butonuna bastıktan sonra karşılaştıkları             “Kutu Açılışı” (Unboxing)           animasyonu, sadece görsel bir   
+        efekt  
+         değil, uygulamanın             oyunlaştırma (gamification)           stratejisinin merkezinde yer alan psikolojik bir ödüldür.   
+
+                Bu animasyonun simgelediği temel kavramlar ve işlevleri şunlardır:   
+
+                  1. "Stresin" "Ödüle" Dönüşmesi           Danışan uygulamayı genellikle kararsızlık ve stres anında (“Ne yiyeceğim?”, “Evde malzeme yok”) açar. Kutu açılışı, bu kaotik anı (malzeme listesini) bir             hediyeye           (hazır çözüme) dönüştürür.   
+
+                • Animasyon, “Bugünün en uygun öğünü bulundu           🎁          ” mesajıyla birlikte gelir.   
+
+                • Danışana, diyetisyeni tarafından gönderilmiş bir "sürpriz hediye" hissi vererek diyet yapma sürecini zorunluluktan çıkarıp keyifli bir deneyime çevirir.   
+
+                  2. Dopamin ve Alışkanlık Yaratma           Animasyonun temel amacı, danışanın “Birleştir” butonunu kullanmasını günlük bir alışkanlık haline getirmektir.   
+
+                • Sosyal medyada veya oyunlarda sandık açma mantığıyla çalışır. Danışan her “Birleştir” dediğinde, o kutudan kendisine özel, lezzetli ve diyetine uygun ne çıkacağını merak eder.   
+
+                • Bu eğlenceli akış, sıkıcı diyet takibini bir oyuna dönüştürerek danışanın uygulamaya bağlılığını (retention) artırır.   
+
+                  3. Diyetisyenin "Dijital İmzası"           Kutu açıldığında içinden rastgele internet tarifleri değil,             Diyetisyenin (örneğin Elif'in) özel tarifleri           çıkar.   
+
+                • Bu sembolizm, diyetisyenin fiziksel olarak orada olmasa bile, dijital olarak danışanın mutfağında olduğunu ve ona özel bir çözüm sunduğunu hissettirir.   
+
+                • Örneğin, kutudan çıkan kartlar "Elif'in Özel Tarifi: Tam Uyum" şeklinde etiketlenerek sunulur.   
+
+                  4. Yeni İçeriklerin Kilidini Açma (İlerleme Hissi)           Animasyon aynı zamanda bir ilerleme (progress) göstergesidir. Başarılı öğünler tamamlandıkça ve kutular açıldıkça, diyetisyenin havuzundaki             "yeni özel tariflerin" kilidi açılır          .   
+
+                • Bu özellik, danışanı sadece o anki öğünü kurtarmaya değil, uzun vadeli bir seriyi (streak) korumaya teşvik eder. "3 günlük seri" veya "Protein Canavarı" gibi rozetlerle desteklenir.   
+
+                Özetle; Kutu Açılışı animasyonu, diyet sürecindeki             "karar verme yorgunluğunu"           alıp, yerine             "keşfetme heyecanını"           koyan stratejik bir kullanıcı deneyimi (UX) öğesidir.   
+
+         
+
+         
+
+                   
+
+                 Diyetisyen Paneli Mevcut Mimari ve Hiyerarşi Analizi            :                               Verilen kaynaklar ve projenin mevcut teknik mimarisi incelendiğinde; sistemin             şu anki tasarımında           farklı klinik şubeleri veya bir klinik altındaki diyetisyenleri yönetecek özelleşmiş bir             "Alt Kullanıcı / Şube Yönetimi" hiyerarşisinin açıkça bulunmadığı           görülmektedir.   
+
+                Mevcut kaynaklara göre sistemin kullanıcı ve yönetim yapısı şu şekildedir:   
+
+                  1. Mevcut Rol Yapısı           Teknik dokümantasyonda sistemin kimlik doğrulama (Auth) yapısı üç ana rol üzerine kurgulanmıştır:   
+
+                •             Client (Danışan):           Mobil uygulamayı kullanan son kullanıcı.   
+
+                •             Dietitian (Diyetisyen/Klinik):           Web panelini kullanan, tarif giren ve danışan yöneten hizmet sağlayıcı.   
+
+                •             Admin (Sistem Yöneticisi):           SaaS platformunun sahibi (siz), yani tüm diyetisyenleri ve sistemi yöneten üst yönetici.   
+
+                Bu yapıda, bir "Klinik Yöneticisi"nin altında "Şube Diyetisyeni" gibi bir ara katman (sub-user) tanımlaması kaynaklarda yer almamaktadır.   
+
+                  2. İşleyiş Modeli (Tekil Yönetim)           Sistemin kurgusu "Diyetisyen Elif ve Danışan Mert" örneği üzerinden,             bireysel profesyonellerin veya tekil klinik hesaplarının           yönetimini esas alır.   
+
+                • Diyetisyen paneli; tarif ekleme, danışan atama ve raporlama işlemlerini             tek bir hesap altından           yürütür.   
+
+                • Diyetisyenler sisteme giriş yapar ve kendi danışanları için "Access Key" üretir.   
+
+                  3. Çoklu Şube İçin Mevcut Çözüm (Workaround)           Mevcut mimari ile birden fazla şubesi olan bir klinik bu sistemi kullanmak isterse, şu anki yapıya göre iki farklı yöntem izleyebilir:   
+
+                •             Ayrı Hesaplar:           Her şube veya her diyetisyen için sistemde ayrı bir "Diyetisyen Hesabı" açılması gerekir.   
+
+                •             Ortak Hesap:           Tüm şubelerin tek bir "Klinik Hesabı" (Örn: Merkez Klinik) üzerinden giriş yapıp havuzu ortak kullanması gerekir. Ancak bu durumda "hangi danışanın hangi şubeye ait olduğu" ayrımı raporlarda yapılamayabilir.   
+
+                  Sonuç olarak;           Kaynaklardaki teknik planlamaya göre, öncelik "Free/Premium" ayrımı ve mobil uygulama akışının oturtulmasına verilmiştir. "Klinik Şube Yönetimi" veya "Çoklu Diyetisyen Yönetimi" (Enterprise features), projenin şu anki MVP (Minimum Viable Product) kapsamından ziyade, ileriki aşamalarda eklenebilecek bir özellik olarak değerlendirilebilir.   
+
+         
+
+         
+
+                   
+
+                 Erişim Anahtarı ile Dinamik Markalama ve Klinik Dönüşümü            :                               Verilen kaynaklara ve projenin teknik mimarisine göre; kliniklerin kendi markalarını (  
+        logo  
+        , isim, özel içerik) uygulamaya yansıtması, yani             White-label (Markalama)           süreci, ayrı bir mobil uygulama yazdırmak yerine,             "Access Key" (Erişim Anahtarı)           teknolojisi üzerinden çalışan dinamik bir dönüşümle gerçekleşir.   
+
+                Bu süreç klinik (diyetisyen) ve danışan tarafında şu adımlarla ilerler:   
+
+                1. Klinik Tarafı: Dijital Kimliğin Kurulması (Web Panel)   
+
+                Süreç, diyetisyenin yönetim panelinde başlar. Kaynaklarda belirtilen "Kontrol Merkezi" yapısı, diyetisyenin sadece tarif girmesini değil, kendi dijital markasını oluşturmasını sağlar.   
+
+                •             Profil ve Marka Tanımlama:           Diyetisyen panele giriş yaptığında kendi klinik ismini, unvanını (Örn: Diyetisyen Elif) ve   
+        profil  
+         detaylarını sisteme işler.   
+
+                •             İmza İçerik Oluşturma:           Diyetisyen, "Tariflerim" bölümünden sadece kendi danışanlarına özel "İmza Tarifler" (Premium İçerik) ekler. Bu tarifler uygulamada anonim olarak değil, "Elif'in Özel Tarifi" etiketiyle görünür  
+        ,.  
+ 
+
+                •             Yetkilendirme:           Diyetisyen, danışanı sisteme ekler ve markalı arayüzü tetikleyecek olan "Premium Anahtar"ı (Access Key) üretir.   
+
+                2. Bağlantı Anı: "Access Key" ile Dönüşüm   
+
+                Markalamanın devreye girdiği en kritik andır. Danışan uygulamayı ilk indirdiğinde standart (markasız) bir arayüz görür.   
+
+                •             Aktivasyon:           Danışan, diyetisyeninden aldığı kodu mobil uygulamadaki aktivasyon ekranına girer.   
+
+                •             Teknik Tetikleyici:           Kod doğrulandığında, sistem arka planda            /api/client/me           servisini günceller ve            activeDietitianId           (Aktif Diyetisyen Kimliği) bilgisini kullanıcıya atar.   
+
+                3. Danışan Tarafı: Arayüzün Kliniğe Dönüşmesi (Soft White-label)   
+
+                Kodun girilmesiyle birlikte mobil uygulama             "Free Stack"           (Standart Mod) yapısından             "Premium Stack"           (Klinik Modu) yapısına geçer  
+        ,.  
+         Bu geçişle birlikte uygulama şu şekilde markalanır:   
+
+                •             Ana Ekran Değişimi:           Standart içeriklerin yerini, diyetisyenin hazırladığı özel plan ve klinik mesajları alır. Danışan uygulamayı açtığında diyetisyeninin yönetiminde olduğunu hisseder.   
+
+                •             İsim ve Aitlik:           Tarif önerileri ve bildirimler artık sistemin değil, diyetisyenin ağzından konuşur (Örn: "Elif'in tariflerinden Mert'in mutfağına" veya "Elif'in Özel: Ton Balıklı Salata")  
+        ,.  
+ 
+
+                •             Yapay Zeka Tonu:           AI asistanı, genel geçer tavsiyeler vermek yerine, diyetisyenin belirlediği kurallar ve yasaklar çerçevesinde, onun "dijital asistanı" gibi konuşarak markayı temsil eder  
+        ,.  
+ 
+
+                Özetle İşleyiş   
+
+                Sistem, her klinik için ayrı bir uygulama marketi kurulumu (Hard White-label) yapmaz. Bunun yerine,             tek bir uygulama           (SaaS Kit) vardır; ancak girilen             Access Key          , uygulamanın içindeki içeriği, logoyu (  
+        profil  
+         resmini) ve iletişim dilini o kliniğin kimliğine büründürür. Bu sayede klinik, yazılım maliyetine girmeden danışanına "kendi uygulamasını" kullandırma deneyimi sunar.   
+
+         
+
+                   
+
+                 Diyetisyen SaaS Ödeme ve Paket Modelleri Stratejisi            :                               Verilen kaynaklara ve projenin teknik mimarisine (özellikle "Access Key" ve "Free/Premium" ayrımına) dayanarak, bu SaaS kiti için en uygun ödeme ve paket modelleri             B2B (Diyetisyen/Klinik)           ve             B2B2C (Klinik üzerinden Danışan)           stratejileri üzerine kurgulanabilir.   
+
+                Sistemin "Access Key" mekanizması ve diyetisyen paneli özellikleri, aşağıdaki 3 ana gelir modelini desteklemektedir:   
+
+                1. Katmanlı Abonelik Modeli (Tiered Subscription) - B2B   
+
+                Diyetisyenin panele erişimi ve yönetebileceği aktif danışan sayısı üzerine kurulu en yaygın SaaS modelidir. Kaynaklarda belirtilen "Danışan Yönetimi" ve "İmza Tarifler" özellikleri bu paketlerin sınırlarını belirler.   
+
+                •             Başlangıç Paketi (Starter / Solo Diyetisyen):   
+
+                    ◦             Hedef:           Yeni mezun veya az danışanı olan diyetisyenler.   
+
+                    ◦             Kapsam:           Aylık sabit ücret.   
+
+                    ◦             Sınırlamalar:           Örn. 10 Aktif "Access Key" (Aynı anda 10 premium danışan), Standart Tarif Havuzu erişimi.   
+
+                    ◦             Teknik Karşılık:                      SubscriptionStatus           tablosunda temel seviye yetkilendirme.   
+
+                •             Profesyonel Paket (Pro / Yoğun Klinik):   
+
+                    ◦             Hedef:           "Dyt. Elif" gibi yoğun çalışan profesyoneller.   
+
+                    ◦             Kapsam:           Daha yüksek aylık ücret.   
+
+                    ◦             Avantajlar:           50-100 Aktif "Access Key", Sınırsız "İmza Tarif" ekleme hakkı, detaylı raporlama ve kopuş analizleri.   
+
+                    ◦             Markalaşma:           Uygulama içinde diyetisyenin logosunun ve renklerinin görünmesi (White-label özellikleri).   
+
+                2. "Access Key" Başına Ödeme (Pay-As-You-Go) - Kullandıkça Öde   
+
+                Sistemin teknik altyapısında "Access Key" bir kontör gibi çalışır. Diyetisyen sabit bir aylık ücret ödemek yerine, danışanlarına satacağı veya hediye edeceği "dijital süreleri" satın alır.   
+
+                •             Paket Mantığı:           Diyetisyen toplu olarak "50 Adet 3 Aylık Premium Anahtar" satın alır.   
+
+                •             Avantajı:           Diyetisyen için risk yoktur; danışanı yoksa ödeme yapmaz. Danışanına "3 Aylık Dijital Asistan Hizmeti"ni paketleyip satabilir.   
+
+                •   
+          Hikaye  
+           Uyumu:           Kaynakta geçen "Mert için 3 aylık premium program" senaryosu bu modele tam uyar. Diyetisyen anahtarı oluştururken sistem bakiyesinden 1 kredi düşer.   
+
+                3. Hibrit Model (Abonelik + Ekstra Anahtar)   
+
+                En sürdürülebilir modeldir. Diyetisyen paneli kullanmak için düşük bir taban ücret öder, ekstra danışan eklemek istediğinde ek ücret verir.   
+
+                •             Base Ücret:           Paneli ve tarif oluşturma araçlarını kullanmak için ödenir.   
+
+                •             Add-on (Eklenti):           Standart kota dolduğunda diyetisyen ek "Access Key" paketleri satın alabilir.   
+
+                Klinikler İçin Satış Arttırıcı Özellikler (Upsell Fırsatları)   
+
+                Bu SaaS kitini kliniklere satarken fiyatlandırmayı etkileyen ve kaynaklarda geçen özellikler şunlardır:   
+
+                •             Klinik Markalı Arayüz:           Diyetisyene "Uygulama sizin markanızla açılır, danışan sizin   
+        logonuzu  
+         görür" diyerek daha üst paket satılabilir.   
+
+                •             Yeniden Kazanım (Retention) Modülü:           Diyet süresi bitip "Free" moda düşen eski danışanlara toplu bildirim atma veya kampanya yapma özelliği, üst paketlere   
+        dahil  
+         edilebilir.   
+
+                •             Çoklu Diyetisyen Yönetimi:           Büyük bir klinikte birden fazla diyetisyen çalışıyorsa, "Yönetici Paneli" (Admin Dashboard) içeren kurumsal paket sunulabilir.   
+
+                 Özetle; ödeme modeli, diyetisyenin             "Access Key" üretim yetkisine           endekslenmelidir. Çünkü sistemin asıl değeri, diyetisyenin danışanını "Free" moddan "Premium" moda geçirebilme gücüdür  
+        ,.  
+ 
+
+                     
+
+                   
+
+                  Diyetisyen SaaS Operasyonel Strateji ve Teknik Altyapı Rehberi            :                                Verilen kaynaklar ve projenin teknik mimarisi ışığında; bu SaaS kitinin diyetisyenlere satış stratejisi, teknik olarak veritabanında tanımlanma şekli ve tüm sürecin işleyişi aşağıdaki gibi üç ana başlıkta özetlenebilir:   
+
+                 1. Satış Stratejisi: Diyetisyenlere Nasıl Satılır?   
+
+                 Bu ürünü satarken teknik özelliklerden çok, diyetisyenin yaşadığı operasyonel sorunlara odaklanmalısınız. Kaynaklarda belirtilen "Diyetisyen Elif ve Danışan Mert"   
+         hikayesi  
+          en güçlü satış argümanıdır.   
+
+                 • Temel Satış Vaadi (Value Proposition): "En iyi diyet listesini bile yazsanız, danışan mutfakta yalnız kaldığında 'evde malzeme yok' diyerek diyeti bozuyor. Bu uygulama, danışanınızın mutfağındaki malzemelerle sizin kurallarınıza uygun yemek yapmasını sağlar.".   
+
+                 • İş Yükünü Azaltma: Diyetisyene şunu söylemelisiniz: "Danışanlarınızdan gelen 'Bunun yerine ne yiyeyim?', 'Evde sadece yumurta var ne yapayım?' mesajlarını azaltın. Operasyonel yükü yapay   
+         zeka  
+          ve algoritma üstlensin, siz klinik başarınıza odaklanın".   
+
+                 • Dijital Marka Oluşturma: Diyetisyene kendi logosu ve "İmza Tariflerini" yükleyebileceği, sadece kendi danışanlarına özel "Premium" bir alan sunduğunuzu belirtin. Bu, diyetisyenin hizmetini standart bir PDF liste göndermekten çıkarıp, interaktif bir dijital deneyime dönüştürür.   
+
+                 • Sürdürülebilir Gelir: Diyet bitse bile danışanın uygulamada kalabileceğini (Free mod), böylece eski danışanlarla bağın kopmadığını ve onları yeniden kazanmanın kolaylaştığını vurgulayın.   
+
+                 2. Teknik Tanımlama: Veritabanında Klinik ve Diyetisyen Yapısı   
+
+                 Sistemin veritabanı (PostgreSQL) ve Backend (.NET) yapısında diyetisyenler, son kullanıcılardan (Client) tamamen farklı bir rol ve yetki setiyle tanımlanır.   
+
+                 A) Veritabanı Şeması (Basitleştirilmiş): Sistemde "Users" tablosu dışında, diyetisyenleri tanımlayan özel bir tablo bulunur:   
+
+                 • Table: Dietitians (veya Tenants)   
+
+                     ◦ Id: Benzersiz kimlik (GUID).   
+
+                     ◦ FullName: Diyetisyenin veya Kliniğin adı.   
+
+                     ◦ Email/Password: Sisteme giriş bilgileri.   
+
+                     ◦ ClinicName: Uygulamada danışana görünecek marka ismi.   
+
+                     ◦ SubscriptionStatus: (Active/Passive) Diyetisyenin SaaS ödemesini yapıp yapmadığını kontrol eder.   
+
+                     ◦ BrandingConfig: (Opsiyonel) Logo URL'i, tema rengi vb.   
+
+                 B) Kimlik Doğrulama (Auth) ve Roller: Backend tarafında JWT (JSON Web Token) tabanlı bir yetkilendirme kullanılır.   
+
+                 • Giriş yapan kişi /api/dietitian/login uç noktasını kullanır.   
+
+                 • Sistem bu kişiye Role: Dietitian veya Role: Admin yetkisi atar.   
+
+                 • Bu rol, "Tarif Ekleme", "Danışan Ekleme" ve "Access Key Üretme" gibi kritik API uçlarına erişimi açar.   
+
+                 3. Süreç Nasıl İlerler? (Uçtan Uca Akış)   
+
+                 Süreç, diyetisyenin sisteme   
+         dahil  
+          edilmesinden (Onboarding), danışanını yönetmesine kadar şu 4 adımda ilerler:   
+
+                 Adım 1: Diyetisyenin Kaydı (Onboarding)   
+
+                 • Yöntem: Diyetisyen, sizin oluşturduğunuz bir "Landing Page" üzerinden demo talep eder veya doğrudan paket satın alır.   
+
+                 • Sistem: Admin (Siz), diyetisyeni veritabanında "Onaylı Diyetisyen" olarak tanımlar ve ona Web Panel giriş bilgilerini verir.   
+
+                 Adım 2: İçerik ve Kurulum (Web Paneli)   
+
+                 • Diyetisyen panele girer ve kendi "İmza Tariflerini" yükler.   
+
+                 • Tarifleri girerken "Akıllı Tarif Şeması"na sadık kalarak yasakları, zorunlu malzemeleri ve etiketleri belirler.   
+
+                 • Bu aşamada diyetisyen aslında kendi yapay   
+         zeka  
+          asistanını eğitmiş olur.   
+
+                 Adım 3: Danışan Bağlama (Access Key)   
+
+                 • Diyetisyen, kliniğine gelen yeni danışanı (örneğin Mert) panele ekler.   
+
+                 • Panelden "3 Aylık Premium" seçeneğini seçer ve sistem benzersiz bir Access Key (Erişim Anahtarı) üretir.   
+
+                 • Diyetisyen bu kodu danışana verir (WhatsApp veya e-posta ile).   
+
+                  Adım 4: Danışan Aktivasyonu ve Döngü   
+
+                 • Danışan mobil uygulamayı indirir, önce "Free" modda açar.   
+
+                 • "Premium'a Geç" butonuna basıp diyetisyenin verdiği kodu girer.   
+
+                 • Teknik Sonuç: Veritabanındaki DietitianClientLinks tablosunda IsActive=true kaydı oluşur.   
+
+                 • Artık danışan uygulamada "Birleştir" dediğinde, sadece o diyetisyenin onayladığı ve yüklediği tarifleri görür.   
+
+                 Bu yapı, teknik olarak ölçeklenebilir bir B2B2C modelidir; siz diyetisyene (B2B) hizmet satarsınız, diyetisyen de bu hizmeti kendi danışanına (B2C) bir değer olarak sunar.   
+
+         
+
+                   
+          Diyetisyen Paneli Premium Üyelik Yönetimi ve İptal Prosedürü             :                            Evet, kaynaklardaki sistem tasarımına göre diyetisyeniniz üyeliğinizi (Premium bağlantınızı) dilediği zaman manuel olarak sonlandırma yetkisine sahiptir.   
+     Süreç şu şekilde işlemektedir:   
+      1. Manuel İptal Yetkisi        Diyetisyen panelinin "Danışanlar" menüsünde, danışan yönetimi için         "Premium anahtar üret / iptal et"        fonksiyonları bulunur. Diyetisyen, süreçle ilgili bir sorun olduğunda veya danışan diyeti erken bıraktığında, panel üzerinden tek tuşla erişim anahtarını iptal ederek Premium bağlantısını kesebilir.   
+      2. Otomatik Süre Yönetimi        Genel işleyişte manuel iptale gerek kalmaz; çünkü diyetisyen size anahtarı verirken bir süre sınırı (örneğin 1 ay veya 3 ay) belirler. Belirlenen bitiş tarihi (         EndDate       ) geldiğinde sistem üyeliğinizi otomatik olarak sonlandırır.   
+      3. Sonlandırma Sonrası Durum        Üyeliğiniz manuel veya otomatik olarak sonlandırıldığında:   
+     • Uygulamadan atılmazsınız veya verileriniz silinmez.   
+     • Statünüz         "Premium"dan "Free" (Ücretsiz) moda        düşer.   
+     • Diyetisyeninize özel planlara, mesajlaşmaya ve imza tariflere erişiminiz kapanır, ancak kendi kişisel takiplerinizi yapmaya devam edebilirsiniz.   
+
+         
+
+                   
+
+                                Formun Altı   
+
+             Ücretsiz Kullanıcı Tarif Erişim ve Kısıtlama Rehberi         :                         Verilen kaynaklara ve projenin teknik dökümantasyonuna göre;             ücretsiz kullanıcıların sisteme sıfırdan kendi detaylı yemek tariflerini (malzemeler, yapılış adımları, "Akıllı Tarif Şeması"na uygun şekilde) oluşturup kaydetme özelliği bulunmamaktadır.   
+
+                Sistemin mevcut kurgusunda "içerik üreticisi" diyetisyen, "içerik tüketicisi" ise kullanıcıdır. Ücretsiz kullanıcıların tariflerle ilgili yetkileri şunlarla sınırlıdır:   
+
+                  1. Hazır Havuzu Kullanma (Public Recipe Library)           Ücretsiz kullanıcılar, sistem tarafından sunulan veya genel kullanıma açılmış             "Genel Tarifler" (Public Recipes)           kütüphanesine erişebilir ve bu tariflere göz atabilirler. Kendi tariflerini yazmak yerine, bu havuzdaki mevcut tarifleri kullanırlar.   
+
+                  2. Basit Planlama ve İşaretleme           Kullanıcılar yeni bir tarif yaratamazlar ancak             "Basit Planlama"           özelliği sayesinde kendi öğünlerini manuel olarak işaretleyebilirler. Bu, detaylı bir tarif veritabanı girişi değil, günlük takip (tracking) amaçlı bir işlemdir.   
+
+                  3. Tarif Oluşturma Yetkisi Diyetisyendedir           Tariflerin sisteme girilmesi, malzemelerin tanımlanması ve "yasaklar/zorunlu malzemeler" gibi kuralların belirlenmesi işlemi, sadece             Diyetisyen Paneli (Web)           üzerinden yapılabilen profesyonel bir fonksiyondur.   
+
+                Özetle; sistem "Kullanıcı Tarafından Oluşturulan İçerik" (User Generated Content) modeliyle değil,             profesyonel/klinik içerik           modeliyle çalışmaktadır.   
+
+      
+
+             
+
+              Premium Üyelik Sonrası Veri Yönetimi ve Erişim Hakları         :                         Verilen kaynaklara ve projenin teknik yapısına göre, premium üyelik süresi dolduğunda danışanın verileri             silinmez          , ancak kullanıcının statüsü ve erişim yetkileri değişir. Sistem, üyeliği tamamen kapatmak yerine kullanıcıyı             "Free" (Ücretsiz)           moda geçirerek verilerini korur.   
+
+                Bu geçiş sürecinde verilerin durumu şu şekilde yönetilir:   
+
+                  1. Veriler Korunur, Statü Değişir (Downgrade)           Premium süresi bittiğinde (Backend'deki            EndDate           tarihi geçtiğinde), sistem kullanıcının            isPremium           statüsünü            false           olarak günceller. Ancak veritabanındaki kullanıcı kaydı, geçmiş ölçümleri ve profil bilgileri silinmez  
+        ,.  
+         Kullanıcı uygulamaya giriş yapmaya devam edebilir ancak deneyimi değişir.   
+
+                  2. Erişime Kapanan Özellikler (Premium Kilitleri)           Kullanıcı "Free" moda geçtiği için diyetisyenine ve kliniğe bağlı şu özelliklere erişimi kaybeder:   
+
+                •             Kişiye Özel Plan:           Diyetisyenin hazırladığı gün/gün plan ve öğün detayları görünmez olur.   
+
+                •             Özel Tarif Havuzu:           Diyetisyenin "imza tariflerine" ve sadece danışanlarına açtığı özel içeriklere erişim kilitlenir; kullanıcı sadece genel (public) tarifleri görebilir  
+        ,.  
+ 
+
+                •             İletişim:           Diyetisyenle mesajlaşma veya not paylaşma özelliği pasif hale gelir.   
+
+                  3. Kullanılmaya Devam Eden Veriler (Free Mod)           Kullanıcı, diyetisyenden bağımsız olarak kendi verilerine erişmeye devam eder:   
+
+                •             Kişisel Takip Geçmişi:           Kilo, bel/kalça ölçümleri, su tüketimi gibi geçmişte girdiği veriler grafikleriyle birlikte erişilebilir durumda kalır.   
+
+                •             Profil Bilgileri:           Boy, kilo, hedef gibi temel bilgiler korunur.   
+
+                •             Genel İçerikler:           "Public Recipe Library"deki (herkese açık) genel tariflere ve blog yazılarına erişebilir.   
+
+                  4. Stratejik Amaç: "Yeniden Kazanım" (Retention)           Bu yapı, danışanın uygulamayı silmesini engellemek için stratejik bir tercihtir. Diyet süreci bitse bile danışan uygulamayı bir "sağlıklı yaşam takipçisi" olarak kullanmaya devam eder. Bu durum, diyetisyene gelecekte eski danışanına tekrar ulaşma ve yeni bir             Access Key           vererek onu yeniden premium sürece   
+        dahil  
+         etme şansı tanır.   
+
+                Özetle; teknik olarak arayüz **"Premium Home"**dan **"Free Home"**a döner, ancak veri tabanında hiçbir veri kaybı yaşanmaz   
+
+      
+
+             
+
+              Diyetisyen Erişim Anahtarı Aktivasyon Prosedürü         :                         Verilen kaynaklara ve projenin teknik dokümantasyonuna göre,             Access Key (Erişim Anahtarı)           ile premium üyeliği aktifleştirme süreci, kullanıcının "Free" (kısıtlı) moddan, diyetisyenine bağlı "Premium" moda geçişini sağlayan teknik ve operasyonel adımlardan oluşur.   
+
+                Bu süreç iki taraflı işler: Diyetisyenin anahtarı üretmesi ve danışanın mobil uygulamada bu anahtarı girmesi.   
+
+                1. Diyetisyen Tarafı: Anahtarın Üretilmesi   
+
+                Süreç, diyetisyenin web paneli üzerinden başlar:   
+
+                •             Tanımlama:           Diyetisyen, panelindeki "Danışanlar" sekmesinden ilgili danışanı seçer.   
+
+                •             Süre Belirleme:           Danışan için bir premium süre (örneğin 3 ay) belirler ve sistem tek tuşla benzersiz bir             Access Key           üretir  
+        ,.  
+ 
+
+                •             İletim:           Diyetisyen bu kodu danışanına (mesaj veya e-posta yoluyla) iletir.   
+
+                2. Danışan Tarafı: Aktivasyon Adımları (Mobil Uygulama)   
+
+                Danışan, uygulamayı indirip giriş yaptığında varsayılan olarak "Free Home" (Ücretsiz Ana Ekran) ile karşılaşır. Aktivasyon adımları şöyledir:   
+
+                1.             Menüye Erişim:           Danışan, uygulamanın ana ekranındaki veya profil sekmesindeki             "Premium'a Geç"           veya             "Diyetisyen Kodun Var mı?"           butonuna tıklar  
+        ,.  
+         (Yeni akışta bu adım giriş ekranında zorunlu tutulmaz, isteğe bağlıdır).   
+
+                2.             Kod Girişi:           Açılan            ActivatePremiumScreen           ekranına diyetisyeninden aldığı kodu girer.   
+
+                3.             Doğrulama:           "Aktifleştir" butonuna basıldığında uygulama arka planda            /api/client/activate-premium           servisine istek atar.   
+
+                4.             Sonuç ve Geçiş:   
+
+                    ◦ Sistem kodun geçerliliğini ve süresini doğrular.   
+
+                    ◦ Başarılı ise, kullanıcının statüsü anında güncellenir (           isPremium = true          ).   
+
+                    ◦ Uygulama arayüzü             Free Stack          'ten             Premium Stack          'e dönüşür; yani diyet planı, diyetisyen mesajlaşma alanı ve özel tarifler görünür hale gelir  
+        ,.  
+ 
+
+                3. Teknik Arka Plan ve Sistem Davranışı   
+
+                Bu işlem sırasında sistem arka planda şu değişiklikleri yapar:   
+
+                •             Bağlantı Kurma:           Danışan ile diyetisyen arasında veritabanında aktif bir bağ (ActiveDietitianLink) oluşturulur.   
+
+                •             Süre Kısıtı:           Premium üyeliğin bitiş tarihi (           EndDate          ), diyetisyenin belirlediği süreye göre sisteme işlenir.   
+
+                •             Hata Yönetimi:           Eğer kod hatalıysa, süresi dolmuşsa veya zaten kullanılmışsa, kullanıcıya "Geçersiz Anahtar" veya "Süresi Dolmuş" gibi dostane hata mesajları gösterilir.   
+
+                Özetle; Access Key, kullanıcının uygulamasını             bireysel takip aracından          , diyetisyen gözetimindeki             profesyonel bir klinik asistanına           dönüştüren anahtardır.   
+
+      
+
+             
+
+                       Diyetisyen Paneli Oyunlaştırma ve Veri Takibi Mekanizması         :                         Mevcut kaynaklara ve proje dokümantasyonuna göre; danışanların kazandığı "Protein Canavarı" veya "5 Dakikacı" gibi   
+        spesifik  
+         oyunlaştırma rozetlerinin, diyetisyen paneline             doğrudan bir "rozet raporu" olarak yansıdığına dair bir bilgi bulunmamaktadır.   
+
+                Sistemin mevcut kurgusunda raporlama ve takip mekanizması şu şekilde ayrışmaktadır:   
+
+                  1. Diyetisyen Rozetleri Değil, "Sonuçları" Görür           Diyetisyen paneli, oyunlaştırma öğelerinden ziyade, bu rozetlerin kazanılmasını sağlayan             somut beslenme verilerine           odaklanır. Diyetisyen şunları raporlar:   
+
+                •             Uyum Oranı (Compliance):           Danışanın plana ne kadar sadık kaldığı yüzdesel olarak (Örn: %85) görünür.   
+
+                •             Aktivite Akışı:           Danışanın hangi yemeği, ne zaman yaptığı anlık olarak panele düşer (Örn: "Ton Balıklı Yoğurtlu Salata - Dün, 19:30").   
+
+                •             Haftalık Özet:           Danışanın o hafta uygulama üzerinden kaç öğün tamamladığı raporlanır.   
+
+                  2. Rozetler Danışan Motivasyonu İçindir           Rozetler (Gamification), danışanın mobil uygulama tarafındaki deneyimini eğlenceli hale getirmek ve "Birleştir" butonunu kullanmayı alışkanlık haline getirmek için tasarlanmış bir             müşteri tarafı (client-side)           özelliğidir.   
+
+                • Amaç danışana "3 günlük seri yaptın" veya "Sebze dostu rozeti kazandın" diyerek dopamin salgılatmak ve diyete bağlılığı artırmaktır.   
+
+                  3. Teknik Altyapı ve Potansiyel           Veritabanı yapısında "Kullanım Kayıtları" tutulduğu için teknik olarak danışanın hangi başarımları elde ettiği sistemde mevcuttur. Ancak şu anki panel tasarımında diyetisyene sunulan veriler,             klinik takip ve başarı analizi           üzerine kurgulanmıştır; oyunlaştırma detayları üzerine değil.   
+
+                Özetle; diyetisyen danışanının "Protein Canavarı" rozetini kazandığını doğrudan görmez, ancak danışanın o hafta protein ağırlıklı tarifleri eksiksiz uyguladığını             aktivite raporlarından ve uyum grafiklerinden           net bir şekilde takip eder.   
+
+      
+
+             
+
+              Akıllı Tarif Şeması Yasaklar Filtresi Çalışma Prensibi         :                         Akıllı Tarif Şeması'ndaki "yasaklar" filtresi, uygulamanın karar mekanizmasında bir             "güvenlik duvarı"           görevi görür. Bu filtre, tarif ne kadar lezzetli veya eldeki malzemelere uygun olursa olsun, sağlık veya diyet kısıtlamalarına uymayan seçeneklerin danışana önerilmesini kesin olarak engeller.   
+
+                Sistem şu şekilde işlemektedir:   
+
+                  1. Diyetisyenin Kural Tanımlaması (Veri Girişi)           Diyetisyen panele bir tarif girerken (örneğin "Ton Balıklı Yoğurtlu Salata"), sadece malzemeleri yazmakla kalmaz; aynı zamanda o tarifin             kimlere gösterilmemesi gerektiğini           de "Yasaklar" alanında belirtir.   
+
+                • Örneğin; tarifin içine "laktoz intoleransı" veya "yumurta alerjisi" gibi kısıtlayıcı etiketler eklenir  
+        ,.  
+ 
+
+                • Diyetisyen burada "Şunlar kesin olmasın" mantığıyla hareket ederek riskli durumları baştan tanımlar.   
+
+                  2. "Birleştir" Algoritmasının Eleme Mantığı           Danışan "Birleştir" butonuna bastığında, uygulama arka planda çalışan             Karşılaştırma Motoru           devreye girer. Bu motorun ilk baktığı   
+        kriterlerden  
+         biri yasaklardır:   
+
+                • Uygulama şu soruyu sorar:             "Bu tarifte, danışanın   
+          profilinde  
+           yasaklı olan bir madde var mı?"   
+
+                • Cevap "Evet" ise, tarifin diğer puanlarına (malzeme uyumu, pratiklik vb.) bakılmaksızın o seçenek             doğrudan elenir  
+        ,.  
+ 
+
+                  3. Sonuç: "Uygun Değil" Statüsü           Filtreleme sonucunda, yasaklı madde içeren tarifler danışanın öneri listesine "Tam Uyum" veya "1 Eksikle Olur" olarak düşmez.   
+
+                • Bu tarifler ya listeden tamamen çıkarılır ya da             "Uygun Değil             ❌            "           (Yasaklı veya kritik eksiklik var) statüsüyle işaretlenerek kullanıcının hata yapması önlenir.   
+
+                Özetle; yasaklar filtresi, danışanın sepetinde tüm malzemeler olsa bile (örneğin evde yoğurt var ama danışan laktoz hassasiyetine sahip), sistemin o tarifi önermesini engelleyerek diyetisyenin planına ve danışanın sağlığına sadık kalmasını sağlar   
+
+      
+
+             
+
+                       Diyetisyenler İçin Akıllı Tarif Algoritması ve Veri Girişi         :                        Diyetisyenin kendi özel tariflerini sisteme yükleme süreci, basit bir metin yazımından öte, uygulamanın "Birleştir" algoritmasının çalışabilmesi için             yapılandırılmış bir veri girişi           (Akıllı Tarif Şeması) şeklinde işler.   
+
+                Süreç, diyetisyenin web tabanlı paneli üzerinden şu adımlarla gerçekleşir:   
+
+                  1. Akıllı Tarif Şeması ile Veri Girişi           Diyetisyen, tarifi bir blog yazısı gibi rastgele yazmaz. Uygulamanın mutfaktaki malzemeleri tanıması için tarifi şu parçalara bölerek sisteme girer:   
+
+                •             Temel Bilgiler:           Başlık (Örn: Ton Balıklı Yoğurtlu Salata), öğün türü (kahvaltı/akşam), hazırlama süresi ve zorluk derecesi seçilir.   
+
+                •             Etiketleme:           Tarifin kimlere uygun olduğu belirlenir (Örn: #yüksekprotein, #glutensiz, #hızlı).   
+
+                  2. Malzemelerin "Mantıksal" Sınıflandırılması           Sistemin en kritik özelliği burasıdır. Diyetisyen malzemeleri girerken uygulamanın karar mekanizmasını yönlendirecek şekilde üç kategoriye ayırır:   
+
+                •             Zorunlu Malzemeler:           Tarifin ana karakterleridir (Örn: Ton balığı ve yoğurt). Bunlar evde yoksa uygulama bu tarifi önermez veya "eksik malzeme" uyarısı verir  
+        ,.  
+ 
+
+                •             Opsiyonel Malzemeler:           Olmasa da olur ama lezzet katar (Örn: Dereotu, limon). Bunların evde olması tarifi puan olarak öne çıkarır.   
+
+                •             Alternatifler:           Diyetisyen esneklik sağlamak için alternatif tanımlayabilir (Örn: "Yoğurt yoksa kefir de olur" gibi)  
+        ,.  
+ 
+
+                  3. Malzeme Sözlüğü (Ingredient Dictionary) Kullanımı           Diyetisyen malzeme ismini elle yazmaz, sistemdeki             standart sözlükten           seçer.   
+
+                • Bu sayede "domates", "çeri domates" veya "salkım domates" gibi farklı yazımlar engellenir.   
+
+                • Standart seçim, uygulamanın danışanın sepetindeki malzemeyle tarifi hatasız eşleştirmesini sağlar.   
+
+                  4. Tarif Adımları ve Kişiselleştirme   
+
+                •             Hazırlanış:           Yapım aşamaları kısa maddeler halinde girilir.   
+
+                •             İmza Tarif Statüsü:           Diyetisyen bu tarifi "Herkese Açık (Klasik)" veya sadece kendi danışanlarına özel "Premium/İmza Tarif" olarak işaretleyebilir  
+        ,.  
+ 
+
+                Sonuç olarak diyetisyen sisteme sadece bir yemek tarifi değil, uygulamanın             "bu malzemelerle bu yemek yapılır mı?"           sorusunu yanıtlamasını sağlayan bir             algoritma kural seti           yüklemiş olur.   
+
+      
+
+             
+
+              Diyetisyen Paneli Veri ve Takip Analitiği         :                                Verilen kaynaklara ve proje dokümantasyonuna göre, diyetisyen panelindeki "Raporlar" ve genel takip ekranlarında izlenebilen veriler şunlardır:   
+
+                  1. Danışan Uyum Oranları (Compliance Rate)           Diyetisyen, danışanının plana ne kadar sadık kaldığını anlık yüzdelerle görebilir. Geleneksel "Ne yedin?" sorusunun yerini somut veriler alır.   
+
+                •             Genel Uyum Yüzdesi:           Örneğin, panelde danışanın durumu "Uyum Durumu: %85" şeklinde yeşil bir gösterge ile sunulur.   
+
+                •             Haftalık Özet:           Danışanın o hafta kaç öğünü uygulama üzerinden tarifle tamamladığı raporlanır (Örn: "Bu hafta 5 öğün tarifle yapıldı")  
+        ,.  
+ 
+
+                  2. Tarif Performans Analitiği           Diyetisyen, kendi oluşturduğu içeriklerin ne kadar işe yaradığını ölçebilir. Bu veriler, diyetisyenin hangi tür tariflere ağırlık vermesi gerektiğini gösterir.   
+
+                •             Popüler Tarifler:           Hangi tariflerin danışanlar tarafından daha sık tercih edildiği ve yapıldığı listelenir  
+        ,.  
+ 
+
+                •             Tercih Eğilimleri:           Danışanların en çok hangi öğünlerde (kahvaltı, akşam vb.) uygulama desteğine ihtiyaç duyduğu görülebilir.   
+
+                  3. Danışan Aktivite ve Kopuş Noktaları           Süreç yönetimini iyileştirmek için danışanın zorlandığı alanlar tespit edilebilir.   
+
+                •             Son Aktiviteler:           Danışanın en son hangi yemeği, ne zaman yaptığı (Örn: "Ton Balıklı Yoğurtlu Salata (Yapıldı) - Dün, 19:30") anlık olarak akışa düşer.   
+
+                •             Kopuş Analizi:           Danışanların diyetin hangi aşamasında veya hangi tür günlerde zorlandığına dair içgörüler (Danışanlar nerede kopuyor?) takip edilebilir.   
+
+                  4. Ölçüm ve Fiziksel Takip (Premium Özellik)           Premium danışanlar için sisteme girilen fiziksel veriler de panelden izlenebilir.   
+
+                •             Vücut Ölçüleri:           Kilo, bel/kalça oranı gibi danışanın girdiği ölçüm verileri takip edilebilir  
+        ,.  
+ 
+
+                Özetle; raporlar kısmı diyetisyene sadece             kimin ne yediğini           değil,             hangi tariflerin daha popüler olduğunu           ve             danışanların genel başarı grafiğini           tek bir ekrandan yönetme   
+        imkanı  
+         sunar.   
+
+                      
+
+             
+
+              Diyet Uyum Asistanı: Diyetisyenler İçin Dijital Çözüm Rehberi         :                         Verilen kaynaklar ve proje geliştirme geçmişimiz ışığında, bu uygulamanın ("Diyet Uyum Asistanı") diyetisyenlere sağladığı en büyük avantajları beş ana başlıkta toplayabiliriz:   
+
+                  1. Danışan Uyumunu (Compliance) Zirveye Taşıma           Diyetisyenlerin yaşadığı en büyük sorun, danışanların "evde malzeme yok" veya "ne pişireceğimi bilmiyorum" diyerek diyetten kopmasıdır. Uygulama bu sorunu şu şekilde çözer:   
+
+                •             Anlık Çözüm:           Danışan evindeki malzemeleri seçer ve uygulama,             diyetisyenin kendi tariflerinden           o malzemelere en uygun öğünü oluşturur.   
+
+                •             Esneklik:           "Tarife uyacak malzemem yok" bahanesini ortadan kaldırır; eksik malzeme varsa uygulama alternatif önerir ancak diyeti bozmaz.   
+
+                •             Sonuç:           "Ne yiyeceğim?" stresi bittiği için danışan diyete daha sadık kalır.   
+
+                  2. İş Yükünü Hafifletme ve Mesaj Trafiğini Azaltma           Diyetisyenler gün içinde sürekli "Bunun yerine ne yiyebilirim?" veya "Evde sadece yumurta var, ne yapayım?" gibi sorularla karşılaşır.   
+
+                •             Otomasyon:           Uygulama bu soruları otomatikleştirilmiş süreçlerle yanıtlar, böylece diyetisyene gelen operasyonel mesajlar azalır.   
+
+                •             AI Desteği:           Yapay   
+        zeka  
+        , diyetisyenin yerine karar vermez ancak tarifi danışan için motive edici ve anlaşılır bir dille anlatarak diyetisyenin üzerindeki "sürekli açıklama yapma" yükünü alır.   
+
+                  3. Gerçek Veriye Dayalı Takip (Manuel Takip Yerine)           Geleneksel yöntemde diyetisyen danışana "Ne yedin?" diye sorar. Bu uygulamada ise süreç dijitalleşir:   
+
+                •             Diyetisyen Paneli:           Diyetisyen, danışanının uyum durumunu (örneğin %85 uyum) panel üzerinden anlık olarak görür.   
+
+                •             Net Veri:           "Bu hafta 5 öğün tarifle yapıldı" gibi somut verilerle süreç yönetilir.   
+
+                •             Raporlama:           Hangi tariflerin daha çok tercih edildiği ve danışanların nerede zorlandığı raporlanabilir.   
+
+                  4. Kendi "Dijital Markasını" ve Tarif Kütüphanesini Oluşturma           Uygulama, diyetisyenin yerini almaz; aksine onun bilgisini dijital bir ürüne dönüştürür.   
+
+                •             İmza Tarifler:           Diyetisyen sisteme kendi özel "imza tariflerini" ekleyerek danışanlarına benzersiz bir değer sunar.   
+
+                •             Premium İçerik:           Diyetisyen, danışanlarına "Premium Anahtar" (Access Key) vererek sadece onlara özel içeriklerin kilidini açabilir. Bu, diyetisyenin hizmetini standart bir diyet listesinden "özel bir dijital deneyime" dönüştürür.   
+
+                  5. Sürdürülebilir İlişki ve Gelir Modeli           Projenin teknik yapısında kurguladığımız "Free" ve "Premium" ayrımı diyetisyenler için yeni fırsatlar yaratır:   
+
+                •             Bağlılık:           Diyet süreci bitse bile danışan uygulamayı kullanmaya devam edebilir, bu da diyetisyenle bağın kopmamasını sağlar.   
+
+                •             Yeniden Kazanım:           Uygulama, eski danışanlar için bir yeniden kazanım kanalı olabilir.   
+
+                Özetle; bu sistem diyetisyeni "liste yazan kişi" olmaktan çıkarıp, danışanının mutfağında her an yanında olan             dijital bir asistana           sahip profesyonel bir marka haline getirir.   
+
+      
+
+             
+
+               Yapay   
+      Zeka  
+       Destekli Diyet ve Motivasyon Yönetimi         :                          Bu             diyet uyum asistanı           , danışanların evdeki malzemelerle diyetisyen tariflerine ulaşmasını sağlar.             Yapay   
+          zeka  
+          destekli sistem, malzemeleri eşleştirerek pratik öğünler sunar.             Diyetisyen paneli            üzerinden tarif ve danışan yönetimi yapılırken,             oyunlaştırma            ile kullanıcı   
+         motivasyonu  
+          artırılır.   
+
+                   
+
+            Diyetisyen Dijital Operasyon Merkezi ve SaaS Yönetim Paneli :                       Verilen kaynaklara ve projenin SaaS (Hizmet Olarak Yazılım)   
+      vizyonuna  
+       dayanarak; Diyetisyen Paneli (Web), sadece bir veri giriş ekranı değil, diyetisyenin          "Dijital Operasyon Merkezi"         olarak tasarlanmalıdır.   
+
+           Diyetisyenler için en önemli değer önerisi          "iş yükünü hafifletmek"         olduğundan, panelin tasarımı          hızlı, analitik ve yönetilebilir         olmalıdır.   
+
+           İşte Diyetisyen Paneli'nin (  
+      Next.js  
+      /Web) ideal yapısı ve detayları:   
+
+           1. Genel Yerleşim ve Navigasyon (Sidebar)   
+
+           Ekranın solunda sabit bir menü, sağda ise geniş bir çalışma alanı bulunmalıdır. Menü şu 5 ana başlıktan oluşmalıdır:   
+
+           1.          Genel Bakış (Dashboard):         Kliniğin anlık durumu.   
+
+           2.          Danışanlar (Clients):         Erişim anahtarı yönetimi ve üye listesi.   
+
+           3.          Tarifler (Recipes):         Akıllı tarif girişi ve kütüphane.   
+
+           4.          Planlar (Plans):         Haftalık/Aylık şablon oluşturma.   
+
+           5.          Ayarlar & Marka (Settings):         Logo, renk ve   
+      profil  
+       ayarları.   
+
+           --------------------------------------------------------------------------------   
+
+           2. Modül Detayları   
+
+           A. Genel Bakış (Dashboard) - "Pilot Kokpiti"   
+
+           Diyetisyen sabah kahvesini içerken buraya bakar. Amaç:          "Bugün kiminle ilgilenmeliyim?"         sorusunu yanıtlamaktır.   
+
+           •          KPI Kartları:   
+
+               ◦           Aktif Danışan:         "42 Kişi (Premium)"   
+
+               ◦           Ortalama Uyum:         "%85" (Yeşil yukarı ok)   
+
+               ◦           Bekleyen Aksiyon:         "3 Danışan Anahtarı Süresi Doluyor"   
+
+           •          Canlı Aktivite Akışı (Feed):   
+
+               ◦           "Mert, 'Ton Balıklı Salata' öğününü tamamladı. (19:30)"   
+
+               ◦           "Ayşe, 3 günlük seri rozeti kazandı!            🔥          "   
+
+           •          Popüler Tarifler:         Bu hafta danışanların en çok yaptığı 3 tarif.   
+
+           B. Danışan Yönetimi ve "Access Key" (Gelir Merkezi)   
+
+           Burası sistemin para kazandıran ve "Freemium" döngüsünü yöneten yeridir.   
+
+           •          Danışan Listesi:         İsim, Başlangıç Tarihi, Kalan Süre, Uyum Skoru tablosu.   
+
+           •          Kritik Aksiyon: "Anahtar Üret" Butonu:   
+
+                ◦ Diyetisyen yeni danışan eklediğinde veya süresi bitene ek süre vermek istediğinde bu butona basar.   
+
+               ◦           Seçim:         Süre (1 Ay / 3 Ay / 6 Ay).   
+
+               ◦           Çıktı:         Sistem benzersiz bir kod üretir:          ELIF-9X2A        .   
+
+               ◦           Paylaş:         "WhatsApp ile Gönder" butonu ile danışana iletilir.   
+
+           •          Detay Görünümü:         Bir danışana tıklandığında onun kilo grafiği, tükettiği besinler ve sistemin hesapladığı başarı raporu açılır.   
+
+           C. Akıllı Tarif Editörü (Sistemin Beyni)   
+
+           Diyetisyen buraya rastgele metin yazmaz; algoritmanın çalışması için          yapılandırılmış veri         girer.   
+
+           •          Temel Bilgiler:         Tarif Adı, Fotoğraf, Hazırlama Süresi.   
+
+           •          Malzeme Girişi (En Kritik Alan):   
+
+               ◦           Arama Kutusu:         Diyetisyen "Domates" yazar, sistem          Malzeme Sözlüğü        'nden standart ID_Domates'i getirir.   
+
+               ◦           Rol Atama:         Her malzeme için bir rol seçtirilir:   
+
+                   1.          Zorunlu:         (Bu olmadan tarif önerilemez).   
+
+                   2.          Opsiyonel:         (Olursa puan artar).   
+
+                   3.          Alternatif:         ("Yoğurt yoksa Kefir olur" tanımlaması).   
+
+           •          Etiketler ve Yasaklar:   
+
+               ◦ "Bu tarif kimlere gösterilmemeli?" ->           Seç:         Laktoz İntoleransı, Çölyak.   
+
+           •          Görünürlük:   
+
+               ◦           Toggle Switch:         "Sadece Benim Danışanlarıma Özel (Premium)" veya "Herkese Açık (Public)".   
+
+           D. Marka Ayarları (White-Label)   
+
+           Kliniklerin uygulamayı sahiplenmesi için özelleştirme alanı.   
+
+           •          Logo Yükle:         Danışan uygulamasının sol üstünde görünecek   
+      logo  
+      .   
+
+           •          Renk Seçimi:         Diyetisyen kendi marka rengini (Örn: Mor) seçer. Danışan "Access Key" girdiğinde mobil uygulamanın başlıkları yeşilden mora döner.   
+
+           --------------------------------------------------------------------------------   
+
+           3. Yazılımcı (Cursor) İçin Direktifler   
+
+           Diyetisyen panelini kodlarken şu teknik prensiplere dikkat edilmelidir:   
+
+           1.          Role-Based Access Control (RBAC):         Sadece Role: Dietitian yetkisine sahip kullanıcılar tarif ekleyebilir ve anahtar üretebilir.   
+
+           2.          Ingredient Dictionary Entegrasyonu:         Tarif ekleme ekranında Input değil, Select/Autocomplete bileşeni kullanılmalı ve veriler arka          plandaki Ingredients tablosundan çekilmelidir. (Diyetisyen "Domates" yazdığında sistemin tanıdığı ID seçilmeli).   
+
+           3.          Access Key Generator:         Backend'de benzersiz, çakışmayan 6 haneli kod üreten bir servis (NanoID veya özel algoritma) kullanılmalı.   
+
+           Bu yapı, diyetisyeni bir "veri giriş elemanı" olmaktan çıkarıp, kendi dijital kliniğini yöneten bir          "Teknoloji Yöneticisi"         konumuna yükseltir.   
+
+                    
+
+             
+
+            Diyetisyen Paneli: Danışan Uyum Analizi ve Veri Takibi :                       Verilen kaynaklara ve projenin teknik mimarisine göre; diyetisyen panelinde danışan uyum oranlarını takip etmek, manuel soru-cevap sürecinden çıkıp          gerçek zamanlı veri analitiğine         dayalı bir yapıya dönüşmüştür.   
+
+           Panelde uyum oranlarını (Compliance Rates) takip etmek için kullanacağınız 3 ana mekanizma ve detayları şöyledir:   
+
+           1. Genel Bakış (Dashboard) ve KPI Kartları   
+
+           Diyetisyen paneline giriş yaptığınızda karşınıza çıkan ilk ekranda, tüm danışan   
+      portföyünüzün  
+       genel sağlık durumunu tek bakışta görebilirsiniz.   
+
+           •          KPI Kartları:         Ekranın üst kısmında          "Ortalama Uyum Skoru"         kartı yer alır (Örn: %85          ⬆️        ). Bu veri, tüm aktif danışanlarınızın planlarına ne kadar sadık kaldığının ortalamasıdır.   
+
+           •          Aktivite Akışı (Live Feed):         Sağ panelde, danışanların o an yaptığı işlemler akar.   
+
+               ◦           Örnek:         "Mert, 'Ton Balıklı Salata' öğününü tamamladı. (19:30)"   
+
+               ◦           Örnek:         "Ayşe, 3 günlük seri rozeti kazandı!          🔥        "   
+
+               ◦ Bu akış, hangi danışanın şu an aktif olduğunu ve planı uyguladığını anlık gösterir.   
+
+           2. Danışan Detay Sayfası ve "Uyum Skoru" (Compliance Score)   
+
+           Bir danışanın   
+      profiline  
+       tıkladığınızda, ona özel detaylı bir          "Karnesi"         açılır. Burası takibin merkezidir.   
+
+           •          Halka Grafik (Donut Chart):         Danışanın   
+      profilinde  
+       büyük bir grafik bulunur.   
+
+               ◦          Görsel:         Yeşil (%85), Sarı (%10), Kırmızı (%5) renklerle bölünmüş bir halka.   
+
+               ◦          Anlamı:   
+
+                   ▪          Yeşil (Tam Uyum):         Danışanın, sizin önerdiğiniz tarifleri birebir uyguladığı öğün oranı.   
+
+                   ▪          Sarı (Alternatifli):         "Yoğurt yerine Kefir" gibi akıllı alternatiflerle tamamlanan öğünler.   
+
+                   ▪          Kırmızı (Uyumsuz/Boş):         Atlanan veya sistem dışı (Fast-food vb.) tüketilen öğünler.   
+
+           •          Haftalık Özet Raporu:         Grafiğin altında, "Bu hafta planlanan 21 öğünün 18'i uygulama üzerinden yapıldı" gibi somut bir metin yazar.   
+
+           3. Kopuş Analizi ve Trendler   
+
+           Sadece "ne yendiğini" değil, "nerede zorlanıldığını" da görebilirsiniz.   
+
+           •          Kopuş Noktaları:         Danışanın uyum grafiğinde aşağı yönlü kırılmalar varsa (Örn: Hafta sonları %40'a düşüyor), panel bunu size          "Hafta Sonu Riski"         olarak işaretler.   
+
+           •          Tarif Performansı:         Hangi tariflerinizin daha yüksek uyum getirdiğini görebilirsiniz.   
+
+               ◦           Örnek:         "Ton Balıklı Salata tarifiniz %95 oranında uygulanıyor, ancak Kereviz Sapı Çorbası %20'de kalıyor."   
+
+               ◦ Bu veri, danışanın damak tadına göre planı revize etmenizi sağlar.   
+
+             Özetle:         Panelde "Ne yedin?" sorusuna gerek kalmaz. Danışan mobil uygulamada          "Birleştir"         ve          "Yaptım"         butonlarına bastıkça, sizin panelinizdeki          Uyum Grafiği         otomatik olarak güncellenir ve size yüzdesel bir başarı raporu sunar.   
+
+      
+
+             
+
+            Dijital Diyetisyen ve Danışan Veri Paylaşım Mimarisi :                       Verilen kaynaklara ve projenin teknik mimarisine göre;          Premium modda         diyetisyen ve danışan arasındaki veri paylaşımı, tek taraflı bir bilgi akışı değil,          çift yönlü ve gerçek zamanlı bir etkileşim         üzerine kuruludur.   
+
+           Bu süreç, sistemde          "DietitianClientLinks"         tablosu ve          "Access Key"         (Erişim Anahtarı) mekanizması üzerinden yönetilir. Veri paylaşımı şu üç ana başlıkta gerçekleşir:   
+
+           1. Diyetisyenden Danışana Akış (Yönetim ve Kural Seti)   
+
+           Diyetisyen, danışanın cebindeki uygulamayı kendi "dijital kliniğine" dönüştürmek için şu verileri paylaşır:   
+
+           •          İmza Tarifler ve İçerik Havuzu:         Diyetisyen, kendi panelinde oluşturduğu özel tarifleri (Signature Recipes) sadece kendisine bağlı ("Premium") danışanların erişimine açar. Danışan "Birleştir" butonuna bastığında, sistem genel internet tariflerini değil,          diyetisyeninin veri havuzunu         tarar.   
+
+           •          Klinik Kurallar ve Yasaklar (The Logic):         Diyetisyen sadece yemek tarifi değil, mantıksal kurallar seti gönderir. Örneğin;           "Mert için laktoz yasak"         veya           "Bu tarifte ton balığı zorunlu"         gibi kurallar veritabanına işlenir. Danışan evdeki malzemeleri seçtiğinde, sistem bu kuralları          filtre         olarak kullanır  
+      ,.  
+ 
+
+           •          Kişiselleştirilmiş Diyet Planı:         Diyetisyen, hangi gün hangi öğünün yeneceğini (Örn: Salı - Akşam: Ton Balıklı Salata) sisteme girer. Bu veri, danışanın ana ekranına "Sıradaki Öğün" kartı olarak yansır.   
+
+           •          Motivasyon ve İletişim:         Diyetisyenin belirlediği notlar ve hatırlatmalar, uygulama içindeki yapay   
+      zeka  
+       (AI) anlatıcısı aracılığıyla danışana "diyetisyenin ses tonuyla" iletilir.   
+
+           2. Danışandan Diyetisyene Akış (Hesap Verebilirlik ve Takip)   
+
+           Danışan uygulamayı kullandıkça, diyetisyenin paneline          "Uyum Verisi" (Compliance Data)         akar. Bu sayede diyetisyen, danışanına sürekli "Ne yedin?" diye sormak zorunda kalmaz.   
+
+           •          Aktivite ve Teyit:         Danışan önerilen tarifi yapıp "Yaptım/Yedim" butonuna bastığında, bu işlem diyetisyen paneline anlık olarak düşer (Örn:           "Mert, dün 19:30'da Ton Balıklı Salata yaptı"        ).   
+
+           •          Uyum Skoru:         Danışanın plana ne kadar sadık kaldığı sistem tarafından hesaplanır (Örn:           "Bu hafta 5 öğün tarifle yapıldı"        ,           "Uyum Durumu: %85"        ) ve diyetisyene raporlanır.   
+
+           •          Ölçüm ve Sağlık Verileri:         Danışanın girdiği kilo, bel/kalça ölçümleri ve su tüketim verileri, sadece telefonunda kalmaz; diyetisyenin takip ekranı ile senkronize edilir  
+      ,.  
+ 
+
+           3. Teknik Yönetim: "Aktif Bağlantı" (Active Link) Mekanizması   
+
+           Bu veri trafiğinin güvenliği ve yönetimi arka planda (Backend) şu kurallarla sağlanır:   
+
+           •          Yetkilendirme (Auth):         Sistem, /api/client/me servisi üzerinden danışanın activeDietitianId bilgisini kontrol eder. Eğer geçerli bir bağ varsa,          "Premium Stack"         (Özel Arayüz) yüklenir.   
+
+           •          Veri İzolasyonu:         Diyetisyenin tarifleri ve danışan verileri "Private" (Özel) olarak işaretlenir. Başka bir diyetisyenin danışanı veya ücretsiz kullanıcılar bu verileri göremez. Bu yetki yönetimi RequirePremiumClient politikası ile korunur.   
+
+           •          Zaman Kısıtı:         Veri paylaşımı, Access Key ile tanımlanan süre (Örn: 3 Ay) boyunca aktiftir. Süre dolduğunda (EndDate geçtiğinde), sistem otomatik olarak veri akışını keser ve danışanı "Free" moda düşürür  
+      ,.  
+ 
+
+            Özetle; Premium modda diyetisyen          "Akıl ve Kural"         (Rules & Content) gönderir, karşılığında danışandan          "Eylem ve Kanıt"         (Action & Proof) alır.   
+
+      
+
+             
+
+            Ücretsiz Kullanıcı İçin Akıllı Malzeme Sözlüğü İşleyişi  :                       Verilen kaynaklara ve projenin teknik mimarisine göre;          Malzeme Sözlüğü (Ingredient Dictionary)        , Ücretsiz (Free) kullanıcılar için de Premium kullanıcılarla          aynı teknik altyapıyı kullanarak         çalışır. Çünkü bu   
+      modül  
+      , uygulamanın "Birleştir" motorunun çalışabilmesi için gereken temel veri giriş kapısıdır.   
+
+           Ücretsiz kullanıcılar için sözlüğün çalışma prensibi ve sağladığı faydalar şunlardır:   
+
+           1. "Kaos Engelleyici" Olarak Çalışır (Standardizasyon)   
+
+           Ücretsiz kullanıcı "Mutfak" sekmesine girip elindeki malzemeleri eklemek istediğinde, sözlük bir          çevirmen         görevi görür.   
+
+           •          Sorun:         Kullanıcı arama çubuğuna "salkım domates", "çeri domates" veya sadece "domates" yazabilir. Eğer sözlük olmasaydı, sistem bunları 3 farklı ürün sanardı.   
+
+           •          Çözüm:         Sözlük, ücretsiz kullanıcının girdiği tüm bu varyasyonları arka planda tek bir          ID_Domates (Standart Kimlik)         verisine dönüştürür. Bu sayede algoritma, kullanıcının elindekileri "Genel Tarif Havuzu"ndaki (Public Library) tariflerle hatasız eşleştirebilir.   
+
+           2. Akıllı Kapsayıcılık (Hiyerarşi Yönetimi)   
+
+           Sözlük, malzemeleri düz bir liste değil, bir "aile ağacı" (Parent-Child) gibi algılar. Bu, ücretsiz kullanıcının sınırlı   
+      envanterle  
+       daha fazla tarif bulmasını sağlar.   
+
+           •          Mantık:         Eğer kullanıcı "Süzme Yoğurt" eklerse, sözlük bunun aslında "Yoğurt" ailesinden olduğunu bilir.   
+
+           •          Sonuç:         Genel havuzda sadece "Yoğurt" isteyen bir tarif varsa, sistem kullanıcıya "Elinizde süzme yoğurt var, bu tarifi yapabilirsiniz" diyerek eşleşmeyi onaylar. Kullanıcıyı "tam olarak aynısı yok" diye geri çevirmez.   
+
+           3. Alternatif Önerme (Esneklik)   
+
+           Ücretsiz kullanıcılar için "Birleştir" sonuçlarında çıkan "1 Eksikle Olur" (Sarı Kart) mantığı bu sözlük sayesinde çalışır.   
+
+           •          Senaryo:         Kullanıcının dolabında "Süt" yok ama "Badem Sütü" var.   
+
+           •          İşleyiş:         Sözlükte bu iki malzeme birbirinin alternatifi (Substitute) olarak tanımlıdır.   
+
+           •          Çıktı:         Algoritma, sütlü bir tarifi elemek yerine;           "Süt eksik ama elindeki badem sütüyle de yapabilirsin"         önerisini sunar. Bu özellik Premium'a özel değildir, sözlüğün doğal bir yeteneğidir.   
+
+           4. Premium ile Tek Farkı: "Eşleşme Hedefi"   
+
+           Malzeme sözlüğü teknik olarak her iki kullanıcı tipinde de aynı şekilde veri toplar (Input), ancak bu veriyi          farklı havuzlarla         kıyaslar:   
+
+           •          Ücretsiz Kullanıcıda:         Sözlükten seçilen malzemeler,          "Genel Tarif Havuzu" (Public Recipe Pool)         ile eşleştirilir. Burada diyetisyenin özel kuralları veya katı yasakları devreye girmez.   
+
+           •          Premium Kullanıcıda:         Aynı sözlük verisi,          "Diyetisyen İmza Tarifleri"         ve          "Klinik Yasaklar Filtresi"         ile işlenir.   
+
+             Özetle:         Ücretsiz kullanıcı için Malzeme Sözlüğü; mutfağındaki malzemeleri          standart bir dijital dile         çevirerek, internetteki genel tariflerle (Public Library) doğru eşleşme yapmasını sağlayan akıllı bir arama motorudur.   
+
+      
+
+             
+
+            SaaS Diyetisyen Paneli: Dijital Operasyon Merkezi Tasarım Rehberi :                       Verilen kaynaklara ve projenin "SaaS" (Hizmet Olarak Yazılım)   
+      vizyonuna  
+       dayanarak; Diyetisyen Paneli, sıkıcı bir veri giriş ekranı değil, diyetisyenin          "Dijital Operasyon Merkezi (Digital Cockpit)"         olarak tasarlanmalıdır.   
+
+           Panelin tasarımı          hızlı, analitik ve yönetilebilir         olmalıdır. Diyetisyen sabah kahvesini içerken tek bir ekrana bakıp "Bugün kiminle ilgilenmeliyim?" sorusuna yanıt bulabilmelidir.   
+
+           İşte Diyetisyen Paneli (Web/  
+      Next.js  
+      ) için ideal tasarım şeması ve detayları:   
+
+           1. Genel Yerleşim ve Navigasyon (Layout)   
+
+           Ekran yapısı modern SaaS standartlarına (örn: Linear, Notion) uygun olmalı:   
+
+           •          Sabit Sol Menü (Sidebar):         Koyu yeşil (#2F5233) veya çok açık gri (#F9F7F2) zemin üzerinde dikey navigasyon.   
+
+           •          Geniş Çalışma Alanı (Main Content):         Beyaz kartlar ve yumuşak gölgelerle ayrılmış alanlar.   
+
+            Menü Başlıkları:   
+
+           1.          Genel Bakış (Dashboard)                  🏠   
+
+           2.          Danışanlar (Clients)                  👥         (Access Key buradan yönetilir)   
+
+           3.          Tarifler (Recipes)                  🥗         (İmza tariflerin girildiği yer)   
+
+           4.          Planlar (Plans)                  📅   
+
+           5.          Ayarlar (Branding)                  ⚙️         (Logo ve renk ayarları)   
+
+           --------------------------------------------------------------------------------   
+
+           2. Ekran Detayları ve UI Bileşenleri   
+
+           A. Genel Bakış (Dashboard) - "Pilot Kokpiti"   
+
+           Burası diyetisyenin durumu tek bakışta anladığı yerdir.   
+
+           •          Üst Bant (KPI Kartları):         4 adet yan yana kart.   
+
+               ◦           Aktif Danışan:         "42 Kişi" (Access Key süresi dolmamış olanlar).   
+
+               ◦           Ortalama Uyum:         "%85" (Yeşil yukarı ok ile   
+      trend  
+       göstergesi).   
+
+               ◦           Riskli Danışan:         "3 Kişi" (Uyum skoru %50'nin altına düşenler).   
+
+               ◦           Bekleyen İş:         "5 Yeni Tarif Onayı".   
+
+           •          Canlı Aktivite Akışı (Live Feed):         Sağ tarafta dikey bir akış listesi.   
+
+               ◦           "Mert, 'Ton Balıklı Salata' öğününü tamamladı. (19:30)"   
+
+               ◦           "Ayşe, 3 günlük seri rozeti kazandı!            🔥          "        .   
+
+               ◦           Tasarım:         Her satırda küçük bir ikon ve zaman damgası.   
+
+           B. Danışanlar ve "Access Key" Yönetimi   
+
+            Burası sistemin para kazandıran (Monetization) merkezidir.   
+
+           •          Liste Görünümü:         Tablo yapısında danışan listesi.   
+
+               ◦ Sütunlar: İsim, Başlangıç Tarihi, Kalan Süre, Uyum Skoru (Halka grafik ikonu).   
+
+           •          Kritik Aksiyon Butonu:         Tablonun sağ üstünde belirgin          "Yeni Danışan / Anahtar Üret"         butonu.   
+
+               ◦           Modal (Açılır Pencere):         "Süre Seçiniz: 1 Ay / 3 Ay".   
+
+               ◦           Sonuç:         Ekranda büyük puntolarla kopyalanabilir kod belirir:          ELIF-9X2A        .   
+
+           •          Detay Paneli:         İsme tıklandığında sağdan bir panel (Drawer) açılır. Burada danışanın kilo grafiği ve son yediği yemekler görünür.   
+
+           C. Akıllı Tarif Editörü (Sistemin Beyni)   
+
+           Burası en karmaşık ama en kritik yerdir. Diyetisyen "metin yazarı" gibi değil, "algoritma eğitmeni" gibi çalışmalıdır.   
+
+           •          Form Yapısı:   
+
+               ◦          Başlık & Fotoğraf:         Sürükle-bırak fotoğraf alanı.   
+
+               ◦          Malzeme Seçici (Autocomplete):         Diyetisyen "Dom" yazar yazmaz sistem           Malzeme Sözlüğü        'nden "Domates (ID:101)" önerisini getirir.   
+
+           •          Rol Atama (Radio Button):         Seçilen her malzemenin yanına 3 seçenek gelir:   
+
+               ◦          🔵         Zorunlu (Olmazsa olmaz)   
+
+               ◦          🟢         Opsiyonel (Lezzet katar)   
+
+               ◦          🔄         Alternatif (Yoğurt yerine Kefir)   
+
+           •          Yasaklar/Etiketler:         "Laktozsuz", "Glutensiz" gibi etiketler           Chip         (hap) şeklinde seçilir.   
+
+           •          Görünürlük Switch'i:         "Sadece Benim Danışanlarıma Özel (Premium)"          🔒         vs "Herkese Açık".   
+
+           D. Marka Ayarları (White-Label)   
+
+           Diyetisyenin uygulamayı sahiplenmesi için:   
+
+           •          Logo Yükle:         Daire içine ön izleme.   
+
+           •          Renk Seçici:         Renk paletinden seçim (Örn: Mor). Seçince yandaki "Mobil Önizleme" (Mockup) anlık olarak o renge döner.   
+
+           --------------------------------------------------------------------------------   
+
+           3. Görsel Tasarım Dili (Style Guide)   
+
+           Mobil uygulama ile tutarlı olması için "Doğal Denge" teması korunmalıdır:   
+
+           •          Zemin Rengi:         Saf beyaz yerine          Yulaf Sütü (#F9F7F2)         veya çok açık gri.   
+
+           •          Ana Renk:                  Adaçayı Yeşili (#4A7C59)         (Butonlar ve aktif sekmeler için).   
+
+           •          Uyarı Rengi:                  Mercan (#FF8C61)         (Süresi biten anahtarlar veya düşük uyum için).   
+
+            •          Font:                   Inter         veya           Public Sans         (Okunaklı, veri yoğunluğuna uygun).   
+
+           •          Kartlar:         Köşeleri yuvarlatılmış (Radius: 12px), hafif gölgeli beyaz kartlar.   
+
+           --------------------------------------------------------------------------------   
+
+           4. Yazılımcı (Cursor) İçin Tasarım Prompt'u   
+
+           Bu tasarımı hayata geçirmek için Cursor veya geliştiricinize şu komutu verebilirsiniz:   
+
+           **Task:** Create a Dietitian Dashboard layout using   
+      Next.js  
+       (App Router) and Tailwind CSS.   
+
+      
+
+           **Design System:**   
+
+           - Background: #F9F7F2 (Oat Milk)   
+
+           - Primary: #4A7C59 (Sage Green)   
+
+           - Sidebar: Fixed left, dark green (#2F5233) or clean white.   
+
+           - Cards: White with shadow-sm and rounded-xl.   
+
+      
+
+           **Pages Requirements:**   
+
+           1. **Dashboard:**   
+
+              - Top: 4 KPI Cards (Total Clients, Avg Compliance, Pending Actions).   
+
+              - Main: "Live Activity Feed" list showing client logs (e.g  
+      .,  
+       "Mert ate Salad").   
+
+           2. **Client Management:**   
+
+              - A Data Table listing clients.   
+
+              - A primary button "Generate Access Key" that opens a Modal.   
+
+              - Inside Modal: A selector for duration (1/3/6 months) and a generated code display (e.g  
+      .,  
+       "ELIF-9X2A").   
+
+           3. **Recipe Editor (Advanced Form):**   
+
+              - NOT a simple text area.   
+
+              - Use a dynamic list for ingredients.   
+
+              - Each ingredient row must have an autocomplete (mock   
+      data  
+       for now) and a "Role Selector" (Mandatory/Optional/Substitute).   
+
+              - A toggle switch for "Private/Signature Recipe".   
+
+      
+
+           **Goal:** Clean, professional SaaS look similar to Linear or modern medical dashboards.   
+
+           Bu yapı, diyetisyene          "Ben sadece liste yazmıyorum, bir teknoloji yönetiyorum"         hissi verecek ve ürününüzün B2B satışını çok kolaylaştıracaktır.   
+
+            Dijital Diyetisyen Paneli: Veri Analitiği ve Takip Rehberi :                       Verilen kaynaklara ve projenin teknik mimarisine göre; diyetisyen panelindeki takip sistemi, manuel sorgulamaları ortadan kaldırıp          gerçek zamanlı veri analitiğine         dayalı bir "Dijital Kokpit" olarak tasarlanmıştır.   
+
+           Panelde uyum oranlarını ve KPI kartlarını takip etmek için kullanacağınız mekanizmalar şu 4 ana başlıkta toplanır:   
+
+           1. Genel Bakış (Dashboard): KPI Kartları ile "Kuş Bakışı" Takip   
+
+           Diyetisyen panele giriş yaptığında karşılaştığı ilk ekran, tüm kliniğin sağlık durumunu özetleyen          4 kritik KPI kartından         oluşur  
+      ,.  
+ 
+
+           •          Aktif Danışan Sayısı:         "42 Kişi (Premium)" – Şu an "Access Key" süresi dolmamış ve sisteme bağlı danışan sayısı.   
+
+           •          Ortalama Uyum Skoru:         "%85          ⬆️        " – Tüm aktif danışanlarınızın planlarına sadakat ortalaması. (Yeşil yukarı ok, kliniğin genel başarısının arttığını gösterir).   
+
+           •          Riskli Danışanlar:         "3 Kişi" – Uyum skoru belirli bir seviyenin (örn: %50) altına düşen ve acil müdahale/  
+      motivasyon  
+       bekleyenler.   
+
+           •          Bekleyen Aksiyonlar:         "5 Yeni Onay" – Süresi dolmak üzere olan anahtarlar veya bekleyen tarif onayları.   
+
+           2. Canlı Aktivite Akışı (Live Feed): Anlık Davranış İzleme   
+
+           Dashboard'un sağ tarafında yer alan bu akış, danışanların          o an         ne yaptığını gösterir. Danışan mobil uygulamada "Yaptım/Yedim" butonuna bastığı an buraya veri düşer  
+      ,.  
+ 
+
+           •           Örnek Bildirim:         "Mert, 'Ton Balıklı Salata' öğününü tamamladı. (19:30)"   
+
+           •           Örnek Bildirim:         "Ayşe, 3 günlük seri rozeti kazandı!          🔥        "   
+
+           •          Fayda:         Diyetisyen, danışanının diyeti bozmadığını anlık olarak görür ve gerekirse motive edici bir mesaj atar.   
+
+           3. Danışan Detay Sayfası: "Kişisel Karne" ve Uyum Grafiği   
+
+           Bir danışanın ismine tıkladığınızda, genel ortalamalar yerine o kişiye özel derinlemesine analiz sayfası açılır  
+      ,.  
+ 
+
+           •          Halka Grafik (Donut Chart):         Danışanın başarısını renk kodlarıyla gösteren ana görseldir.   
+
+               ◦          Yeşil (%85 - Tam Uyum):         Sizin verdiğiniz "Zorunlu Malzemeler" ile yapılan öğünler.   
+
+               ◦          Sarı (%10 - Esnek Uyum):         "1 Eksik" veya "Alternatif" (örn: Yoğurt yerine Kefir) kullanılarak yapılan öğünler.   
+
+               ◦          Kırmızı/Gri (%5 - Uyumsuz):         Atlanan veya uygulama dışı (Fast-food vb.) tüketilen öğünler.   
+
+           •          Somut Rapor:         Grafiğin altında "Bu hafta planlanan 21 öğünün 18'i uygulama üzerinden yapıldı" gibi net bir veri yazar.   
+
+           4. Analitik ve Trend Takibi: "Neden?" Sorusunun Cevabı   
+
+            Panel sadece "ne yendiğini" değil, "nerede zorlanıldığını" da analiz etmenizi sağlar.   
+
+           •          Kopuş Analizi (Breakdown):         Danışanın uyum grafiğinde aşağı yönlü kırılmaların olduğu zamanları gösterir.   
+
+               ◦           İçgörü:         "Mert hafta içi %90 uyum sağlıyor ama Hafta Sonları %40'a düşüyor." ->           Aksiyon:         Hafta sonu için daha pratik tarifler veya "Tatlı Krizi Paketi" önerilebilir.   
+
+           •          Tarif Performansı:         Hangi tariflerinizin "Hit", hangilerinin "Flop" olduğunu gösterir.   
+
+               ◦           İçgörü:         "Ton Balıklı Salata tarifiniz %95 oranında uygulanıyor, ancak Kereviz Sapı Çorbası %20'de kalıyor." ->           Aksiyon:         Sevilmeyen tarifi revize etme şansı doğar  
+      ,.  
+ 
+
+            Özetle:         Bu panel yapısı sayesinde diyetisyen; "Bu hafta kaçamak yaptın mı?" diye sormak yerine,          "Hafta sonları akşam öğünlerinde zorlandığını görüyorum, oraya daha pratik bir alternatif ekleyelim mi?"         diyerek veriye dayalı profesyonel bir koçluk sunar.   
+
+         
+
+      
+
+             
+
+              Dijital Operasyon Merkezi: SaaS Diyetisyen Paneli Tasarım Rehberi         :                         •             Danışan Listesi (Tablo):           İsim, Başlangıç Tarihi, Bitiş Tarihi, Anlık Uyum Skoru (Halka grafik ikonu).   
+
+                •             Kritik Aksiyon: "Anahtar Üret" Butonu:   
+
+                    ◦ Bu butona basıldığında bir             Modal (Pencere)           açılır.   
+
+                    ◦             Süre Seçimi:           "1 Ay / 3 Ay / 6 Ay".   
+
+                    ◦             Sonuç:           Sistem benzersiz bir kod üretir:              ELIF-9X2A          .   
+
+                    ◦             Paylaş:           "WhatsApp ile Gönder" butonu  
+        ,.  
+ 
+
+                •             Danışan Detayı (Drawer):           İsme tıklandığında sağdan açılan panelde; kilo grafiği, yasaklı besinleri ve son yediği yemekler görünür.   
+
+                C. Akıllı Tarif Editörü (Recipes) - "Sistemin Beyni"   
+
+                Diyetisyen buraya rastgele metin yazmaz; algoritmanın çalışması için             yapılandırılmış veri           girer  
+        ,.  
+ 
+
+                •             Temel Bilgiler:           Tarif Adı, Fotoğraf (Sürükle-Bırak), Hazırlama Süresi.   
+
+                •             Malzeme Girişi (En Kritik Alan):   
+
+                    ◦             Akıllı Arama:           Diyetisyen "Dom" yazar yazmaz sistem             Malzeme Sözlüğü          'nden "Domates (ID:101)" önerisini getirir  
+        ,.  
+ 
+
+                    ◦             Rol Atama:           Her malzeme için yanındaki kutucuktan seçim yapılır:   
+
+                        1.             Zorunlu:           (Bu malzeme yoksa tarifi önerme).   
+
+                        2.             Opsiyonel:           (Olursa puan artır).   
+
+                        3.             Alternatif:           ("Yoğurt yoksa Kefir olur" tanımlaması).   
+
+                •             Etiketler & Yasaklar:           "Laktozsuz", "Glutensiz" gibi etiketler seçilir.   
+
+                •             Görünürlük Switch'i:           "Sadece Benim Danışanlarıma Özel (Premium)"           🔒           vs "Herkese Açık (Public)".   
+
+                D. Planlama (Plans)   
+
+                Diyetisyenin haftalık şablonlar oluşturduğu yerdir.   
+
+                •             Takvim Görünümü:           Sürükle-bırak yöntemiyle tarifler günlere ve öğünlere (Kahvaltı, Öğle, Akşam) atanır.   
+
+                •             Şablonlar:           "Standart Detoks Haftası" gibi şablonlar kaydedilip tek tıkla yeni danışana uygulanabilir.   
+
+                E. Marka Ayarları (Settings / White-Label)   
+
+                Diyetisyenin uygulamayı sahiplenmesi için özelleştirme alanı  
+        ,.  
+ 
+
+                •             Logo Yükle:           Danışan uygulamasının sol üstünde görünecek   
+        logo  
+        .   
+
+                •             Renk Seçimi:           Diyetisyen kendi kurumsal rengini (Örn: Mor) seçer. Seçim yapıldığında yandaki "Mobil Önizleme" (Mockup) anlık olarak o renge döner.   
+
+                --------------------------------------------------------------------------------   
+
+                3. Yazılımcı (Cursor) İçin Tasarım Prompt'u   
+
+                Bu yapıyı oluşturmak için yazılımcınıza veya Cursor'a şu direktifi verebilirsiniz:   
+
+                                  **Task:** Create a specialized Dietitian Dashboard using   
+        Next.js  
+         (App Router) and Tailwind CSS based on the "Nature Balance" theme.   
+
+                           
+
+                                  **1. Layout & Style:**   
+
+                                     - Background: #F9F7F2 (Oat Milk).   
+
+                                     - Sidebar: Fixed left, color #4A7C59 (Sage Green) or clean white.   
+
+                                     - Design Language: Clean SaaS look (like Linear/Notion), rounded corners (12px), subtle shadows.   
+
+                           
+
+                                  **2. Key Modules to Build:**   
+
+                                     - **Dashboard:**   
+
+                                       - Top: 4 KPI Cards (Active Clients, Avg Compliance %, Alerts).   
+
+                                        - Right: "Live Activity Feed" (Real-time logs: "User X ate Salad").   
+
+                                     - **Client Management:**   
+
+                                       - Data Table with "Generate Access Key" action.   
+
+                                       - Modal: Duration selector -> Returns generated code (e.g  
+        .,  
+         ELIF-9X2A).   
+
+                                     - **Smart Recipe Editor (Critical):**   
+
+                                       - NOT a simple text area. Use dynamic form arrays.     
+
+                                       - Ingredient Input: Must be an Autocomplete connected to a mock `IngredientsDictionary`.   
+
+                                       - Ingredient Roles: Radio buttons for [Mandatory, Optional, Substitute].   
+
+                                       - Visibility Toggle: [Private/Signature] vs [Public].   
+
+                                     - **Branding Settings:**   
+
+                                       - Color picker that updates a live mobile preview component on the side.   
+
+                           
+
+                                  **3. Goal:**   
+
+                                     - Focus on the "Digital Cockpit" feel. The dietitian should see   
+        data  
+         and take action, not just input text.   
+
+                Bu tasarım, diyetisyene             "Ben sadece liste yazmıyorum, bir teknoloji yönetiyorum"           hissi verecek ve ürününüzün kliniklere satışını (B2B) oldukça kolaylaştıracaktır.   
+
+       
+
+     

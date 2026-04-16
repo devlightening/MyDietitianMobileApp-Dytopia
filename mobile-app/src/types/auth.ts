@@ -1,7 +1,7 @@
 export enum Gender {
-  Male = 'Male',
-  Female = 'Female',
-  Other = 'Other'
+  Male = 0,
+  Female = 1,
+  Other = 2,
 }
 
 export interface RegisterRequest {

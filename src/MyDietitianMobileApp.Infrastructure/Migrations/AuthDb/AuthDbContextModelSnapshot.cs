@@ -38,11 +38,17 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations.AuthDb
                     b.Property<string>("FullName")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("LastLoginAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("LinkedClientId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("LinkedDietitianId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PasswordChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -53,6 +59,10 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations.AuthDb
                         .HasColumnType("text");
 
                     b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SecurityStamp")
                         .IsRequired()
                         .HasColumnType("text");
 

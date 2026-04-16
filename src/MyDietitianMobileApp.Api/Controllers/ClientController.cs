@@ -154,7 +154,7 @@ public class ClientController : ControllerBase
     /// <summary>
     /// Get client pantry items (inventory)
     /// </summary>
-    [HttpGet("pantry")]
+    [HttpGet("pantry/items")]
     [EnableRateLimiting("pantry")]
     public async Task<IActionResult> GetPantry()
     {

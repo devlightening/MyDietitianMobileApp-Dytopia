@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
@@ -53,11 +54,13 @@ public class IngredientNormalizationService : IIngredientNormalizationService
 
     public async Task<IngredientNormalizationResult> NormalizeAsync(string rawInput, CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
         rawInput ??= string.Empty;
         var normalized = NormalizeText(rawInput);
 
         if (string.IsNullOrWhiteSpace(normalized))
         {
+            sw.Stop();
             var emptyResult = new IngredientNormalizationResult
             {
                 RawInput = rawInput,
@@ -67,7 +70,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 Confidence = 0,
                 Explanation = "Empty or whitespace input."
             };
-            await LogAsync(emptyResult, cancellationToken);
+            await LogAsync(emptyResult, sw, cancellationToken);
             return emptyResult;
         }
 
@@ -108,12 +111,40 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 },
                 Explanation = "Exact canonical ingredient match."
             };
-            await LogAsync(result, cancellationToken);
+            await LogAsync(result, sw, cancellationToken);
             return result;
         }
 
         if (canonicalMatches.Count > 1)
         {
+            if (IngredientResolutionPolicy.TryCollapseSameCanonicalIdentity(canonicalMatches, out var preferredCanonical, out var orderedCanonicalCandidates))
+            {
+                var collapsedResult = new IngredientNormalizationResult
+                {
+                    RawInput = rawInput,
+                    NormalizedInput = normalized,
+                    Status = IngredientMatchStatus.Matched,
+                    MatchedBy = IngredientMatchedBy.Canonical,
+                    Confidence = 1.0,
+                    MatchedIngredientId = preferredCanonical.Id,
+                    MatchedCanonicalName = preferredCanonical.CanonicalName,
+                    MatchedAliases = preferredCanonical.Aliases.ToArray(),
+                    Candidates = orderedCanonicalCandidates
+                        .Select(i => new IngredientNormalizationCandidate
+                        {
+                            IngredientId = i.Id,
+                            CanonicalName = i.CanonicalName,
+                            Aliases = i.Aliases.ToArray(),
+                            MatchedBy = IngredientMatchedBy.Canonical,
+                            Confidence = 1.0
+                        })
+                        .ToArray(),
+                    Explanation = $"Exact canonical ingredient match after collapsing {orderedCanonicalCandidates.Count} duplicate active rows for the same canonical identity."
+                };
+                await LogAsync(collapsedResult, sw, cancellationToken);
+                return collapsedResult;
+            }
+
             var candidates = canonicalMatches
                 .Select(i => new IngredientNormalizationCandidate
                 {
@@ -135,7 +166,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 Candidates = candidates,
                 Explanation = "Multiple ingredients share the same canonical name after normalization."
             };
-            await LogAsync(result, cancellationToken);
+            await LogAsync(result, sw, cancellationToken);
             return result;
         }
 
@@ -174,12 +205,40 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 },
                 Explanation = "Exact alias ingredient match."
             };
-            await LogAsync(result, cancellationToken);
+            await LogAsync(result, sw, cancellationToken);
             return result;
         }
 
         if (aliasMatches.Count > 1)
         {
+            if (IngredientResolutionPolicy.TryCollapseSameCanonicalIdentity(aliasMatches, out var preferredAlias, out var orderedAliasCandidates))
+            {
+                var collapsedResult = new IngredientNormalizationResult
+                {
+                    RawInput = rawInput,
+                    NormalizedInput = normalized,
+                    Status = IngredientMatchStatus.Matched,
+                    MatchedBy = IngredientMatchedBy.Alias,
+                    Confidence = 0.95,
+                    MatchedIngredientId = preferredAlias.Id,
+                    MatchedCanonicalName = preferredAlias.CanonicalName,
+                    MatchedAliases = preferredAlias.Aliases.ToArray(),
+                    Candidates = orderedAliasCandidates
+                        .Select(i => new IngredientNormalizationCandidate
+                        {
+                            IngredientId = i.Id,
+                            CanonicalName = i.CanonicalName,
+                            Aliases = i.Aliases.ToArray(),
+                            MatchedBy = IngredientMatchedBy.Alias,
+                            Confidence = 0.95
+                        })
+                        .ToArray(),
+                    Explanation = $"Exact alias ingredient match after collapsing {orderedAliasCandidates.Count} duplicate active rows for the same canonical identity."
+                };
+                await LogAsync(collapsedResult, sw, cancellationToken);
+                return collapsedResult;
+            }
+
             var candidates = aliasMatches
                 .Select(i => new IngredientNormalizationCandidate
                 {
@@ -201,12 +260,12 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 Candidates = candidates,
                 Explanation = "Multiple ingredients share the same alias after normalization."
             };
-            await LogAsync(result, cancellationToken);
+            await LogAsync(result, sw, cancellationToken);
             return result;
         }
 
         // ── Layer C: Fuzzy fallback match ─────────────────────────────────────────
-        var fuzzyCandidates = FuzzyIngredientMatcher.Match(normalized, ingredients);
+        var fuzzyCandidates = CollapseDuplicateFuzzyCandidates(FuzzyIngredientMatcher.Match(normalized, ingredients));
 
         if (fuzzyCandidates.Count >= 2)
         {
@@ -238,7 +297,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                     }).ToArray(),
                     Explanation = $"Fuzzy match: '{top.Ingredient.CanonicalName}' (score {top.Score:F3}, margin {margin:F3} over second candidate '{second.Ingredient.CanonicalName}')."
                 };
-                await LogAsync(fuzzyResult, cancellationToken);
+                await LogAsync(fuzzyResult, sw, cancellationToken);
                 return fuzzyResult;
             }
             else
@@ -261,7 +320,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                     }).ToArray(),
                     Explanation = $"Fuzzy match is ambiguous: '{top.Ingredient.CanonicalName}' (score {top.Score:F3}) and '{second.Ingredient.CanonicalName}' (score {second.Score:F3}) are too close (margin {margin:F3} < {FuzzyIngredientMatcher.MinMarginForAutoAccept:F3})."
                 };
-                await LogAsync(ambiguousResult, cancellationToken);
+                await LogAsync(ambiguousResult, sw, cancellationToken);
                 return ambiguousResult;
             }
         }
@@ -293,14 +352,14 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 },
                 Explanation = $"Fuzzy match: '{top.Ingredient.CanonicalName}' (score {top.Score:F3}, no competing candidate)."
             };
-            await LogAsync(fuzzyResult, cancellationToken);
+            await LogAsync(fuzzyResult, sw, cancellationToken);
             return fuzzyResult;
         }
 
         // ── Layer D: LLM semantic fallback ────────────────────────────────────────
         if (_llmOptions.Enabled && normalized.Length <= _llmOptions.MaxInputLength)
         {
-            var llmResult = await TryLlmMatchAsync(normalized, rawInput, cancellationToken);
+            var llmResult = await TryLlmMatchAsync(normalized, rawInput, sw, cancellationToken);
             if (llmResult != null)
                 return llmResult;
         }
@@ -315,7 +374,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
             Confidence = 0,
             Explanation = "No match found via canonical, alias, fuzzy, or LLM layers."
         };
-        await LogAsync(unmatched, cancellationToken);
+        await LogAsync(unmatched, sw, cancellationToken);
         return unmatched;
     }
 
@@ -326,7 +385,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
     /// Returns null if the shortlist is empty, the LLM returns None, or any safety rule triggers.
     /// </summary>
     private async Task<IngredientNormalizationResult?> TryLlmMatchAsync(
-        string normalized, string rawInput, CancellationToken cancellationToken)
+        string normalized, string rawInput, Stopwatch sw, CancellationToken cancellationToken)
     {
         try
         {
@@ -363,7 +422,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                     }).ToArray(),
                     Explanation = $"LLM fallback ambiguous or low-confidence. {llmResult.Explanation}"
                 };
-                await LogAsync(ambig, cancellationToken);
+                await LogAsync(ambig, sw, cancellationToken);
                 return ambig;
             }
 
@@ -402,7 +461,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 }).ToArray(),
                 Explanation = $"LLM fallback matched '{ing.CanonicalName}' (confidence {confidence:F2}). {llmResult.Explanation}"
             };
-            await LogAsync(result, cancellationToken);
+            await LogAsync(result, sw, cancellationToken);
             return result;
         }
         catch
@@ -434,6 +493,37 @@ public class IngredientNormalizationService : IIngredientNormalizationService
         return Math.Round(Math.Clamp(mapped, FuzzyMinConfidence, FuzzyMaxConfidence), 4);
     }
 
+    private static IReadOnlyList<FuzzyCandidate> CollapseDuplicateFuzzyCandidates(IReadOnlyList<FuzzyCandidate> rawCandidates)
+    {
+        if (rawCandidates.Count <= 1)
+        {
+            return rawCandidates;
+        }
+
+        return rawCandidates
+            .GroupBy(c => NormalizeText(c.Ingredient.CanonicalName), StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var bestScore = group.Max(c => c.Score);
+                var bestScoreIngredients = group
+                    .Where(c => c.Score == bestScore)
+                    .Select(c => c.Ingredient);
+
+                var preferredIngredient = IngredientResolutionPolicy.SelectPreferred(bestScoreIngredients);
+                var preferredCandidate = group.First(c => c.Ingredient.Id == preferredIngredient.Id && c.Score == bestScore);
+
+                return new FuzzyCandidate
+                {
+                    Ingredient = preferredCandidate.Ingredient,
+                    Score = bestScore,
+                    BestMatchedText = preferredCandidate.BestMatchedText
+                };
+            })
+            .OrderByDescending(c => c.Score)
+            .ThenBy(c => c.Ingredient.Id)
+            .ToArray();
+    }
+
     /// <summary>
     /// Deterministic text normalization: trim, lowercase (InvariantCulture, preserves Turkish),
     /// collapse whitespace, strip leading/trailing punctuation noise.
@@ -451,10 +541,19 @@ public class IngredientNormalizationService : IIngredientNormalizationService
         return collapsed.ToLowerInvariant();
     }
 
-    private async Task LogAsync(IngredientNormalizationResult result, CancellationToken cancellationToken)
+    private async Task LogAsync(
+        IngredientNormalizationResult result,
+        Stopwatch sw,
+        CancellationToken cancellationToken)
     {
         try
         {
+            var elapsedMs          = sw.ElapsedMilliseconds;
+            var candidateCount     = result.Candidates?.Count ?? 0;
+            var ambiguousCount     = result.Status == IngredientMatchStatus.Ambiguous
+                ? candidateCount
+                : 0;
+
             string? candidateSummaryJson = null;
             if (result.Candidates != null && result.Candidates.Any())
             {
@@ -473,10 +572,13 @@ public class IngredientNormalizationService : IIngredientNormalizationService
                 rawInput: result.RawInput,
                 normalizedInput: result.NormalizedInput,
                 status: result.Status.ToString(),
-                matchedBy: result.MatchedBy.ToString(),  // e.g. "Canonical", "Alias", "Fuzzy", "Llm", "None"
+                matchedBy: result.MatchedBy.ToString(),
                 matchedIngredientId: result.MatchedIngredientId,
                 matchedCanonicalName: result.MatchedCanonicalName,
                 confidence: result.Confidence,
+                elapsedTimeMs: elapsedMs,
+                candidateCount: candidateCount,
+                ambiguousCandidateCount: ambiguousCount,
                 candidateSummaryJson: candidateSummaryJson,
                 correlationId: null,
                 requestPath: null);

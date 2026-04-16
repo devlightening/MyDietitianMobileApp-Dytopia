@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      .NET 10 preview on this workstation intermittently fails while resolving
+      project-reference target frameworks in parallel, even though the same
+      projects build successfully in sequence. Keep project graph builds
+      deterministic until the repo is pinned to a stable SDK.
+    -->
+    <BuildInParallel>false</BuildInParallel>
+  </PropertyGroup>
+</Project>

@@ -80,7 +80,11 @@ public class DietitianPlanController : ControllerBase
         var recipeIds = request.Meals.Select(m => m.RecipeId).Distinct().ToList();
         var existingRecipes = await _appDb.Recipes
             .Where(r => recipeIds.Contains(r.Id) &&
-                       (r.DietitianId == dietitianId || r.IsPublic))
+                       (r.DietitianId == dietitianId || r.IsPublic) &&
+                       !r.IsArchived &&
+                       !r.IsDemo &&
+                       !r.IsDraft &&
+                       !r.IsHiddenFromProduction)
             .Select(r => r.Id)
             .ToListAsync();
 
@@ -114,6 +118,13 @@ public class DietitianPlanController : ControllerBase
 
             _appDb.ClientMeals.Add(meal);
         }
+
+        // Write plan_assigned activity event
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId,
+            dietitianId,
+            "plan_assigned",
+            new { planId = mealPlan.Id.ToString(), planName = mealPlan.Name }));
 
         await _appDb.SaveChangesAsync();
 
@@ -168,6 +179,161 @@ public class DietitianPlanController : ControllerBase
             .ToListAsync();
 
         return Ok(new { items = plans });
+    }
+
+    /// <summary>
+    /// Assign a plan to a client from a template — creates a ClientMealPlan (with ClientMeals
+    /// for template items that have a RecipeId) and optionally deactivates the current active plan.
+    /// </summary>
+    [HttpPost("clients/{clientId:guid}/assign-from-template")]
+    public async Task<IActionResult> AssignFromTemplate(
+        Guid clientId,
+        [FromBody] AssignFromTemplateRequest request)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        var link = await _appDb.DietitianClientLinks
+            .FirstOrDefaultAsync(l => l.DietitianId == dietitianId &&
+                                     l.ClientId == clientId &&
+                                     l.IsActive);
+        if (link == null)
+            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND", "Client not found"));
+
+        var template = await _appDb.MealPlanTemplates
+            .Include(t => t.Items)
+            .FirstOrDefaultAsync(t => t.Id == request.TemplateId && t.DietitianId == dietitianId);
+
+        if (template == null)
+            return NotFound(ApiProblems.NotFound("TEMPLATE_NOT_FOUND", "Template not found"));
+
+        if (!DateTime.TryParse(request.StartDate, out var startDate))
+            return BadRequest(ApiProblems.Validation("INVALID_START_DATE", "Invalid start date"));
+
+        DateTime? endDate = null;
+        if (!string.IsNullOrWhiteSpace(request.EndDate) && DateTime.TryParse(request.EndDate, out var ed))
+            endDate = DateTime.SpecifyKind(ed.Date, DateTimeKind.Utc);
+
+        var startUtc = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
+
+        // Deactivate current active plan if requested
+        if (request.DeactivateCurrent)
+        {
+            var currentPlan = await _appDb.ClientMealPlans
+                .Where(p => p.ClientId == clientId && p.IsActive)
+                .ToListAsync();
+            foreach (var cp in currentPlan) cp.Deactivate();
+        }
+
+        var planName = string.IsNullOrWhiteSpace(request.Name) ? template.Name : request.Name;
+        var mealPlan = new ClientMealPlan(clientId, dietitianId, planName, startUtc, endDate, template.Description);
+        _appDb.ClientMealPlans.Add(mealPlan);
+
+        // Only create ClientMeal entries for template items that have a RecipeId
+        var recipeItems = template.Items.Where(i => i.RecipeId.HasValue).ToList();
+        foreach (var item in recipeItems)
+        {
+            // Map PlanMealItemType enum ordinal to day-of-week by order index (cycle Mon–Sun)
+            var dow = item.OrderIndex % 7;
+            var mealType = item.MealType.ToString().ToLower() switch
+            {
+                "breakfast" => "breakfast",
+                "lunch"     => "lunch",
+                "dinner"    => "dinner",
+                _           => "snack"
+            };
+            _appDb.ClientMeals.Add(new ClientMeal(mealPlan.Id, item.RecipeId!.Value, dow, mealType));
+        }
+
+        // Write plan_assigned activity event
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId,
+            dietitianId,
+            "plan_assigned",
+            new { planId = mealPlan.Id.ToString(), planName = mealPlan.Name, templateName = template.Name }));
+
+        await _appDb.SaveChangesAsync();
+
+        return Ok(new
+        {
+            id             = mealPlan.Id,
+            name           = mealPlan.Name,
+            startDate      = mealPlan.StartDate.ToString("yyyy-MM-dd"),
+            endDate        = mealPlan.EndDate?.ToString("yyyy-MM-dd"),
+            mealsCreated   = recipeItems.Count,
+            templateName   = template.Name
+        });
+    }
+
+    /// <summary>
+    /// Update an existing client meal plan's name/description/dates (does not touch meals).
+    /// Writes a plan_updated activity event.
+    /// </summary>
+    [HttpPatch("{planId:guid}")]
+    public async Task<IActionResult> UpdateClientPlan(
+        Guid planId,
+        [FromBody] UpdateClientPlanRequest request)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        var plan = await _appDb.ClientMealPlans
+            .FirstOrDefaultAsync(p => p.Id == planId && p.DietitianId == dietitianId);
+
+        if (plan == null)
+            return NotFound(ApiProblems.NotFound("PLAN_NOT_FOUND", "Plan not found"));
+
+        // Apply updates — use existing fields as fallback when omitted
+        var newName = string.IsNullOrWhiteSpace(request.Name) ? plan.Name : request.Name;
+        var newDescription = request.Description ?? plan.Description;
+
+        DateTime newStartDate = plan.StartDate;
+        if (!string.IsNullOrWhiteSpace(request.StartDate) && DateTime.TryParse(request.StartDate, out var sd))
+            newStartDate = DateTime.SpecifyKind(sd.Date, DateTimeKind.Utc);
+
+        DateTime? newEndDate = plan.EndDate;
+        if (request.EndDate is not null)
+        {
+            newEndDate = string.IsNullOrWhiteSpace(request.EndDate)
+                ? null
+                : DateTime.TryParse(request.EndDate, out var ed)
+                    ? DateTime.SpecifyKind(ed.Date, DateTimeKind.Utc)
+                    : plan.EndDate;
+        }
+
+        plan.UpdateDetails(newName, newDescription, newStartDate, newEndDate);
+
+        // Write plan_updated activity event
+        _appDb.ClientActivities.Add(new ClientActivity(
+            plan.ClientId,
+            dietitianId,
+            "plan_updated",
+            new { planId = plan.Id.ToString(), planName = plan.Name }));
+
+        await _appDb.SaveChangesAsync();
+
+        return Ok(new
+        {
+            id          = plan.Id,
+            name        = plan.Name,
+            description = plan.Description,
+            startDate   = plan.StartDate.ToString("yyyy-MM-dd"),
+            endDate     = plan.EndDate?.ToString("yyyy-MM-dd"),
+        });
     }
 
     /// <summary>
@@ -243,6 +409,13 @@ public class DietitianPlanController : ControllerBase
 }
 
 // DTOs
+public record AssignFromTemplateRequest(
+    Guid TemplateId,
+    string StartDate,
+    string? EndDate = null,
+    string? Name = null,
+    bool DeactivateCurrent = true);
+
 public record AssignPlanRequest(
     string Name,
     string? Description,
@@ -255,3 +428,9 @@ public record MealRequest(
     int DayOfWeek,
     string MealType,
     int Servings);
+
+public record UpdateClientPlanRequest(
+    string? Name = null,
+    string? Description = null,
+    string? StartDate = null,
+    string? EndDate = null);

@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { Card } from '@/components/ui/Card';
 import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -21,14 +20,11 @@ export function AuthGuard({ children, requiredRole = 'dietitian' }: AuthGuardPro
   const hasChecked = useRef(false);
 
   useEffect(() => {
-    // Prevent double-check in React StrictMode
     if (hasChecked.current) {
       return;
     }
 
-    // SAFEGUARD: If already on auth page, don't check
     if (pathname.startsWith('/auth')) {
-      console.log('[AuthGuard] Already on auth page, skipping check');
       setIsChecking(false);
       return;
     }
@@ -37,15 +33,11 @@ export function AuthGuard({ children, requiredRole = 'dietitian' }: AuthGuardPro
       try {
         hasChecked.current = true;
 
-        // Middleware already validated token, this is just for role checking
-        // If we reach here, user is authenticated (middleware allowed access)
         const response = await fetch('/api/auth/me', {
           credentials: 'include',
         });
 
         if (!response.ok) {
-          // Middleware should have caught this, but just in case
-          console.log('[AuthGuard] Unexpected auth failure, middleware should have redirected');
           setError('error');
           setIsChecking(false);
           return;
@@ -53,34 +45,30 @@ export function AuthGuard({ children, requiredRole = 'dietitian' }: AuthGuardPro
 
         const data = await response.json();
 
-        // Check role if required
         if (requiredRole && data.role !== requiredRole) {
-          console.log('[AuthGuard] Forbidden - wrong role');
           setError('forbidden');
           setIsAuthorized(false);
           setIsChecking(false);
           return;
         }
 
-        console.log('[AuthGuard] Authorized');
         setIsAuthorized(true);
         setIsChecking(false);
-      } catch (err) {
-        console.error('[AuthGuard] Auth check failed:', err);
+      } catch {
         setError('error');
         setIsChecking(false);
       }
     }
 
-    checkAuth();
-  }, [pathname, router, requiredRole]);
+    void checkAuth();
+  }, [pathname, requiredRole, router]);
 
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="space-y-4 w-full max-w-md p-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">Verifying authentication...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="w-full max-w-md space-y-4 p-8 text-center">
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-primary" />
+          <p className="text-muted-foreground">Oturum doğrulanıyor...</p>
         </div>
       </div>
     );
@@ -88,17 +76,17 @@ export function AuthGuard({ children, requiredRole = 'dietitian' }: AuthGuardPro
 
   if (error === 'forbidden') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="p-12 text-center max-w-md">
-          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="w-8 h-8 text-destructive" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Card className="max-w-md p-12 text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+            <AlertCircle className="h-8 w-8 text-destructive" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Access Denied</h1>
-          <p className="text-muted-foreground mb-6">
-            You don't have permission to access this page. This area is restricted to dietitians only.
+          <h1 className="mb-2 text-2xl font-bold text-foreground">Erişim engellendi</h1>
+          <p className="mb-6 text-muted-foreground">
+            Bu sayfayı görüntüleme yetkiniz bulunmuyor. Bu alan yalnızca diyetisyen hesaplarına açıktır.
           </p>
           <Button variant="primary" onClick={() => router.replace('/auth/login')}>
-            Go to Login
+            Girişe dön
           </Button>
         </Card>
       </div>
@@ -107,17 +95,17 @@ export function AuthGuard({ children, requiredRole = 'dietitian' }: AuthGuardPro
 
   if (error === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="p-12 text-center max-w-md">
-          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="w-8 h-8 text-destructive" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Card className="max-w-md p-12 text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+            <AlertCircle className="h-8 w-8 text-destructive" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Authentication Error</h1>
-          <p className="text-muted-foreground mb-6">
-            There was a problem verifying your authentication. Please try logging in again.
+          <h1 className="mb-2 text-2xl font-bold text-foreground">Doğrulama hatası</h1>
+          <p className="mb-6 text-muted-foreground">
+            Oturum doğrulanırken bir sorun oluştu. Lütfen tekrar giriş yapın.
           </p>
           <Button variant="primary" onClick={() => router.replace('/auth/login')}>
-            Go to Login
+            Girişe dön
           </Button>
         </Card>
       </div>

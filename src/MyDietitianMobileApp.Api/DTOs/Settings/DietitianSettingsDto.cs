@@ -11,6 +11,9 @@ public class DietitianSettingsDto
     public string AccentColorHex { get; set; } = "#8FBC8F";
     public string? ThemePresetKey { get; set; }
     public string? LogoUrl { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Bio { get; set; }
+    public string? WebsiteUrl { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -24,4 +27,7 @@ public class UpdateDietitianSettingsDto
     public string PrimaryColorHex { get; set; } = "#4A7C59";
     public string AccentColorHex { get; set; } = "#8FBC8F";
     public string? ThemePresetKey { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Bio { get; set; }
+    public string? WebsiteUrl { get; set; }
 }

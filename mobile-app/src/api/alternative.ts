@@ -5,20 +5,60 @@ import type {
   Ingredient,
 } from "../types/alternative";
 
+// ─── Recipe Plan Context ───────────────────────────────────────────────────────
+
+export interface RecipeIngredientItem {
+  id: string;
+  name: string;
+}
+
+export interface RecipePlanContext {
+  recipeId: string;
+  recipeName: string;
+  description: string;
+  steps: string[];
+  caloriesKcal?: number;
+  proteinGrams?: number;
+  carbsGrams?: number;
+  fatGrams?: number;
+  ingredients: {
+    mandatory: RecipeIngredientItem[];
+    optional: RecipeIngredientItem[];
+  };
+}
+
+export async function getRecipePlanContext(recipeId: string): Promise<RecipePlanContext> {
+  const res = await apiClient.get<RecipePlanContext>(`/api/client/recipes/${recipeId}/plan-context`);
+  return res.data;
+}
+
+// Shape returned by GET /api/ingredients/search?q=...
+interface IngredientSearchResponse {
+  page: number;
+  pageSize: number;
+  total: number;
+  ingredients: Ingredient[];
+}
+
 const FALLBACK: Ingredient[] = [
-  { id: "egg", canonicalName: "Egg" },
-  { id: "yogurt", canonicalName: "Yogurt" },
-  { id: "tuna", canonicalName: "Tuna" },
-  { id: "tomato", canonicalName: "Tomato" },
-  { id: "cucumber", canonicalName: "Cucumber" },
+  { id: "yumurta-fallback", canonicalName: "Yumurta" },
+  { id: "yogurt-fallback",  canonicalName: "Yoğurt" },
+  { id: "domates-fallback", canonicalName: "Domates" },
+  { id: "tavuk-fallback",   canonicalName: "Tavuk Göğsü" },
+  { id: "sut-fallback",     canonicalName: "Süt" },
 ];
 
 export async function searchIngredients(query: string): Promise<Ingredient[]> {
-  // If backend endpoint differs, UI still works with fallback list
   try {
-    const res = await apiClient.get<Ingredient[]>("/api/ingredients/search", { params: { query } });
-    return res.data ?? [];
+    // Primary param is "q"; backend also accepts legacy "query" alias
+    const res = await apiClient.get<IngredientSearchResponse>(
+      "/api/ingredients/search",
+      { params: { q: query } }
+    );
+    // Extract the nested ingredients array from the paginated response envelope
+    return res.data?.ingredients ?? [];
   } catch {
+    // Network/server error → show local fallback filtered by query
     const q = query.trim().toLowerCase();
     return FALLBACK.filter((i) => i.canonicalName.toLowerCase().includes(q));
   }

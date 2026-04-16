@@ -1,8 +1,6 @@
 {
-  "/api/dietitian/dashboard/activity/route": "app/api/dietitian/dashboard/activity/route.js",
-  "/api/dietitian/dashboard/stats/route": "app/api/dietitian/dashboard/stats/route.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/clients/page": "app/dashboard/clients/page.js",
-  "/dashboard/plans/page": "app/dashboard/plans/page.js",
-  "/dashboard/recipe-match/page": "app/dashboard/recipe-match/page.js"
+  "/dashboard/appointments/page": "app/dashboard/appointments/page.js",
+  "/dashboard/clients/[clientId]/page": "app/dashboard/clients/[clientId]/page.js",
+  "/dashboard/plans/page": "app/dashboard/plans/page.js"
 }

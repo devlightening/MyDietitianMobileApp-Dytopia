@@ -66,6 +66,20 @@ public class LlmNormalizationTests
         }
     }
 
+    private sealed class ThrowingLlmClient : IIngredientLlmClient
+    {
+        public int CallCount { get; private set; }
+
+        public Task<LlmIngredientMatchResult> MatchAsync(
+            string normalizedInput,
+            IReadOnlyList<LlmCandidateIngredient> candidates,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            throw new InvalidOperationException("Synthetic LLM failure");
+        }
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
     private static AppDbContext CreateDb()
@@ -423,6 +437,38 @@ public class LlmNormalizationTests
         Assert.Equal(IngredientMatchStatus.Unmatched, result.Status);
         Assert.Equal(IngredientMatchedBy.None, result.MatchedBy);
         _output.WriteLine("✓ NullIngredientLlmClient produces same behavior as pre-LLM pipeline");
+    }
+
+    [Fact]
+    public async Task IExtra_ShortlistEmpty_DoesNotCallLlm()
+    {
+        var db = CreateDb();
+        await SeedAsync(db);
+        var fakeLlm = new FakeLlmClient(LlmIngredientMatchResult.None("should never be called"));
+        var svc = CreateSvcWithLlm(db, fakeLlm);
+
+        var result = await svc.NormalizeAsync("zzzz qqqq unmatched ingredient");
+
+        Assert.Equal(0, fakeLlm.CallCount);
+        Assert.Equal(IngredientMatchStatus.Unmatched, result.Status);
+        Assert.Equal(IngredientMatchedBy.None, result.MatchedBy);
+    }
+
+    [Fact]
+    public async Task IExtra_LlmException_FallsBackToUnmatched()
+    {
+        var db = CreateDb();
+        await SeedAsync(db);
+        var throwingLlm = new ThrowingLlmClient();
+        var opts = new LlmNormalizationOptions { Enabled = true, MinConfidenceToAccept = 0.75, MinConfidenceForAmbiguous = 0.50 };
+        var builder = new IngredientLlmCandidateBuilder(db, opts);
+        var svc = new IngredientNormalizationService(db, throwingLlm, builder, opts);
+
+        var result = await svc.NormalizeAsync("light ton");
+
+        Assert.Equal(1, throwingLlm.CallCount);
+        Assert.Equal(IngredientMatchStatus.Unmatched, result.Status);
+        Assert.Equal(IngredientMatchedBy.None, result.MatchedBy);
     }
 
     // ─── Inline InMemoryIngredientRepository (same as NormalizedSearchIntegrationTests) ──────

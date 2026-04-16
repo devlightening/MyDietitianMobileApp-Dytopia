@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 
-// Redirect old settings page to new branding page
-export default function OldSettingsPage() {
-  redirect('/dashboard/settings/branding');
+export default function SettingsIndexPage() {
+  redirect('/dashboard/settings/profile');
 }

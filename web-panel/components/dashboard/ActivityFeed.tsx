@@ -1,185 +1,280 @@
 'use client';
 
-import { Card } from '@/components/ui/Card';
 import { useQuery } from '@tanstack/react-query';
 import { getActivityFeed, ActivityFeedItem } from '@/lib/api/dashboard';
 import {
+  Activity,
+  Calendar,
+  CalendarCheck,
+  CheckCircle2,
+  ChefHat,
+  Clock,
+  Crown,
+  Droplets,
+  Dumbbell,
+  Flame,
+  Gift,
+  LucideIcon,
+  Rabbit,
+  Shuffle,
+  Siren,
+  Sparkles,
+  Trophy,
   User,
   Utensils,
   Weight,
-  Calendar,
-  CheckCircle2,
-  Clock
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/Skeleton';
 
-function getActivityIcon(type: ActivityFeedItem['type']) {
-  switch (type) {
-    case 'login':
-      return User;
-    case 'meal_logged':
-      return Utensils;
-    case 'weight_update':
-      return Weight;
-    case 'plan_assigned':
-      return Calendar;
-    case 'compliance':
-      return CheckCircle2;
-    default:
-      return Clock;
+const ICON_MAP: Record<ActivityFeedItem['type'], LucideIcon> = {
+  client_linked: User,
+  login: User,
+  meal_logged: Utensils,
+  weight_update: Weight,
+  plan_assigned: Calendar,
+  compliance: CheckCircle2,
+  badge_unlocked: Trophy,
+  streak_milestone: Flame,
+  streak_at_risk: Siren,
+};
+
+const COLOR_MAP: Record<ActivityFeedItem['type'], { bg: string; color: string }> = {
+  client_linked: { bg: 'rgba(71, 185, 114, 0.12)', color: 'var(--brand-emerald)' },
+  login: { bg: 'rgba(71, 185, 114, 0.12)', color: 'var(--brand-emerald)' },
+  meal_logged: { bg: 'rgba(87, 184, 199, 0.12)', color: 'var(--brand-accent)' },
+  weight_update: { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426' },
+  plan_assigned: { bg: 'rgba(122, 141, 214, 0.12)', color: '#6f82d8' },
+  compliance: { bg: 'rgba(71, 185, 114, 0.12)', color: 'var(--brand-emerald)' },
+  badge_unlocked: { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426' },
+  streak_milestone: { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)' },
+  streak_at_risk: { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)' },
+};
+
+type BadgeVisual = {
+  label: string;
+  Icon: LucideIcon;
+  bg: string;
+  color: string;
+};
+
+const BADGE_VISUALS: Record<string, BadgeVisual> = {
+  protein_focus: {
+    label: 'Protein Canavarı',
+    Icon: Dumbbell,
+    bg: 'rgba(71, 185, 114, 0.12)',
+    color: 'var(--brand-emerald)',
+  },
+  veggie_focus: {
+    label: 'Sebze Dostu',
+    Icon: Rabbit,
+    bg: 'rgba(227, 196, 93, 0.14)',
+    color: '#b99426',
+  },
+  kitchen_spark: {
+    label: 'Mutfak Kıvılcımı',
+    Icon: ChefHat,
+    bg: 'rgba(87, 184, 199, 0.12)',
+    color: 'var(--brand-accent)',
+  },
+  water_keeper: {
+    label: 'Su Koruyucusu',
+    Icon: Droplets,
+    bg: 'rgba(87, 184, 199, 0.12)',
+    color: 'var(--brand-accent)',
+  },
+  flex_saver: {
+    label: 'Esnek Uyum',
+    Icon: Shuffle,
+    bg: 'rgba(227, 196, 93, 0.14)',
+    color: '#b99426',
+  },
+  plan_keeper: {
+    label: 'Plan Koruyucu',
+    Icon: CalendarCheck,
+    bg: 'rgba(71, 185, 114, 0.12)',
+    color: 'var(--brand-emerald)',
+  },
+  streak_3: {
+    label: '3 Günlük Seri',
+    Icon: Flame,
+    bg: 'rgba(229, 126, 107, 0.12)',
+    color: 'var(--brand-coral)',
+  },
+  perfect_day: {
+    label: 'Mükemmel Uyum',
+    Icon: Gift,
+    bg: 'rgba(87, 184, 199, 0.12)',
+    color: 'var(--brand-accent)',
+  },
+  streak_7: {
+    label: 'Haftalık Seri',
+    Icon: CalendarCheck,
+    bg: 'rgba(71, 185, 114, 0.12)',
+    color: 'var(--brand-emerald)',
+  },
+  streak_14: {
+    label: 'Ritim Ustası',
+    Icon: Crown,
+    bg: 'rgba(227, 196, 93, 0.14)',
+    color: '#b99426',
+  },
+};
+
+function getBadgeVisual(badgeId?: string): BadgeVisual {
+  if (badgeId && BADGE_VISUALS[badgeId]) {
+    return BADGE_VISUALS[badgeId];
   }
+
+  return {
+    label: 'Rozet',
+    Icon: Sparkles,
+    bg: 'rgba(227, 196, 93, 0.14)',
+    color: '#b99426',
+  };
 }
 
-function getActivityColor(type: ActivityFeedItem['type']) {
-  switch (type) {
-    case 'login':
-      return 'bg-primary/10 text-primary';
-    case 'meal_logged':
-      return 'bg-accent/10 text-accent';
-    case 'weight_update':
-      return 'bg-action/10 text-action';
-    case 'plan_assigned':
-      return 'bg-primary/10 text-primary';
-    case 'compliance':
-      return 'bg-action/10 text-action';
-    default:
-      return 'bg-muted text-muted-foreground';
-  }
+function BadgeToken({ badgeId }: { badgeId?: string }) {
+  const badge = getBadgeVisual(badgeId);
+
+  return (
+    <div className="group relative inline-flex flex-shrink-0">
+      <div
+        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/80 shadow-sm"
+        style={{ background: badge.bg, color: badge.color }}
+        aria-label={badge.label}
+        title={badge.label}
+      >
+        <badge.Icon className="h-4 w-4" />
+      </div>
+      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-slate-950 px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {badge.label}
+      </div>
+    </div>
+  );
 }
 
-function getActivityDescription(activity: ActivityFeedItem): string {
+function getDescription(activity: ActivityFeedItem): string {
   switch (activity.type) {
+    case 'client_linked':
+      return activity.metadata?.note || 'kliniğe bağlandı';
     case 'login':
-      return 'logged in to the app';
+      return 'uygulamaya giriş yaptı';
     case 'meal_logged':
-      return `logged meal: ${activity.metadata?.mealName || 'Unknown'}`;
+      return `öğün kaydetti: ${activity.metadata?.mealName || ''}`;
     case 'weight_update':
-      return `updated weight to ${activity.metadata?.weight || 0} kg`;
+      return `kilo güncelledi: ${activity.metadata?.weight || 0} kg`;
     case 'plan_assigned':
-      return `was assigned plan: ${activity.metadata?.planName || 'Unknown'}`;
+      return `plana atandı: ${activity.metadata?.planName || ''}`;
     case 'compliance':
-      return `compliance rate: ${activity.metadata?.complianceRate || 0}%`;
+      return `uyum oranı: %${activity.metadata?.complianceRate || 0}`;
+    case 'badge_unlocked':
+      return 'yeni rozet kazandı';
+    case 'streak_milestone':
+      return `${activity.metadata?.currentStreak || 0} günlük seri seviyesine ulaştı`;
+    case 'streak_at_risk':
+      return 'günlük ritim zayıflıyor';
     default:
-      return 'performed an action';
+      return 'bir hareket gerçekleştirdi';
   }
 }
 
-function formatTimestamp(timestamp: string): string {
-  const date = new Date(timestamp);
+function formatTime(value: string): string {
+  const date = new Date(value);
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
+  const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (diffMinutes < 1) return 'Az önce';
+  if (diffMinutes < 60) return `${diffMinutes} dk önce`;
+
+  const hours = Math.floor(diffMinutes / 60);
+  if (hours < 24) return `${hours} sa önce`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} gün önce`;
+
+  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 }
 
 export function ActivityFeed() {
   const { data: activities, isLoading } = useQuery({
     queryKey: ['activity-feed'],
     queryFn: () => getActivityFeed(15),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
   });
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-foreground">Live Activity Feed</h3>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-action animate-pulse" />
-          <span className="text-sm text-muted-foreground">Live</span>
+    <section className="card-sfcos h-full p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Activity className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Canlı akış</h2>
+            <p className="text-sm text-muted-foreground">Danışan hareketleri ve uygulamadan gelen son olaylar</p>
+          </div>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+          <span className="h-2 w-2 rounded-full bg-primary" />
+          30 sn yenilenir
         </div>
       </div>
 
       {isLoading ? (
         <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <Skeleton className="w-10 h-10 rounded-lg flex-shrink-0" />
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="flex items-start gap-3 rounded-2xl bg-surface-overlay px-4 py-4">
+              <div className="h-10 w-10 rounded-2xl shimmer" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/4" />
+                <div className="h-4 w-2/3 rounded-xl shimmer" />
+                <div className="h-3 w-1/3 rounded-xl shimmer" />
               </div>
             </div>
           ))}
         </div>
       ) : !activities || activities.length === 0 ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 px-1 mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 bg-muted px-1.5 py-0.5 rounded">
-              Sample Data
-            </span>
-            <p className="text-[10px] text-muted-foreground italic">Showing sample activity while feed is empty</p>
-          </div>
-          {[
-            { id: 's1', clientName: 'Ali Yılmaz', type: 'meal_logged', timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), metadata: { mealName: 'Tavuklu Salata' } },
-            { id: 's2', clientName: 'Ayşe Demir', type: 'weight_update', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), metadata: { weight: 64.2 } },
-            { id: 's3', clientName: 'Mehmet Can', type: 'compliance', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), metadata: { complianceRate: 92 } },
-            { id: 's4', clientName: 'Zeynep Kaya', type: 'plan_assigned', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), metadata: { planName: 'Kilo Verme Programı' } },
-            { id: 's5', clientName: 'Fatma Şahin', type: 'meal_logged', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(), metadata: { mealName: 'Yulaf Ezmesi' } }
-          ].map((activity) => {
-            const Icon = getActivityIcon(activity.type as any);
-            const colorClass = getActivityColor(activity.type as any);
-
-            return (
-              <div
-                key={activity.id}
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors border border-transparent hover:border-border/50"
-              >
-                <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', colorClass)}>
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">
-                    <span className="font-medium">{activity.clientName}</span>{' '}
-                    <span className="text-muted-foreground">
-                      {getActivityDescription(activity as any)}
-                    </span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatTimestamp(activity.timestamp)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+        <div className="rounded-2xl border border-dashed border-border bg-surface-overlay px-6 py-12 text-center">
+          <Clock className="mx-auto h-10 w-10 text-muted-foreground" />
+          <p className="mt-4 text-sm font-semibold text-foreground">Henüz aktivite kaydı yok</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Uygulama kullanımı arttıkça bu alan daha anlamlı hale gelecek.
+          </p>
         </div>
       ) : (
-        <div className="space-y-4 max-h-[400px] overflow-y-auto">
+        <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
           {activities.map((activity) => {
-            const Icon = getActivityIcon(activity.type);
-            const colorClass = getActivityColor(activity.type);
+            const Icon = ICON_MAP[activity.type] ?? Clock;
+            const colors = COLOR_MAP[activity.type] ?? {
+              bg: 'rgba(24, 51, 36, 0.05)',
+              color: 'hsl(var(--muted-foreground))',
+            };
 
             return (
               <div
                 key={activity.id}
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors"
+                className="flex items-start gap-3 rounded-2xl border border-border/80 bg-white/70 px-4 py-4 transition hover:border-primary/15 hover:bg-primary/5"
               >
-                <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', colorClass)}>
-                  <Icon className="w-5 h-5" />
+                <div
+                  className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl"
+                  style={{ background: colors.bg, color: colors.color }}
+                >
+                  <Icon className="h-4 w-4" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">
-                    <span className="font-medium">{activity.clientName}</span>{' '}
-                    <span className="text-muted-foreground">
-                      {getActivityDescription(activity)}
-                    </span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatTimestamp(activity.timestamp)}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-sm leading-6 text-foreground">
+                      <span className="font-semibold">{activity.clientName}</span> {getDescription(activity)}
+                    </p>
+                    {activity.type === 'badge_unlocked' ? (
+                      <BadgeToken badgeId={activity.metadata?.badgeId} />
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{formatTime(activity.timestamp)}</p>
                 </div>
               </div>
             );
           })}
         </div>
       )}
-    </Card>
+    </section>
   );
 }

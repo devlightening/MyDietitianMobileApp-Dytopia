@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,287 +8,357 @@ import {
   Alert,
   ScrollView,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Animated,
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../auth/AuthContext';
 import { Gender } from '../types/auth';
-import { colors, spacing } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { useTranslation } from '../context/I18nContext';
+import { radii, spacing } from '../theme/tokens';
+import ProduceBubble from '../components/decor/ProduceBubble';
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [gender, setGender] = useState<Gender>(Gender.Male);
   const [birthDate, setBirthDate] = useState(new Date(2000, 0, 1));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-
   const { register } = useAuth();
   const navigation = useNavigation();
+  const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 650, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 650, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const isValid = fullName.trim() && email.includes('@') && password.length >= 6;
 
   async function handleRegister() {
     if (!isValid) {
-      Alert.alert('Hata', 'Lütfen tüm alanları doğru doldurun');
+      Alert.alert('Hata', 'Lütfen tüm alanları doldurun');
       return;
     }
-
-    // Check age - must be at least 13
-    const today = new Date();
-    const age = today.getFullYear() - birthDate.getFullYear();
+    const age = new Date().getFullYear() - birthDate.getFullYear();
     if (age < 13) {
       Alert.alert('Hata', 'En az 13 yaşında olmalısınız');
       return;
     }
-
     setLoading(true);
     try {
-      const birthDateStr = birthDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      await register(email, password, fullName, gender, birthDateStr);
-    } catch (error: any) {
-      Alert.alert(
-        'Kayıt Başarısız',
-        error.response?.data?.message || 'Bir hata oluştu'
-      );
+      await register(email, password, fullName, gender, birthDate.toISOString().split('T')[0]);
+    } catch (e: any) {
+      Alert.alert('Kayıt Başarısız', e.response?.data?.detail || e.response?.data?.message || e.message || 'Bir hata oluştu');
     } finally {
       setLoading(false);
     }
   }
 
+  const genderOpts: { v: Gender; l: string }[] = [
+    { v: Gender.Male, l: t.auth.genderMale },
+    { v: Gender.Female, l: t.auth.genderFemale },
+    { v: Gender.Other, l: t.auth.genderOther },
+  ];
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[s.outer, { backgroundColor: theme.bg }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backText}>← Geri</Text>
-        </TouchableOpacity>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
+      <ProduceBubble
+        icon="food-apple-outline"
+        iconSize={34}
+        iconColor={`${theme.primary}42`}
+        style={[s.topGlow, { backgroundColor: theme.primaryGlow }]}
+      />
+      <ProduceBubble
+        icon="fruit-pear"
+        iconSize={38}
+        iconColor={`${theme.primary}46`}
+        style={[s.bottomGlow, { backgroundColor: theme.emeraldGlow }]}
+      />
 
-        <Text style={styles.title}>Hesap Oluştur</Text>
-        <Text style={styles.subtitle}>Profilinizi oluşturun</Text>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={18} color={theme.primaryDark} />
+            <Text style={[s.backTxt, { color: theme.primaryDark }]}>{t.common.back}</Text>
+          </TouchableOpacity>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Ad Soyad</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ad Soyad"
-            value={fullName}
-            onChangeText={setFullName}
-            autoCapitalize="words"
-            editable={!loading}
-          />
+          <View style={[s.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={s.heroTop}>
+              <View style={[s.logoWrap, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '35' }]}>
+                <Ionicons name="leaf" size={28} color={theme.primaryDark} />
+              </View>
+              <View style={[s.heroBadge, { backgroundColor: theme.surfaceElevated }]}>
+                <Text style={[s.heroBadgeText, { color: theme.emerald }]}>Start fresh</Text>
+              </View>
+            </View>
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="email@example.com"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
-
-          <Text style={styles.label}>Şifre</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="En az 6 karakter"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
-
-          <Text style={styles.label}>Cinsiyet</Text>
-          <View style={styles.genderContainer}>
-            {[Gender.Male, Gender.Female, Gender.Other].map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[
-                  styles.genderButton,
-                  gender === g && styles.genderButtonActive
-                ]}
-                onPress={() => setGender(g)}
-                disabled={loading}
-              >
-                <Text style={[
-                  styles.genderText,
-                  gender === g && styles.genderTextActive
-                ]}>
-                  {g === Gender.Male ? 'Erkek' : g === Gender.Female ? 'Kadın' : 'Diğer'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <Text style={[s.title, { color: theme.text }]}>{t.auth.registerTitle}</Text>
+            <Text style={[s.subTxt, { color: theme.textSub }]}>{t.auth.registerSubtitle}</Text>
           </View>
 
-          <Text style={styles.label}>Doğum Tarihi</Text>
+          <View style={[s.card, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+            <View style={s.field}>
+              <Text style={[s.lbl, { color: theme.textSub }]}>{t.auth.fullName}</Text>
+              <TextInput
+                style={[s.inp, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, color: theme.text }]}
+                placeholder="Adınız Soyadınız"
+                placeholderTextColor={theme.textMuted}
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                editable={!loading}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={[s.lbl, { color: theme.textSub }]}>{t.auth.email}</Text>
+              <TextInput
+                style={[s.inp, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, color: theme.text }]}
+                placeholder="email@example.com"
+                placeholderTextColor={theme.textMuted}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={[s.lbl, { color: theme.textSub }]}>{t.auth.password}</Text>
+              <View style={[s.pwRow, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                <TextInput
+                  style={[s.pwInp, { color: theme.text }]}
+                  placeholder="En az 6 karakter"
+                  placeholderTextColor={theme.textMuted}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPw}
+                  editable={!loading}
+                  autoCorrect={false}
+                />
+                <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPw((v) => !v)}>
+                  <Ionicons name={showPw ? 'eye-outline' : 'eye-off-outline'} size={18} color={theme.textMuted} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={s.field}>
+              <Text style={[s.lbl, { color: theme.textSub }]}>{t.auth.gender}</Text>
+              <View style={s.genderRow}>
+                {genderOpts.map(({ v, l }) => (
+                  <TouchableOpacity
+                    key={v}
+                    style={[
+                      s.genderPill,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
+                      gender === v && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    ]}
+                    onPress={() => setGender(v)}
+                    disabled={loading}
+                  >
+                    <Text style={[s.genderTxt, { color: theme.text }, gender === v && { color: '#FFF' }]}>
+                      {l}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={s.field}>
+              <Text style={[s.lbl, { color: theme.textSub }]}>{t.auth.birthDate}</Text>
+              <TouchableOpacity
+                style={[s.dateBtn, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+                onPress={() => setShowDatePicker(true)}
+                disabled={loading}
+              >
+                <Ionicons name="calendar-outline" size={16} color={theme.primaryDark} />
+                <Text style={[s.dateTxt, { color: theme.text }]}>
+                  {birthDate.toLocaleDateString('tr-TR')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={birthDate}
+                mode="date"
+                display="spinner"
+                onChange={(_event: any, d?: Date) => {
+                  setShowDatePicker(Platform.OS === 'ios');
+                  if (d) setBirthDate(d);
+                }}
+                maximumDate={new Date()}
+              />
+            )}
+
+            <TouchableOpacity
+              style={[
+                s.regBtn,
+                { backgroundColor: theme.primary, shadowColor: theme.primaryGlow },
+                (!isValid || loading) && s.btnDis,
+              ]}
+              onPress={handleRegister}
+              disabled={!isValid || loading}
+              activeOpacity={0.85}
+            >
+              {loading ? <ActivityIndicator color="#FFF" size="small" /> : (
+                <>
+                  <Text style={s.regBtnTxt}>{t.auth.registerBtn}</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
+            style={s.link}
+            onPress={() => navigation.navigate('Login' as never)}
             disabled={loading}
           >
-            <Text style={styles.dateText}>
-              {birthDate.toLocaleDateString('tr-TR')}
+            <Text style={[s.linkTxt, { color: theme.textSub }]}>
+              {t.auth.hasAccount}{' '}
+              <Text style={[s.linkBold, { color: theme.primary }]}>{t.auth.goToLogin}</Text>
             </Text>
           </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={birthDate}
-              mode="date"
-              display="spinner"
-              onChange={(_event: any, selectedDate?: Date) => {
-                setShowDatePicker(Platform.OS === 'ios');
-                if (selectedDate) {
-                  setBirthDate(selectedDate);
-                }
-              }}
-              maximumDate={new Date()}
-            />
-          )}
-
-          <TouchableOpacity
-            style={[styles.button, (!isValid || loading) && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={!isValid || loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Kayıt yapılıyor...' : 'Kayıt Ol'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.linkButton}
-            onPress={() => navigation.navigate('Login' as never)} // Routes.Auth.Login
-            disabled={loading}
-          >
-            <Text style={styles.linkText}>
-              Zaten hesabınız var mı? <Text style={styles.linkTextBold}>Giriş Yap</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+const s = StyleSheet.create({
+  outer: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.xl },
+  topGlow: {
+    position: 'absolute',
+    top: -90,
+    right: -70,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    opacity: 0.95,
   },
-  scrollContent: {
-    flexGrow: 1,
-    padding: spacing.lg,
+  bottomGlow: {
+    position: 'absolute',
+    bottom: -90,
+    left: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    opacity: 0.82,
   },
-  backButton: {
+
+  back: {
+    alignSelf: 'flex-start',
     marginBottom: spacing.lg,
-  },
-  backText: {
-    fontSize: 16,
-    color: colors.primary,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textMuted,
-    marginBottom: spacing.xl,
-  },
-  form: {
-    gap: spacing.md,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: -spacing.sm,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.md,
-    fontSize: 16,
-    backgroundColor: colors.card,
-  },
-  genderContainer: {
+    paddingVertical: spacing.xs,
     flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  genderButton: {
-    flex: 1,
-    padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
     alignItems: 'center',
+    gap: 8,
   },
-  genderButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  genderText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-  },
-  genderTextActive: {
-    color: '#ffffff',
-  },
-  dateButton: {
+  backTxt: { fontSize: 15, fontWeight: '700' },
+
+  heroCard: {
+    borderRadius: radii.xxl,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.md,
-    backgroundColor: colors.card,
+    shadowColor: '#183324',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.08,
+    shadowRadius: 28,
+    elevation: 10,
   },
-  dateText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    padding: spacing.md,
-    borderRadius: 12,
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.base },
+  heroBadge: { borderRadius: radii.full, paddingHorizontal: 12, paddingVertical: 8 },
+  heroBadgeText: { fontSize: 12, fontWeight: '800' },
+  logoWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
     alignItems: 'center',
-    marginTop: spacing.md,
-    shadowColor: colors.primary,
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+
+  title: { fontSize: 34, fontWeight: '900', letterSpacing: -0.5, marginBottom: spacing.xs },
+  subTxt: { fontSize: 14, fontWeight: '500', marginBottom: 0, lineHeight: 20 },
+
+  card: {
+    borderRadius: radii.xxl,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
     elevation: 4,
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  linkButton: {
-    marginTop: spacing.md,
+  field: { marginBottom: spacing.base },
+  lbl: { fontSize: 12, fontWeight: '700', marginBottom: spacing.xs, letterSpacing: 0.3 },
+  inp: { height: 52, borderWidth: 1.5, borderRadius: radii.xl, paddingHorizontal: spacing.md, fontSize: 15 },
+  pwRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: radii.xl, height: 52 },
+  pwInp: { flex: 1, height: 52, paddingHorizontal: spacing.md, fontSize: 15 },
+  eyeBtn: { paddingHorizontal: spacing.md, height: 52, justifyContent: 'center' },
+
+  genderRow: { flexDirection: 'row', gap: spacing.sm },
+  genderPill: { flex: 1, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1.5, alignItems: 'center' },
+  genderTxt: { fontSize: 13, fontWeight: '700' },
+
+  dateBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    height: 52,
+    borderWidth: 1.5,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
-  linkText: {
-    color: colors.textMuted,
-    fontSize: 14,
+  dateTxt: { fontSize: 15, fontWeight: '500' },
+
+  regBtn: {
+    marginTop: spacing.sm,
+    paddingVertical: 16,
+    borderRadius: radii.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  linkTextBold: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  btnDis: { opacity: 0.5, shadowOpacity: 0, elevation: 0 },
+  regBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+
+  link: { alignItems: 'center', paddingVertical: spacing.xs },
+  linkTxt: { fontSize: 14 },
+  linkBold: { fontWeight: '700' },
 });

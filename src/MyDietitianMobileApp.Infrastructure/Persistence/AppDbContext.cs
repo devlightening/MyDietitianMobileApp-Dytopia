@@ -9,6 +9,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<Dietitian> Dietitians { get; set; }
         public DbSet<Client> Clients { get; set; }
         public DbSet<Recipe> Recipes { get; set; }
+        public DbSet<DietitianRecipeFavorite> DietitianRecipeFavorites { get; set; }
         public DbSet<Ingredient> Ingredients { get; set; }
         public DbSet<RecipeIngredient> RecipeIngredients { get; set; } = null!;
         public DbSet<RecipeSubstitute> RecipeSubstitutes { get; set; } = null!;
@@ -16,6 +17,10 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ClientIngredientProhibition> ClientIngredientProhibitions { get; set; } = null!;
         public DbSet<AccessKey> AccessKeys { get; set; }
         public DbSet<ClientPantryItem> ClientPantryItems { get; set; }
+        public DbSet<ClientGoalPreference> ClientGoalPreferences { get; set; }
+        public DbSet<ClientShoppingListItem> ClientShoppingListItems { get; set; }
+        public DbSet<ClientCareMessage> ClientCareMessages { get; set; }
+        public DbSet<ClientAppointmentSummary> ClientAppointmentSummaries { get; set; }
         public DbSet<PremiumAuditLog> PremiumAuditLogs { get; set; }
         public DbSet<RecipeIngredientSubstitute> RecipeIngredientSubstitutes { get; set; }
         public DbSet<ClientProhibitedIngredient> ClientProhibitedIngredients { get; set; }
@@ -29,7 +34,12 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ClientDailyTracking> ClientDailyTrackings { get; set; }
         public DbSet<ClientWeightEntry> ClientWeightEntries { get; set; }
         public DbSet<ClientMeasurementEntry> ClientMeasurementEntries { get; set; }
+        public DbSet<ClientMeasurement> ClientMeasurements { get; set; }
+        public DbSet<ClientNotificationPreference> ClientNotificationPreferences { get; set; }
         public DbSet<ClientActivity> ClientActivities { get; set; }
+        public DbSet<ClientEngagementEvent> ClientEngagementEvents { get; set; }
+        public DbSet<ClientAchievementUnlock> ClientAchievementUnlocks { get; set; }
+        public DbSet<ClientGamificationSnapshot> ClientGamificationSnapshots { get; set; }
         public DbSet<MealCompletion> MealCompletions { get; set; }
         public DbSet<DailyComplianceSnapshot> DailyComplianceSnapshots { get; set; }
         public DbSet<DietitianBrandingConfig> DietitianBrandingConfigs { get; set; }
@@ -43,6 +53,10 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         // Meal Plan System (API-PLAN-01)
         public DbSet<MealPlan> MealPlans { get; set; }
         public DbSet<PlanMealItem> PlanMealItems { get; set; }
+
+        // Meal Plan Templates (Faz 3)
+        public DbSet<MealPlanTemplate> MealPlanTemplates { get; set; } = null!;
+        public DbSet<MealPlanTemplateItem> MealPlanTemplateItems { get; set; } = null!;
         
         // Compliance tracking entities
         public DbSet<DietPlan> DietPlans { get; set; }
@@ -60,6 +74,22 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         // Evaluation / logging
         public DbSet<IngredientNormalizationLog> IngredientNormalizationLogs { get; set; }
         public DbSet<RecipeRecommendationLog> RecipeRecommendationLogs { get; set; }
+        public DbSet<ProductBarcodeMapping> ProductBarcodeMappings { get; set; } = null!;
+        public DbSet<IngredientAcquisitionLog> IngredientAcquisitionLogs { get; set; } = null!;
+
+        // Contact form messages (landing page → owner panel)
+        public DbSet<ContactMessage> ContactMessages { get; set; } = null!;
+
+        // Vision / image detection (Multimodal ingredient detection — Session 2)
+        public DbSet<VisionLabelMapping> VisionLabelMappings { get; set; } = null!;
+        public DbSet<IngredientImageDetectionLog> IngredientImageDetectionLogs { get; set; } = null!;
+
+        // Recipe Import (Import Wizard)
+        public DbSet<RecipeImportSession> RecipeImportSessions { get; set; } = null!;
+        public DbSet<RecipeImportSessionRecipe> RecipeImportSessionRecipes { get; set; } = null!;
+        public DbSet<RecipeImportSessionIngredient> RecipeImportSessionIngredients { get; set; } = null!;
+        public DbSet<RecipeImportSessionIssue> RecipeImportSessionIssues { get; set; } = null!;
+        public DbSet<ImportTemplate> ImportTemplates { get; set; } = null!;
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -97,8 +127,33 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Slug).IsRequired().HasMaxLength(260);
                 entity.HasIndex(e => e.DietitianId);
+                entity.HasIndex(e => e.Slug).IsUnique();
                 entity.HasIndex(e => e.IsPublic);
+                entity.HasIndex(e => e.IsArchived);
+
+                // Production safety fields — default false so existing rows are unaffected
+                entity.Property(e => e.IsDemo).HasDefaultValue(false);
+                entity.Property(e => e.IsDraft).HasDefaultValue(false);
+                entity.Property(e => e.IsHiddenFromProduction).HasDefaultValue(false);
+                entity.Property(e => e.IsArchived).HasDefaultValue(false);
+                entity.Property(e => e.ArchivedAtUtc).IsRequired(false);
+
+                // Steps stored as JSON text; null = no steps authored
+                entity.Property(e => e.StepsJson).HasColumnName("StepsJson").IsRequired(false);
+                entity.Property(e => e.TagsJson).HasColumnName("TagsJson").HasColumnType("jsonb").IsRequired(false);
+                entity.Property(e => e.PrepTimeMinutes).IsRequired(false);
+                entity.Property(e => e.CookTimeMinutes).IsRequired(false);
+                entity.Property(e => e.Servings).IsRequired(false);
+                entity.Property(e => e.CaloriesKcal).IsRequired(false);
+                entity.Property(e => e.ProteinGrams).HasPrecision(8, 2).IsRequired(false);
+                entity.Property(e => e.CarbsGrams).HasPrecision(8, 2).IsRequired(false);
+                entity.Property(e => e.FatGrams).HasPrecision(8, 2).IsRequired(false);
+
+                // Composite index for the production candidate filter
+                entity.HasIndex(e => new { e.IsDemo, e.IsDraft, e.IsHiddenFromProduction })
+                    .HasDatabaseName("IX_Recipes_ProductionSafetyFlags");
 
                 // Explicit many-to-many: Recipe <-> Ingredient (MandatoryIngredients)
                 entity.HasMany(r => r.MandatoryIngredients)
@@ -126,6 +181,26 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                         j => j.HasOne<Ingredient>().WithMany().HasForeignKey("IngredientId"),
                         j => j.HasOne<Recipe>().WithMany().HasForeignKey("RecipeId"),
                         j => j.HasKey("RecipeId", "IngredientId"));
+            });
+
+            modelBuilder.Entity<DietitianRecipeFavorite>(entity =>
+            {
+                entity.HasKey(e => new { e.DietitianId, e.RecipeId });
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired();
+
+                entity.HasIndex(e => e.CreatedAtUtc);
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithMany()
+                    .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Recipe)
+                    .WithMany()
+                    .HasForeignKey(e => e.RecipeId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // UserMeasurement configuration
@@ -195,46 +270,67 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
             modelBuilder.Entity<PlanMealItem>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                
+
                 entity.Property(e => e.Time)
                     .IsRequired()
                     .HasColumnType("time");
-                
+
+                // MealType: default (Snack) is set by the entity property initializer
+                entity.Property(e => e.MealType)
+                    .IsRequired()
+                    .HasSentinel(PlanMealItemType.Breakfast);
+
+                // Optional recipe link for kitchen integration
+                entity.Property(e => e.RecipeId)
+                    .IsRequired(false);
+
                 entity.Property(e => e.Title)
                     .IsRequired()
                     .HasMaxLength(200);
-                
+
                 entity.Property(e => e.Note)
                     .HasMaxLength(1000);
-                
+
                 entity.Property(e => e.ProteinGrams)
                     .HasPrecision(5, 1);
-                
+
                 entity.Property(e => e.CarbsGrams)
                     .HasPrecision(5, 1);
-                
+
                 entity.Property(e => e.FatGrams)
                     .HasPrecision(5, 1);
-                
+
                 entity.Property(e => e.CreatedAt)
                     .IsRequired()
                     .HasDefaultValueSql("NOW()");
-                
+
                 // Indexes
                 entity.HasIndex(e => e.PlanId)
                     .HasDatabaseName("IX_PlanMealItems_PlanId");
-                
+
                 entity.HasIndex(e => e.Time)
                     .HasDatabaseName("IX_PlanMealItems_Time");
-                
+
                 // Relationships
                 entity.HasOne(e => e.Plan)
                     .WithMany(p => p.Items)
                     .HasForeignKey(e => e.PlanId)
                     .OnDelete(DeleteBehavior.Cascade);
-                
-                // Note: MealCompletion relationship removed (EPIC E uses DietPlanMealId directly, not PlanMealItem navigation)
-                // PlanMealItem.Completion is kept for backward compatibility but not mapped in EF
+
+                // Optional recipe navigation
+                entity.HasOne(e => e.Recipe)
+                    .WithMany()
+                    .HasForeignKey(e => e.RecipeId)
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                // Completion: one PlanMealItem has zero or one MealCompletion.
+                // MealCompletion.DietPlanMealId is the FK pointing back to this entity.
+                entity.HasOne(e => e.Completion)
+                    .WithOne()
+                    .HasForeignKey<MealCompletion>(c => c.DietPlanMealId)
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // MealCompletion configuration (EPIC E)
@@ -244,6 +340,10 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
 
                 entity.Property(e => e.Status)
                     .IsRequired();
+
+                // AlternativeRecipeId — nullable, only set when Status=Alternative
+                entity.Property(e => e.AlternativeRecipeId)
+                    .IsRequired(false);
 
                 entity.Property(e => e.Note)
                     .HasMaxLength(300);
@@ -266,6 +366,93 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasOne(e => e.Dietitian)
                     .WithMany()
                     .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ClientMealPlan>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Description)
+                    .HasMaxLength(1000);
+
+                entity.Property(e => e.StartDate)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone")
+                    .HasConversion(
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.Property(e => e.EndDate)
+                    .HasColumnType("timestamp with time zone")
+                    .HasConversion(
+                        v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
+                        v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone")
+                    .HasConversion(
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.Property(e => e.UpdatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone")
+                    .HasConversion(
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.HasIndex(e => new { e.ClientId, e.IsActive });
+                entity.HasIndex(e => new { e.DietitianId, e.StartDate });
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithMany()
+                    .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasMany(e => e.Meals)
+                    .WithOne(e => e.ClientMealPlan)
+                    .HasForeignKey(e => e.ClientMealPlanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ClientMeal>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.MealType)
+                    .IsRequired()
+                    .HasMaxLength(40);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone")
+                    .HasConversion(
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
+                        v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.Property(e => e.CompletedAt)
+                    .HasColumnType("timestamp with time zone")
+                    .HasConversion(
+                        v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
+                        v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v);
+
+                entity.HasIndex(e => e.ClientMealPlanId);
+                entity.HasIndex(e => new { e.ClientMealPlanId, e.DayOfWeek, e.MealType });
+
+                entity.HasOne(e => e.Recipe)
+                    .WithMany()
+                    .HasForeignKey(e => e.RecipeId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -444,8 +631,12 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasIndex(e => e.IsActive);
 
                 entity.Property(e => e.CanonicalName).IsRequired().HasMaxLength(200);
+#pragma warning disable CS0618
                 entity.Property(e => e.Name).HasMaxLength(200); // Legacy field
+#pragma warning restore CS0618
                 entity.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
+                // Condiment/pantry-helper flag — used by the recommendation engine's guardrail
+                entity.Property(e => e.IsCondiment).HasDefaultValue(false);
                 
                 // Map Aliases as JSON array (PostgreSQL) with ValueComparer to avoid EF warnings
                 var aliasesComparer = new ValueComparer<IReadOnlyCollection<string>>(
@@ -461,6 +652,45 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                         v => NormalizeAliasesList(System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null)))
                     .HasColumnType("jsonb");
                 aliasesProperty.Metadata.SetValueComparer(aliasesComparer);
+            });
+
+            modelBuilder.Entity<ProductBarcodeMapping>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Barcode)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.ProductName)
+                    .IsRequired()
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.Brand)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.MappingType)
+                    .HasConversion<string>()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.SourceProvider)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.Confidence)
+                    .HasPrecision(5, 4);
+
+                entity.HasIndex(e => e.Barcode)
+                    .IsUnique();
+
+                entity.HasIndex(e => e.CanonicalIngredientId);
+                entity.HasIndex(e => e.MappingType);
+                entity.HasIndex(e => e.LastVerifiedAtUtc);
+
+                entity.HasOne(e => e.CanonicalIngredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.CanonicalIngredientId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             // Client pantry items
@@ -488,6 +718,156 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(e => new { e.ClientId, e.UpdatedAtUtc });
+            });
+
+            modelBuilder.Entity<ClientGoalPreference>(entity =>
+            {
+                entity.HasKey(e => e.ClientId);
+
+                entity.Property(e => e.PrimaryGoal)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.DietStyle)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.CookingTimePreference)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.ReminderTone)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.UpdatedAtUtc)
+                    .IsRequired();
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.UpdatedAtUtc);
+            });
+
+            modelBuilder.Entity<ClientShoppingListItem>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(180);
+
+                entity.Property(e => e.Quantity)
+                    .HasPrecision(10, 2);
+
+                entity.Property(e => e.Unit)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.SourceType)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.SourceReferenceId)
+                    .HasMaxLength(128);
+
+                entity.Property(e => e.Note)
+                    .HasMaxLength(240);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.UpdatedAtUtc)
+                    .IsRequired();
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Ingredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.IngredientId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(e => new { e.ClientId, e.IsChecked, e.UpdatedAtUtc });
+                entity.HasIndex(e => new { e.ClientId, e.IngredientId });
+            });
+
+            modelBuilder.Entity<ClientCareMessage>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.SenderRole)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.Text)
+                    .IsRequired()
+                    .HasMaxLength(2000);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired();
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithMany()
+                    .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(e => new { e.ClientId, e.CreatedAtUtc });
+                entity.HasIndex(e => new { e.DietitianId, e.CreatedAtUtc });
+            });
+
+            modelBuilder.Entity<ClientAppointmentSummary>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(160);
+
+                entity.Property(e => e.Mode)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.Location)
+                    .HasMaxLength(180);
+
+                entity.Property(e => e.Note)
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.AttendanceStatus)
+                    .IsRequired()
+                    .HasMaxLength(24)
+                    .HasDefaultValue(ClientAppointmentSummary.AttendancePending);
+
+                entity.Property(e => e.AttendanceMarkedAtUtc)
+                    .IsRequired(false);
+
+                entity.Property(e => e.ScheduledAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired();
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithMany()
+                    .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(e => new { e.ClientId, e.ScheduledAtUtc });
+                entity.HasIndex(e => new { e.ClientId, e.IsCancelled });
             });
 
             // Premium audit logs
@@ -754,6 +1134,120 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
+            // ClientMeasurement configuration (unified measurement table)
+            modelBuilder.Entity<ClientMeasurement>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.SourceType)
+                    .IsRequired()
+                    .HasMaxLength(20);
+
+                entity.Property(e => e.WeightKg).HasPrecision(5, 1);
+                entity.Property(e => e.HeightCm).HasPrecision(5, 1);
+                entity.Property(e => e.BodyFatPercent).HasPrecision(4, 1);
+                entity.Property(e => e.MusclePercent).HasPrecision(4, 1);
+                entity.Property(e => e.WaterPercent).HasPrecision(4, 1);
+                entity.Property(e => e.WaistCm).HasPrecision(5, 1);
+                entity.Property(e => e.HipCm).HasPrecision(5, 1);
+                entity.Property(e => e.ChestCm).HasPrecision(5, 1);
+                entity.Property(e => e.Bmi).HasPrecision(4, 1);
+                entity.Property(e => e.BmiCategory).HasMaxLength(30);
+                entity.Property(e => e.Bmr).HasPrecision(7, 0);
+                entity.Property(e => e.WaistHipRatio).HasPrecision(4, 2);
+                entity.Property(e => e.Notes).HasMaxLength(500);
+                entity.Property(e => e.RecordedAtUtc).IsRequired();
+                entity.Property(e => e.CreatedAtUtc).IsRequired();
+
+                entity.HasIndex(e => new { e.ClientId, e.RecordedAtUtc })
+                    .IsDescending(false, true)
+                    .HasDatabaseName("IX_ClientMeasurements_ClientId_RecordedAtUtc");
+
+                entity.HasIndex(e => new { e.ClientId, e.SourceType })
+                    .HasDatabaseName("IX_ClientMeasurements_ClientId_SourceType");
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ClientNotificationPreference configuration
+            modelBuilder.Entity<ClientNotificationPreference>(entity =>
+            {
+                entity.HasKey(e => e.ClientId);
+
+                entity.Property(e => e.NotificationsEnabled)
+                    .IsRequired()
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.HydrationRemindersEnabled)
+                    .IsRequired()
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.HydrationIntervalMinutes)
+                    .IsRequired()
+                    .HasDefaultValue(120);
+
+                entity.Property(e => e.HydrationStartLocalTime)
+                    .IsRequired()
+                    .HasColumnType("time");
+
+                entity.Property(e => e.HydrationEndLocalTime)
+                    .IsRequired()
+                    .HasColumnType("time");
+
+                entity.Property(e => e.MealPlanRemindersEnabled)
+                    .IsRequired()
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.MealReminderLeadMinutes)
+                    .IsRequired()
+                    .HasDefaultValue(20);
+
+                entity.Property(e => e.MeasurementRemindersEnabled)
+                    .IsRequired()
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.MeasurementReminderDayOfWeek)
+                    .IsRequired()
+                    .HasDefaultValue(1);
+
+                entity.Property(e => e.MeasurementReminderLocalTime)
+                    .IsRequired()
+                    .HasColumnType("time");
+
+                entity.Property(e => e.ReengagementRemindersEnabled)
+                    .IsRequired()
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.ReengagementDelayHours)
+                    .IsRequired()
+                    .HasDefaultValue(48);
+
+                entity.Property(e => e.TimeZoneId)
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasDefaultValue("Europe/Istanbul");
+
+                entity.Property(e => e.UpdatedAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.LastAppOpenAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.LastNotificationSyncAtUtc)
+                    .IsRequired(false);
+
+                entity.HasIndex(e => e.UpdatedAtUtc);
+                entity.HasIndex(e => e.LastAppOpenAtUtc);
+
+                entity.HasOne<Client>()
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
             // ClientActivity configuration
             modelBuilder.Entity<ClientActivity>(entity =>
             {
@@ -785,6 +1279,91 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .WithMany()
                     .HasForeignKey(e => e.DietitianId)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<ClientEngagementEvent>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.EventType)
+                    .IsRequired()
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.EventDate)
+                    .HasColumnType("date");
+
+                entity.Property(e => e.OccurredAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.MetaJson)
+                    .HasColumnType("jsonb");
+
+                entity.HasIndex(e => new { e.ClientId, e.EventDate, e.EventType });
+                entity.HasIndex(e => new { e.DietitianId, e.EventDate })
+                    .HasFilter("\"DietitianId\" IS NOT NULL");
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithMany()
+                    .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<ClientAchievementUnlock>(entity =>
+            {
+                entity.HasKey(e => new { e.ClientId, e.BadgeId });
+
+                entity.Property(e => e.BadgeId)
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.CurrentLevel)
+                    .HasDefaultValue(1);
+
+                entity.Property(e => e.UnlockedAtUtc)
+                    .IsRequired();
+
+                entity.HasIndex(e => e.UnlockedAtUtc)
+                    .IsDescending();
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ClientGamificationSnapshot>(entity =>
+            {
+                entity.HasKey(e => new { e.ClientId, e.Date });
+
+                entity.Property(e => e.Date)
+                    .HasColumnType("date");
+
+                entity.Property(e => e.PrimaryTrack)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.PrimaryScore)
+                    .HasPrecision(5, 2);
+
+                entity.Property(e => e.AdherenceScore)
+                    .HasPrecision(5, 2);
+
+                entity.Property(e => e.EngagementScore)
+                    .HasPrecision(5, 2);
+
+                entity.HasIndex(e => new { e.ClientId, e.Date })
+                    .IsDescending(false, true);
+
+                entity.HasIndex(e => new { e.Date, e.QualifiedForStreak });
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // DailyComplianceSnapshot configuration
@@ -920,6 +1499,37 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasIndex(e => e.SelectedRecipeId);
             });
 
+            modelBuilder.Entity<IngredientAcquisitionLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Source)
+                    .HasConversion<string>()
+                    .HasMaxLength(16);
+
+                entity.Property(e => e.RawInput)
+                    .IsRequired()
+                    .HasMaxLength(512);
+
+                entity.Property(e => e.MappingType)
+                    .HasConversion<string>()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.Confidence)
+                    .HasPrecision(5, 4);
+
+                entity.HasIndex(e => e.SessionId);
+                entity.HasIndex(e => e.Source);
+                entity.HasIndex(e => e.ResolvedIngredientId);
+                entity.HasIndex(e => e.CreatedAtUtc);
+                entity.HasIndex(e => new { e.Source, e.MappingType });
+
+                entity.HasOne(e => e.ResolvedIngredient)
+                    .WithMany()
+                    .HasForeignKey(e => e.ResolvedIngredientId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
             // DietitianSettings configuration
             modelBuilder.Entity<DietitianSettings>(entity =>
             {
@@ -998,6 +1608,266 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
             // by EF Core via Recipe entity's navigation properties (MandatoryIngredients, OptionalIngredients, ProhibitedIngredients).
             // Note: Navigation properties (Days, Meals, Items) are configured
             // via HasMany/WithOne above. EF Core will handle the relationships automatically.
+
+            // ===== RECIPE IMPORT (Import Wizard) =====
+            modelBuilder.Entity<RecipeImportSession>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.OriginalFileName).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.FileType).IsRequired().HasMaxLength(10);
+                entity.Property(e => e.DocumentKind).HasConversion<string>().HasMaxLength(40);
+                entity.Property(e => e.ParserUsed).HasMaxLength(100);
+                entity.Property(e => e.ConfidenceScore).HasPrecision(5, 4);
+                entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+                entity.Property(e => e.WarningsJson).HasColumnType("jsonb");
+                entity.Property(e => e.DetectedRecipeBoundaryMode).HasMaxLength(200);
+                entity.Property(e => e.TemplateKey).HasMaxLength(200);
+                entity.Property(e => e.TemplateHeaderHintsJson).HasColumnType("jsonb");
+                entity.HasIndex(e => new { e.DietitianId, e.CreatedAtUtc })
+                    .HasDatabaseName("IX_RecipeImportSessions_DietitianId_CreatedAt");
+                entity.HasMany(e => e.Recipes)
+                    .WithOne(r => r.Session)
+                    .HasForeignKey(r => r.SessionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<RecipeImportSessionRecipe>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.RawTitle).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.NormalizedTitle).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.Description).HasMaxLength(4000);
+                entity.Property(e => e.RawSourceBlock).HasColumnType("text");
+                entity.Property(e => e.StepsJson).HasColumnType("jsonb");
+                entity.Property(e => e.TagsJson).HasColumnType("jsonb");
+                entity.Property(e => e.PrepTimeText).HasMaxLength(100);
+                entity.Property(e => e.CookTimeText).HasMaxLength(100);
+                entity.Property(e => e.ServingsText).HasMaxLength(100);
+                entity.Property(e => e.DuplicateResolutionMode).HasConversion<string>().HasMaxLength(30);
+                entity.HasIndex(e => e.SessionId)
+                    .HasDatabaseName("IX_RecipeImportSessionRecipes_SessionId");
+                entity.HasMany(e => e.Ingredients)
+                    .WithOne(i => i.SessionRecipe)
+                    .HasForeignKey(i => i.SessionRecipeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<RecipeImportSessionIngredient>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.RawName).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.NormalizedName).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.RawLineText).HasMaxLength(2000);
+                entity.Property(e => e.AmountRaw).HasMaxLength(100);
+                entity.Property(e => e.AmountValue).HasPrecision(10, 4);
+                entity.Property(e => e.UnitNormalized).HasMaxLength(50);
+                entity.Property(e => e.Role).HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.MatchedCanonicalName).HasMaxLength(500);
+                entity.Property(e => e.MatchType).HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.ParseConfidence).HasPrecision(5, 4);
+                entity.Property(e => e.IssueCodesJson).HasColumnType("jsonb");
+                entity.HasIndex(e => e.SessionRecipeId)
+                    .HasDatabaseName("IX_RecipeImportSessionIngredients_SessionRecipeId");
+            });
+
+            modelBuilder.Entity<RecipeImportSessionIssue>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Severity).HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Message).IsRequired().HasMaxLength(2000);
+                entity.Property(e => e.Hint).HasMaxLength(1000);
+                entity.HasIndex(e => e.SessionId)
+                    .HasDatabaseName("IX_RecipeImportSessionIssues_SessionId");
+                entity.HasIndex(e => e.SessionRecipeId)
+                    .HasDatabaseName("IX_RecipeImportSessionIssues_SessionRecipeId");
+            });
+
+            modelBuilder.Entity<ImportTemplate>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.TemplateKey).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.DocumentKind).HasConversion<string>().HasMaxLength(40);
+                entity.Property(e => e.ParserUsed).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.HeaderHintsJson).HasColumnType("jsonb");
+                entity.HasIndex(e => new { e.DietitianId, e.TemplateKey }).IsUnique()
+                    .HasDatabaseName("IX_ImportTemplates_DietitianId_TemplateKey");
+            });
+
+            // ===== MEAL PLAN TEMPLATES (Faz 3) =====
+
+            modelBuilder.Entity<MealPlanTemplate>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.Description)
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+
+                entity.Property(e => e.UpdatedAtUtc)
+                    .IsRequired()
+                    .HasDefaultValueSql("NOW()");
+
+                entity.HasIndex(e => e.DietitianId)
+                    .HasDatabaseName("IX_MealPlanTemplates_DietitianId");
+
+                entity.HasMany(e => e.Items)
+                    .WithOne(i => i.Template)
+                    .HasForeignKey(i => i.TemplateId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<MealPlanTemplateItem>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Time)
+                    .IsRequired()
+                    .HasColumnType("time");
+
+                entity.Property(e => e.MealType)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Note)
+                    .HasMaxLength(1000);
+
+                entity.Property(e => e.ProteinGrams)
+                    .HasPrecision(5, 1);
+
+                entity.Property(e => e.CarbsGrams)
+                    .HasPrecision(5, 1);
+
+                entity.Property(e => e.FatGrams)
+                    .HasPrecision(5, 1);
+
+                entity.Property(e => e.RecipeId)
+                    .IsRequired(false);
+
+                entity.HasIndex(e => e.TemplateId)
+                    .HasDatabaseName("IX_MealPlanTemplateItems_TemplateId");
+            });
+
+            // ContactMessage — landing page contact form submissions
+            modelBuilder.Entity<ContactMessage>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(150);
+                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.Phone).HasMaxLength(30);
+                entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Message).IsRequired().HasMaxLength(4000);
+                entity.Property(e => e.IsRead).HasDefaultValue(false);
+                entity.HasIndex(e => e.CreatedAt)
+                    .HasDatabaseName("IX_ContactMessages_CreatedAt");
+                entity.HasIndex(e => e.IsRead)
+                    .HasDatabaseName("IX_ContactMessages_IsRead");
+            });
+
+            // VisionLabelMapping — cache layer for raw vision labels → canonical ingredients
+            modelBuilder.Entity<VisionLabelMapping>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.RawLabel)
+                    .IsRequired()
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.NormalizedLabel)
+                    .IsRequired()
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.ConfidenceThreshold)
+                    .HasPrecision(5, 4)
+                    .HasDefaultValue(0.7);
+
+                entity.Property(e => e.IsApproved)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.Notes)
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired();
+
+                // Fast lookup: given a normalized label, find its mapping
+                entity.HasIndex(e => e.NormalizedLabel)
+                    .HasDatabaseName("IX_VisionLabelMappings_NormalizedLabel");
+
+                // Filter index: only approved mappings are used at runtime
+                entity.HasIndex(e => e.IsApproved)
+                    .HasDatabaseName("IX_VisionLabelMappings_IsApproved");
+
+                entity.HasIndex(e => e.IngredientId)
+                    .HasDatabaseName("IX_VisionLabelMappings_IngredientId");
+
+                entity.HasOne<Ingredient>()
+                    .WithMany()
+                    .HasForeignKey(e => e.IngredientId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // IngredientImageDetectionLog — per-scan event log for metrics and cost tracking
+            modelBuilder.Entity<IngredientImageDetectionLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                // SessionId groups all per-label entries for one scan (used by confirm endpoint)
+                entity.Property(e => e.SessionId).IsRequired();
+
+                entity.Property(e => e.ImageSource)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.RawLabel)
+                    .IsRequired()
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.NormalizedLabel)
+                    .IsRequired()
+                    .HasMaxLength(300);
+
+                entity.Property(e => e.Confidence)
+                    .HasPrecision(5, 4);
+
+                entity.Property(e => e.MatchType)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.CreatedAtUtc)
+                    .IsRequired();
+
+                // Confirm endpoint: look up all labels from the same scan
+                entity.HasIndex(e => e.SessionId)
+                    .HasDatabaseName("IX_IngredientImageDetectionLogs_SessionId");
+
+                // Per-client scan history (descending time)
+                entity.HasIndex(e => new { e.ClientId, e.CreatedAtUtc })
+                    .IsDescending(false, true)
+                    .HasDatabaseName("IX_IngredientImageDetectionLogs_ClientId_CreatedAtUtc");
+
+                // Aggregate queries by match type (for thesis metrics)
+                entity.HasIndex(e => e.MatchType)
+                    .HasDatabaseName("IX_IngredientImageDetectionLogs_MatchType");
+
+                // Cost tracking: filter by OpenAI usage
+                entity.HasIndex(e => e.UsedOpenAiFallback)
+                    .HasDatabaseName("IX_IngredientImageDetectionLogs_UsedOpenAiFallback");
+            });
         }
 
         private static List<string> NormalizeAliasesList(List<string>? aliases)

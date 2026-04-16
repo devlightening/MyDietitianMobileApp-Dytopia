@@ -1,122 +1,75 @@
-"use client";
-import { useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
+import Link from "next/link";
+import { CalendarDays, KeyRound, MailCheck, ShieldCheck } from "lucide-react";
+
+const steps = [
+  {
+    title: "Paket seçimi",
+    text: "Diyetisyen için 3, 6, 12 veya 24 aylık premium lisans seçilir. Bu ürün kurgu içinde free kullanım bulunmaz.",
+    icon: CalendarDays,
+  },
+  {
+    title: "Aktivasyon maili",
+    text: "Satın alma sonrası panele erişecek kullanıcıya aktivasyon bağlantısı gönderilir.",
+    icon: MailCheck,
+  },
+  {
+    title: "Şifre belirleme",
+    text: "Kullanıcı kendi şifresini oluşturur; hesap bu aşamada aktif hale gelir.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Access key yönetimi",
+    text: "Panel açıldıktan sonra diyetisyen danışan premium akışını access key ile yönetir.",
+    icon: KeyRound,
+  },
+];
 
 export default function DietitianRegisterPage() {
-  const [values, setValues] = useState({ fullName: '', clinicName: '', email: '', password: '' });
-  const [errors, setErrors] = useState({ fullName: '', clinicName: '', email: '', password: '' });
-  const [submitted, setSubmitted] = useState(false);
-  const [apiError, setApiError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  function validate() {
-    const errs: any = {};
-    if (!values.fullName.trim()) errs.fullName = "Ad Soyad zorunludur.";
-    if (!values.clinicName.trim()) errs.clinicName = "Klinik adı zorunludur.";
-    if (!values.email.trim()) errs.email = "E-posta zorunludur.";
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(values.email)) errs.email = "Geçerli bir e-posta girin.";
-    if (!values.password) errs.password = "Şifre zorunludur.";
-    else if (values.password.length < 8) errs.password = "En az 8 karakter olmalı.";
-    else if (!/[A-Z]/.test(values.password)) errs.password = "Bir büyük harf içermeli.";
-    else if (!/[0-9]/.test(values.password)) errs.password = "Bir rakam içermeli.";
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  }
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setValues({ ...values, [e.target.name]: e.target.value });
-    setErrors({ ...errors, [e.target.name]: '' });
-  }
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitted(true);
-    setApiError('');
-    if (!validate()) return;
-    setLoading(true);
-    try {
-      const dto = {
-        fullName: values.fullName.trim(),
-        clinicName: values.clinicName.trim(),
-        email: values.email.trim(),
-        password: values.password
-      };
-      const res = await fetch("/api/auth/dietitian/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dto)
-      });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Kayıt başarısız oldu.");
-      }
-      setApiError('');
-      setLoading(false);
-      window.location.href = "/auth/login";
-    } catch (err: any) {
-      setApiError(err?.message || "Kayıt başarısız oldu.");
-      setLoading(false);
-    }
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md p-8 space-y-6 shadow-lg">
-        <h1 className="text-3xl font-bold text-center mb-2">Diyetisyen Kayıt</h1>
-        <p className="text-center text-muted-foreground mb-4 text-base">
-          Klinik paneline hoşgeldiniz. Lütfen bilgilerinizi doldurun.
-        </p>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <Input
-            label="Ad Soyad"
-            name="fullName"
-            value={values.fullName}
-            onChange={handleChange}
-            error={submitted && errors.fullName}
-            required
-            className="text-base"
-          />
-          <Input
-            label="Klinik Adı"
-            name="clinicName"
-            value={values.clinicName}
-            onChange={handleChange}
-            error={submitted && errors.clinicName}
-            required
-            className="text-base"
-          />
-          <Input
-            label="E-posta"
-            name="email"
-            type="email"
-            value={values.email}
-            onChange={handleChange}
-            error={submitted && errors.email}
-            required
-            className="text-base"
-          />
-          <Input
-            label="Şifre"
-            name="password"
-            type="password"
-            value={values.password}
-            onChange={handleChange}
-            error={submitted && errors.password}
-            required
-            helperText="En az 8 karakter, bir büyük harf ve bir rakam"
-            className="text-base"
-          />
-          {apiError && <div className="text-danger text-sm mt-2">{apiError}</div>}
-          <Button type="submit" className="w-full mt-2" loading={loading} disabled={loading}>
-            Kayıt Ol
-          </Button>
-        </form>
-        <div className="text-center text-sm mt-4">
-          Zaten hesabınız var mı? <a href="/auth/login" className="text-primary hover:underline font-medium">Giriş Yap</a>
+    <div className="relative min-h-screen overflow-hidden bg-[var(--surface-base)]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full blur-3xl" style={{ background: "rgba(71,185,114,0.16)" }} />
+        <div className="absolute -bottom-24 right-0 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(0,191,179,0.10)" }} />
+      </div>
+
+      <div className="relative mx-auto flex min-h-screen max-w-5xl items-center px-4 py-10 sm:px-6">
+        <div className="w-full rounded-[34px] border border-border/80 bg-white/88 p-8 shadow-[0_24px_80px_rgba(31,73,46,0.10)] backdrop-blur-xl sm:p-10">
+          <div className="max-w-3xl">
+            <span className="badge-base badge-premium">Açık self-signup kapalı</span>
+            <h1 className="mt-5 text-4xl font-black tracking-tight text-foreground sm:text-5xl">
+              MyDietitian panel hesabı satın alma sonrası aktive edilir.
+            </h1>
+            <p className="mt-4 text-base leading-8 text-muted-foreground sm:text-lg">
+              Bu ürün kurgusunda diyetisyen paneli herkese açık kayıt alanı değildir. Hesap,
+              paket seçimi ve aktivasyon akışı tamamlandıktan sonra açılır.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            {steps.map((step) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.title} className="rounded-[1.6rem] border border-border/80 bg-[var(--surface-overlay)] p-5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand-primary-soft)] text-[var(--brand-emerald)]">
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <h2 className="mt-5 text-xl font-black tracking-tight text-foreground">{step.title}</h2>
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{step.text}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-3">
+            <Link href="/" className="btn-primary">
+              Satış sayfasına dön
+            </Link>
+            <Link href="/auth/login" className="btn-ghost">
+              Panel giriş alanı
+            </Link>
+          </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

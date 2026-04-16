@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Enums;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
@@ -11,15 +12,18 @@ namespace MyDietitianMobileApp.Infrastructure.Services
         private readonly AppDbContext _context;
         private readonly IRecipeRepository _recipeRepository;
         private readonly IRecipeRecommendationEngine _engine;
+        private readonly IIngredientTaxonomyService _taxonomyService;
 
         public AlternativeMealDecisionService(
             AppDbContext context,
             IRecipeRepository recipeRepository,
-            IRecipeRecommendationEngine engine)
+            IRecipeRecommendationEngine engine,
+            IIngredientTaxonomyService taxonomyService)
         {
             _context = context;
             _recipeRepository = recipeRepository;
             _engine = engine;
+            _taxonomyService = taxonomyService;
         }
 
         public async Task<AlternativeMealDecision> DecideForMealAsync(
@@ -48,6 +52,8 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     prohibitedRejected: false,
                     usedSubstitutes: false,
                     missingMandatoryIds: Array.Empty<Guid>(),
+                    missingMandatoryNames: null,
+                    substituteUsages: null,
                     additionalMeta: new { reason = "Planned recipe not found" },
                     cancellationToken);
 
@@ -57,12 +63,15 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     "Planned recipe not found.");
             }
 
-            // Build evaluation context (no substitutes in this first slice)
-            // For prohibited semantics we mirror previous behavior:
-            // any overlap between recipe.ProhibitedIngredients and clientAvailableIngredients rejects the recipe.
+            // Build evaluation context — substitutes populated from taxonomy compatibility rules.
+            var plannedSubstituteData = await BuildSubstitutesForRecipesAsync(
+                new[] { plannedRecipe }, cancellationToken);
+
             var context = new RecipeEvaluationContext(
                 availableIngredientIds: clientAvailableIngredients,
-                prohibitedIngredientIds: clientAvailableIngredients);
+                prohibitedIngredientIds: new List<Guid>(),
+                substitutesByRecipeAndRequired: plannedSubstituteData.SubstitutesByRecipeAndRequired,
+                substituteCompatibilityByRecipeRequiredAndCandidate: plannedSubstituteData.CompatibilityByRecipeRequiredAndCandidate);
 
             var evaluation = _engine.EvaluateRecipe(plannedRecipe, context);
 
@@ -88,6 +97,8 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     reason,
                     cancellationToken);
 
+                IReadOnlyCollection<(string Required, string Substitute)>? substituteUsages = null;
+
                 await LogRecommendationAsync(
                     flow: "alternative_decision",
                     clientId: null,
@@ -100,6 +111,8 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     prohibitedRejected: evaluation.Explanation.RejectedBecauseProhibited,
                     usedSubstitutes: evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
                     missingMandatoryIds: evaluation.MissingMandatoryIngredientIds,
+                    missingMandatoryNames: missingNames,
+                    substituteUsages: substituteUsages,
                     additionalMeta: new { reason },
                     cancellationToken);
 
@@ -125,6 +138,8 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     prohibitedRejected: false,
                     usedSubstitutes: evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
                     missingMandatoryIds: Array.Empty<Guid>(),
+                    missingMandatoryNames: null,
+                    substituteUsages: null,
                     additionalMeta: new { },
                     cancellationToken);
 
@@ -164,6 +179,8 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                 prohibitedRejected: false,
                 usedSubstitutes: evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
                 missingMandatoryIds: Array.Empty<Guid>(),
+                missingMandatoryNames: missingOptionalNames,
+                substituteUsages: null,
                 additionalMeta: new { lowMatch = true },
                 cancellationToken);
 
@@ -192,10 +209,15 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     $"{reasonForAlternative} No alternative recipes available.");
             }
 
-            // Evaluate and rank alternative recipes using the shared engine
+            // Evaluate and rank alternative recipes using the shared engine.
+            // Substitutes for each alternative recipe's mandatory ingredients are resolved from taxonomy.
+            var altSubstituteData = await BuildSubstitutesForRecipesAsync(dietitianRecipes, cancellationToken);
+
             var context = new RecipeEvaluationContext(
                 availableIngredientIds: clientAvailableIngredients,
-                prohibitedIngredientIds: clientAvailableIngredients); // recipe-level prohibitions handled by engine
+                prohibitedIngredientIds: new List<Guid>(),
+                substitutesByRecipeAndRequired: altSubstituteData.SubstitutesByRecipeAndRequired,
+                substituteCompatibilityByRecipeRequiredAndCandidate: altSubstituteData.CompatibilityByRecipeRequiredAndCandidate);
 
             var ranked = _engine.RankRecipes(dietitianRecipes, context);
             var bestMatch = ranked.FirstOrDefault();
@@ -222,6 +244,58 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                 explanation);
         }
 
+        /// <summary>
+        /// For each recipe's mandatory ingredient, query the taxonomy service for
+        /// compatible substitutes (SubstituteAllowed or FamilyCompatible tier) and
+        /// return a dictionary keyed by (RecipeId, RequiredIngredientId).
+        ///
+        /// Ingredients that have no compatibility rules simply produce no entry,
+        /// so the engine falls back to requiring the exact ingredient.
+        /// </summary>
+        private async Task<SubstituteResolutionData> BuildSubstitutesForRecipesAsync(
+            IEnumerable<Recipe> recipes,
+            CancellationToken cancellationToken)
+        {
+            var result = new Dictionary<(Guid, Guid), IReadOnlySet<Guid>>();
+            var compatibility = new Dictionary<(Guid, Guid, Guid), CompatibilityType>();
+
+            foreach (var recipe in recipes)
+            {
+                foreach (var mandatory in recipe.MandatoryIngredients)
+                {
+                    var key = (recipe.Id, mandatory.Id);
+                    if (result.ContainsKey(key))
+                        continue;
+
+                    var candidates = await _taxonomyService.GetCompatibleCandidatesAsync(
+                        mandatory.Id,
+                        minimumCompatibility: CompatibilityType.SubstituteAllowed,
+                        cancellationToken);
+
+                    if (candidates.Count > 0)
+                    {
+                        result[key] = new HashSet<Guid>(candidates.Select(c => c.Id));
+
+                        foreach (var candidate in candidates)
+                        {
+                            var compatibilityType = await _taxonomyService.GetCompatibilityAsync(
+                                mandatory.Id,
+                                candidate.Id,
+                                cancellationToken);
+
+                            compatibility[(recipe.Id, mandatory.Id, candidate.Id)] = compatibilityType;
+                        }
+                    }
+                }
+            }
+
+            return new SubstituteResolutionData(result, compatibility);
+        }
+
+        private sealed record SubstituteResolutionData(
+            IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId), IReadOnlySet<Guid>> SubstitutesByRecipeAndRequired,
+            IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId, Guid CandidateIngredientId), CompatibilityType> CompatibilityByRecipeRequiredAndCandidate);
+
         private async Task LogRecommendationAsync(
             string flow,
             Guid? clientId,
@@ -234,6 +308,8 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             bool prohibitedRejected,
             bool usedSubstitutes,
             IReadOnlyCollection<Guid> missingMandatoryIds,
+            IReadOnlyCollection<string>? missingMandatoryNames,
+            IReadOnlyCollection<(string Required, string Substitute)>? substituteUsages,
             object? additionalMeta,
             CancellationToken cancellationToken)
         {
@@ -243,11 +319,29 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     ? System.Text.Json.JsonSerializer.Serialize(missingMandatoryIds)
                     : null;
 
+                string? missingNamesJson = missingMandatoryNames != null && missingMandatoryNames.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(missingMandatoryNames)
+                    : null;
+
+                string? substituteUsageSummaryJson = substituteUsages != null && substituteUsages.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(
+                        substituteUsages.Select(s => new { required = s.Required, substitute = s.Substitute }))
+                    : null;
+
+                string? rejectionReasonSummary = null;
+                if (!originalCookable)
+                {
+                    if (prohibitedRejected)
+                        rejectionReasonSummary = "Prohibited ingredient conflict.";
+                    else if (missingMandatoryNames != null && missingMandatoryNames.Count > 0)
+                        rejectionReasonSummary = $"Missing: {string.Join(", ", missingMandatoryNames)}";
+                    else
+                        rejectionReasonSummary = "Recipe not cookable with available ingredients.";
+                }
+
                 string? additionalMetaJson = null;
                 if (additionalMeta != null)
-                {
                     additionalMetaJson = System.Text.Json.JsonSerializer.Serialize(additionalMeta);
-                }
 
                 var log = new RecipeRecommendationLog(
                     id: Guid.NewGuid(),
@@ -262,6 +356,9 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     prohibitedRejected: prohibitedRejected,
                     usedSubstitutes: usedSubstitutes,
                     missingMandatoryIdsJson: missingIdsJson,
+                    rejectionReasonSummary: rejectionReasonSummary,
+                    missingMandatoryNamesJson: missingNamesJson,
+                    substituteUsageSummaryJson: substituteUsageSummaryJson,
                     additionalMetaJson: additionalMetaJson,
                     correlationId: null);
 

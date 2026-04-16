@@ -170,39 +170,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This ensures we get the correct isPremium value from the backend
       await refreshUserState();
     } catch (error: any) {
-      // Self-healing: If network error, try to fix baseURL and retry once
+      // Network error diagnostic logging (dev only).
+      // We intentionally do NOT mutate apiClient.defaults.baseURL here.
+      // Silently changing the base URL after a failure masks misconfiguration and
+      // causes unpredictable behaviour across sessions.
+      //
+      // If FORCE=1 the developer explicitly pinned a URL — overriding it would
+      // defeat the purpose of the flag.  If FORCE is not set, auto-detection
+      // already ran at module load time (config/api.ts) and the result is in the
+      // startup diagnostic log printed by client.ts.
+      //
+      // To fix connectivity: check the startup log, find a working candidate URL,
+      // update .env, and restart Metro with: npx expo start --clear
       if (__DEV__ && error.code === 'ERR_NETWORK') {
-        console.log('🔧 Network error detected, attempting self-heal...');
-
-        try {
-          // Import helpers
-          const { setApiBaseUrl } = await import('../api/client');
-
-          // Get packager IP
-          let Constants: any = null;
-          try { Constants = require('expo-constants'); } catch { }
-
-          const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest?.debuggerHost;
-          if (hostUri) {
-            const packagerIp = hostUri.split(':')[0];
-            const healedUrl = `http://${packagerIp}:5000`;
-
-            console.log('🔧 Attempting to heal baseURL to:', healedUrl);
-            setApiBaseUrl(healedUrl);
-
-            // Retry login once
-            console.log('🔧 Retrying login with healed baseURL...');
-            const retryResponse = await loginClientAPI({ email, password });
-            await SecureStore.setItemAsync('access_token', retryResponse.token);
-            setToken(retryResponse.token);
-            await refreshUserState();
-
-            console.log('✅ Self-heal successful! Login completed.');
-            return; // Success!
-          }
-        } catch (retryError: any) {
-          console.log('❌ Self-heal failed:', retryError.message);
-          // Fall through to throw original error
+        const isForced = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
+        console.error('❌ Login failed: ERR_NETWORK — transport/connectivity issue, not auth.');
+        console.error('   Configured URL:', process.env.EXPO_PUBLIC_API_BASE_URL ?? '(auto-detected)');
+        if (isForced) {
+          console.error('   FORCE=1 is set — the URL above is authoritative and will NOT be overridden.');
+          console.error('   Android emulator fix:');
+          console.error('     adb reverse tcp:5000 tcp:5000');
+          console.error('     dotnet run --launch-profile http');
+          console.error('     npx expo start --localhost --clear');
+        } else {
+          console.error('   FORCE=1 is NOT set. Add to .env:');
+          console.error('     EXPO_PUBLIC_API_BASE_URL_FORCE=1');
+          console.error('     EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:5000');
+          console.error('   Then: adb reverse tcp:5000 tcp:5000 && npx expo start --localhost --clear');
         }
       }
 

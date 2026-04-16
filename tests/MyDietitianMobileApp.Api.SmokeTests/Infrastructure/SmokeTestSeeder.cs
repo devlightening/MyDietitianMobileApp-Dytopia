@@ -51,6 +51,12 @@ public static class SmokeTestSeeder
         appDb.DietitianClientLinks.AddRange(link1, link2);
         await appDb.SaveChangesAsync();
 
+        // Activate premium for client1 and client2 so premium endpoints return 200 (not 403).
+        // freeClient intentionally NOT activated — PremiumGatingSmokeTests depends on it being free.
+        client1.ActivatePremium(dietitian1.Id, DateTime.UtcNow, DateTime.UtcNow.AddYears(1));
+        client2.ActivatePremium(dietitian1.Id, DateTime.UtcNow, DateTime.UtcNow.AddYears(1));
+        await appDb.SaveChangesAsync();
+
         // User accounts
         var d1User = new UserAccount
         {

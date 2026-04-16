@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 
 namespace MyDietitianMobileApp.Application.Handlers;
@@ -115,20 +116,47 @@ public class GetClientsByDietitianQueryHandler
             .ToListAsync(cancellationToken);
         var activePlanSet = activePlans.ToHashSet();
         
-        // Batch query: Calculate compliance for all clients
-        // Compliance = (completed meals / total planned meals) in last 30 days
-        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
-        var complianceData = await _appContext.ClientMealPlans
-            .Where(p => clientIds.Contains(p.ClientId) && p.StartDate >= thirtyDaysAgo)
-            .SelectMany(p => p.Meals)
-            .GroupBy(m => m.ClientMealPlan.ClientId)
+        // Batch query: Calculate compliance for all clients using DailyComplianceSnapshot (System A).
+        // DailyComplianceSnapshot is updated each time a client marks a meal done/skipped.
+        var thirtyDaysAgo = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30));
+        var snapshotCompliance = await _appContext.DailyComplianceSnapshots
+            .Where(s => clientIds.Contains(s.ClientId) && s.Date >= thirtyDaysAgo)
+            .GroupBy(s => s.ClientId)
             .Select(g => new
             {
-                ClientId = g.Key,
-                TotalMeals = g.Count(),
-                CompletedMeals = g.Count(m => m.CompletedAt != null)
+                ClientId    = g.Key,
+                TotalPlanned   = g.Sum(s => s.PlannedCount),
+                TotalCompleted = g.Sum(s => s.CompletedCount),
             })
             .ToDictionaryAsync(x => x.ClientId, cancellationToken);
+
+        // Fallback: clients with no snapshots — compute directly from MealCompletion records.
+        var clientsWithoutSnapshots = clientIds
+            .Where(id => !snapshotCompliance.ContainsKey(id) ||
+                         snapshotCompliance[id].TotalPlanned == 0)
+            .ToList();
+
+        Dictionary<Guid, (int planned, int completed)> fallbackCompliance = new();
+        if (clientsWithoutSnapshots.Count > 0)
+        {
+            var thirtyDaysAgoUtc = DateTime.UtcNow.AddDays(-30);
+
+            // Count how many meal completions exist (done or alternative = compliant)
+            var completionCounts = await _appContext.MealCompletions
+                .Where(c => clientsWithoutSnapshots.Contains(c.ClientId) && c.AtUtc >= thirtyDaysAgoUtc)
+                .GroupBy(c => c.ClientId)
+                .Select(g => new
+                {
+                    ClientId  = g.Key,
+                    Completed = g.Count(c => c.Status == MealCompletionStatus.Done ||
+                                             c.Status == MealCompletionStatus.Alternative),
+                    Total     = g.Count(),
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var row in completionCounts)
+                fallbackCompliance[row.ClientId] = (row.Total, row.Completed);
+        }
         
         // Batch query: Get PublicUserId for all clients from UserAccounts
         var publicUserIds = await _authContext.UserAccounts
@@ -142,11 +170,15 @@ public class GetClientsByDietitianQueryHandler
         {
             var client = link.Client;
             
-            // Calculate compliance
+            // Calculate compliance: prefer DailyComplianceSnapshot, fall back to MealCompletion
             decimal compliancePercent = 0;
-            if (complianceData.TryGetValue(client.Id, out var compliance) && compliance.TotalMeals > 0)
+            if (snapshotCompliance.TryGetValue(client.Id, out var snap) && snap.TotalPlanned > 0)
             {
-                compliancePercent = Math.Round((decimal)compliance.CompletedMeals / compliance.TotalMeals * 100, 1);
+                compliancePercent = Math.Round((decimal)snap.TotalCompleted / snap.TotalPlanned * 100, 1);
+            }
+            else if (fallbackCompliance.TryGetValue(client.Id, out var fb) && fb.planned > 0)
+            {
+                compliancePercent = Math.Round((decimal)fb.completed / fb.planned * 100, 1);
             }
             
             // Apply low compliance filter if requested

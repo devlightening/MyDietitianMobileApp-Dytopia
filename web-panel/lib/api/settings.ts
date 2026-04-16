@@ -7,6 +7,9 @@ export interface DietitianSettings {
   accentColorHex: string;
   themePresetKey?: string | null;
   logoUrl?: string | null;
+  phoneNumber?: string | null;
+  bio?: string | null;
+  websiteUrl?: string | null;
   updatedAt: string;
 }
 
@@ -16,6 +19,9 @@ export interface UpdateDietitianSettings {
   primaryColorHex: string;
   accentColorHex: string;
   themePresetKey?: string | null;
+  phoneNumber?: string | null;
+  bio?: string | null;
+  websiteUrl?: string | null;
 }
 
 export async function getSettings(): Promise<DietitianSettings> {

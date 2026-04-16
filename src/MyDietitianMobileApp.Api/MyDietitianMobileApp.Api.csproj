@@ -26,4 +26,17 @@
     <ProjectReference Include="..\MyDietitianMobileApp.Domain\MyDietitianMobileApp.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Benchmarks\SampleDatasets\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target
+    Name="StopStaleApiProcessBeforeBuild"
+    BeforeTargets="Build"
+    Condition="'$(OS)' == 'Windows_NT' and '$(Configuration)' == 'Debug'">
+    <Exec
+      Command="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Get-Process MyDietitianMobileApp.Api -ErrorAction SilentlyContinue | Stop-Process -Force&quot;"
+      IgnoreExitCode="true" />
+  </Target>
+
 </Project>

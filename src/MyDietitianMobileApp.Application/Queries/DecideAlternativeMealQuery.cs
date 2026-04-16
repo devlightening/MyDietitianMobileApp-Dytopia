@@ -28,6 +28,8 @@ namespace MyDietitianMobileApp.Application.Queries
     {
         public bool CanCookOriginal { get; set; }
         public List<Guid> MissingIngredients { get; set; } = new();
+        /// <summary>Human-readable names for missing ingredients (parallel to MissingIngredients list)</summary>
+        public List<string> MissingIngredientNames { get; set; } = new();
         public AlternativeRecipeDto? AlternativeRecommendation { get; set; }
         public string Explanation { get; set; } = string.Empty;
     }

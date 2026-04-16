@@ -5,6 +5,7 @@ using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using MyDietitianMobileApp.Infrastructure.Services;
 
 namespace MyDietitianMobileApp.Application.Handlers;
 
@@ -91,8 +92,12 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
             };
         }
 
+        userAccount.EnsureSecurityStamp();
+        userAccount.LastLoginAtUtc = DateTime.UtcNow;
+        await _authContext.SaveChangesAsync(cancellationToken);
+
         // Generate JWT with minimal identity claims and PublicUserId
-        var token = GenerateJwtToken(userAccount.Id, client.Id, userAccount.PublicUserId);
+        var token = GenerateJwtToken(userAccount.Id, client.Id, userAccount.PublicUserId, userAccount.SecurityStamp);
 
         return new LoginClientResult
         {
@@ -103,9 +108,9 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
         };
     }
 
-    private string GenerateJwtToken(Guid userId, Guid clientId, string publicUserId)
+    private string GenerateJwtToken(Guid userId, Guid clientId, string publicUserId, string securityStamp)
     {
-        var secret = _config["Jwt:SecretKey"];
+        var secret = _config["Jwt:SecretKey"] ?? _config["Jwt:Secret"];
         var issuer = _config["Jwt:Issuer"];
         var audience = _config["Jwt:Audience"];
 
@@ -117,31 +122,20 @@ public class LoginClientCommandHandler : IRequestHandler<LoginClientCommand, Log
         if (string.IsNullOrWhiteSpace(audience))
             throw new InvalidOperationException("JWT_AUDIENCE_IS_NULL - Check appsettings.json");
 
-        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-        var key = System.Text.Encoding.UTF8.GetBytes(secret);
-
         var claims = new List<System.Security.Claims.Claim>
         {
-            new("sub", userId.ToString()),
-            // Role claims (double-write for robustness)
-            new("role", "Client"),
-            new(System.Security.Claims.ClaimTypes.Role, "Client"),
             new("clientId", clientId.ToString()),
             new("publicUserId", publicUserId)
         };
 
-        var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
-        {
-            Subject = new System.Security.Claims.ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddDays(30),
-            Issuer = issuer,
-            Audience = audience,
-            SigningCredentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
-                new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),
-                Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256Signature)
-        };
-
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        return JwtTokenGenerator.GenerateToken(
+            userId.ToString(),
+            "Client",
+            secret,
+            issuer,
+            audience,
+            expiresMinutes: 60 * 24 * 30,
+            securityStamp: securityStamp,
+            additionalClaims: claims);
     }
 }

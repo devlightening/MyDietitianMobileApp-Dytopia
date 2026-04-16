@@ -1,5 +1,7 @@
 {
   "common": {
+    "appointments": "Randevular",
+    "plans": "Planlar",
     "clients": "Danışanlar",
     "recipes": "Tarifler",
     "plans": "Planlar",
@@ -8,7 +10,8 @@
     "recipeMatch": "Tarif Eşleştir",
     "createRecipe": "Tarif Oluştur",
     "accessKeys": "Erişim Anahtarları",
-    "dashboard": "Dashboard",
+    "dashboard": "Ana Panel",
+    "careHub": "İletişim Merkezi",
     "logout": "Çıkış Yap",
     "welcomeBack": "Hoş geldiniz!",
     "refresh": "Yenile",
@@ -22,10 +25,10 @@
     "cancel": "İptal"
   },
   "dashboard": {
-    "title": "Dashboard Hazır",
-    "subtitle": "Henüz tarif veya erişim anahtarı yok. Danışanlarınız için tarif ekleyerek veya erişim anahtarı oluşturarak başlayın.",
+    "title": "Klinik Genel Görünüm",
+    "subtitle": "Danışan, plan ve iletişim durumunu tek ekrandan takip edin.",
     "welcomeSubtitle": "Hesabınızın genel görünümü",
-    "overview": "Genel Bakış"
+    "overview": "Genel Görünüm"
   },
   "clients": {
     "title": "Danışan Detayları",

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Enums;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Infrastructure.Services;
@@ -206,6 +207,51 @@ public class RecipeRecommendationEngineTests
         result.Explanation.MatchedOptionalCount.Should().Be(1);
         result.Explanation.RejectedBecauseProhibited.Should().BeFalse();
         result.Explanation.Reason.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void Ranking_Prefers_Exact_Mandatory_Coverage_Over_Substitute_Coverage_When_Score_Ties()
+    {
+        using var db = CreateDbContext();
+        var exactMandatory = new Ingredient(Guid.NewGuid(), "Exact Mandatory");
+        var substituteMandatory = new Ingredient(Guid.NewGuid(), "Substitute Mandatory");
+        var optional = new Ingredient(Guid.NewGuid(), "Optional");
+        var substitute = new Ingredient(Guid.NewGuid(), "Substitute");
+        db.Ingredients.AddRange(exactMandatory, substituteMandatory, optional, substitute);
+
+        var exactRecipe = new Recipe(Guid.NewGuid(), null, "Exact Recipe", "desc", isPublic: false);
+        exactRecipe.AddMandatoryIngredient(exactMandatory);
+        exactRecipe.AddOptionalIngredient(optional);
+
+        var substituteRecipe = new Recipe(Guid.NewGuid(), null, "Substitute Recipe", "desc", isPublic: false);
+        substituteRecipe.AddMandatoryIngredient(substituteMandatory);
+        substituteRecipe.AddOptionalIngredient(optional);
+
+        db.Recipes.AddRange(exactRecipe, substituteRecipe);
+        db.SaveChanges();
+
+        var substitutes = new Dictionary<(Guid, Guid), IReadOnlySet<Guid>>
+        {
+            [(substituteRecipe.Id, substituteMandatory.Id)] = new HashSet<Guid> { substitute.Id },
+        };
+
+        var compatibility = new Dictionary<(Guid, Guid, Guid), CompatibilityType>
+        {
+            [(substituteRecipe.Id, substituteMandatory.Id, substitute.Id)] = CompatibilityType.SubstituteAllowed,
+        };
+
+        var engine = CreateEngine();
+        var context = new RecipeEvaluationContext(
+            availableIngredientIds: new[] { exactMandatory.Id, substitute.Id },
+            prohibitedIngredientIds: Array.Empty<Guid>(),
+            substitutesByRecipeAndRequired: substitutes,
+            substituteCompatibilityByRecipeRequiredAndCandidate: compatibility);
+
+        var ranked = engine.RankRecipes(new[] { substituteRecipe, exactRecipe }, context);
+
+        ranked[0].Recipe.Id.Should().Be(exactRecipe.Id);
+        ranked[0].Explanation.ExactMandatoryMatchedCount.Should().Be(1);
+        ranked[1].Explanation.SubstituteMandatoryMatchedCount.Should().Be(1);
     }
 }
 

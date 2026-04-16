@@ -33,6 +33,25 @@ public class RecipeRecommendationLog
     public string? MissingMandatoryIdsJson { get; private set; }
 
     /// <summary>
+    /// Human-readable summary of why the planned recipe was rejected.
+    /// E.g. "Missing: tavuk göğsü, zeytinyağı" or "Prohibited ingredient: fıstık".
+    /// Required for Chapter 5 (evaluation) rejection analysis.
+    /// </summary>
+    public string? RejectionReasonSummary { get; private set; }
+
+    /// <summary>
+    /// JSON array of missing mandatory ingredient canonical names.
+    /// E.g. ["tavuk göğsü", "zeytinyağı"]. Enables precision/recall calculations.
+    /// </summary>
+    public string? MissingMandatoryNamesJson { get; private set; }
+
+    /// <summary>
+    /// JSON summary of which substitute ingredients were used and for which mandatory ingredient.
+    /// E.g. [{"required":"tavuk göğsü","substitute":"hindi göğsü"}].
+    /// </summary>
+    public string? SubstituteUsageSummaryJson { get; private set; }
+
+    /// <summary>
     /// Optional JSON with additional per-flow metadata (e.g. eliminated counts).
     /// </summary>
     public string? AdditionalMetaJson { get; private set; }
@@ -57,6 +76,9 @@ public class RecipeRecommendationLog
         bool prohibitedRejected,
         bool usedSubstitutes,
         string? missingMandatoryIdsJson,
+        string? rejectionReasonSummary,
+        string? missingMandatoryNamesJson,
+        string? substituteUsageSummaryJson,
         string? additionalMetaJson,
         string? correlationId)
     {
@@ -73,6 +95,9 @@ public class RecipeRecommendationLog
         ProhibitedRejected = prohibitedRejected;
         UsedSubstitutes = usedSubstitutes;
         MissingMandatoryIdsJson = missingMandatoryIdsJson;
+        RejectionReasonSummary = rejectionReasonSummary;
+        MissingMandatoryNamesJson = missingMandatoryNamesJson;
+        SubstituteUsageSummaryJson = substituteUsageSummaryJson;
         AdditionalMetaJson = additionalMetaJson;
         CorrelationId = correlationId;
     }

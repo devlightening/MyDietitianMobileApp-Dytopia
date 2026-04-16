@@ -47,15 +47,27 @@ public sealed class RecipeEvaluationContext
     /// Key: (RecipeId, RequiredIngredientId) → substitute ingredient IDs.
     /// </summary>
     public IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId), IReadOnlySet<Guid>> SubstitutesByRecipeAndRequired { get; }
+    public IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId, Guid CandidateIngredientId), MyDietitianMobileApp.Domain.Enums.CompatibilityType> SubstituteCompatibilityByRecipeRequiredAndCandidate { get; }
+
+    /// <summary>
+    /// Ingredient IDs classified as condiments/pantry helpers (oil, salt, spice, sauce, etc.).
+    /// A recipe whose ONLY matched mandatory ingredients are all condiments is NOT a valid full match.
+    /// </summary>
+    public IReadOnlySet<Guid> CondimentIngredientIds { get; }
 
     public RecipeEvaluationContext(
         IReadOnlyCollection<Guid> availableIngredientIds,
         IReadOnlyCollection<Guid> prohibitedIngredientIds,
-        IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId), IReadOnlySet<Guid>>? substitutesByRecipeAndRequired = null)
+        IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId), IReadOnlySet<Guid>>? substitutesByRecipeAndRequired = null,
+        IReadOnlyCollection<Guid>? condimentIngredientIds = null,
+        IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId, Guid CandidateIngredientId), MyDietitianMobileApp.Domain.Enums.CompatibilityType>? substituteCompatibilityByRecipeRequiredAndCandidate = null)
     {
         AvailableIngredientIds = new HashSet<Guid>(availableIngredientIds ?? Array.Empty<Guid>());
         ProhibitedIngredientIds = new HashSet<Guid>(prohibitedIngredientIds ?? Array.Empty<Guid>());
         SubstitutesByRecipeAndRequired = substitutesByRecipeAndRequired ?? new Dictionary<(Guid, Guid), IReadOnlySet<Guid>>();
+        CondimentIngredientIds = new HashSet<Guid>(condimentIngredientIds ?? Array.Empty<Guid>());
+        SubstituteCompatibilityByRecipeRequiredAndCandidate = substituteCompatibilityByRecipeRequiredAndCandidate
+            ?? new Dictionary<(Guid, Guid, Guid), MyDietitianMobileApp.Domain.Enums.CompatibilityType>();
     }
 }
 
@@ -68,6 +80,8 @@ public sealed class RecipeEvaluationExplanation
     public int MissingMandatoryCount { get; init; }
     public IReadOnlyCollection<Guid> MissingMandatoryIngredientIds { get; init; } = Array.Empty<Guid>();
     public int MatchedOptionalCount { get; init; }
+    public int ExactMandatoryMatchedCount { get; init; }
+    public int SubstituteMandatoryMatchedCount { get; init; }
     public IReadOnlyCollection<Guid> UsedSubstituteIngredientIds { get; init; } = Array.Empty<Guid>();
     public bool IsCookable { get; init; }
     public bool IsStrongAlternativeCandidate { get; init; }

@@ -5,26 +5,26 @@ namespace MyDietitianMobileApp.Api.Models
     public class RegisterDietitianRequest
     {
         [Required]
-        public string FullName { get; set; }
+        public string FullName { get; set; } = string.Empty;
         [Required]
-        public string ClinicName { get; set; }
+        public string ClinicName { get; set; } = string.Empty;
         [Required]
-        public string Email { get; set; }
+        public string Email { get; set; } = string.Empty;
         [Required]
-        public string Password { get; set; }
+        public string Password { get; set; } = string.Empty;
     }
 
     public class LoginDietitianRequest
     {
         [Required]
-        public string Email { get; set; }
+        public string Email { get; set; } = string.Empty;
         [Required]
-        public string Password { get; set; }
+        public string Password { get; set; } = string.Empty;
     }
 
     public class LoginClientWithAccessKeyRequest
     {
         [Required]
-        public string AccessKey { get; set; }
+        public string AccessKey { get; set; } = string.Empty;
     }
 }

@@ -9,19 +9,19 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const { isLocked } = useSidebar()
 
   return (
-    <div className="flex w-full h-screen overflow-x-hidden bg-background">
-      {/* Sidebar - Fixed position, transitions smoothly */}
+    <div className="relative flex h-screen w-full overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-10rem] top-[-8rem] h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute bottom-[-8rem] right-[-6rem] h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
+      </div>
+
       <Sidebar />
 
-      {/* Main Content Area - Margin adjusts based on lock state */}
       <div
-        className="flex-1 flex flex-col overflow-hidden transition-all duration-200 ease-in-out min-w-0"
-        style={{
-          marginLeft: isLocked ? '240px' : '64px'
-        }}
+        className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-out"
+        style={{ marginLeft: isLocked ? '248px' : '64px' }}
       >
-        {/* Page Content - Scrollable */}
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-8">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           {children}
         </main>
       </div>

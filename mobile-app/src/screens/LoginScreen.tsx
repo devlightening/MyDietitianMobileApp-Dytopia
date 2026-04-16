@@ -1,183 +1,86 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../auth/AuthContext';
-import { colors, spacing } from '../theme';
-import { API_BASE_URL } from '../config/api';
 import axios from 'axios';
+import { useAuth } from '../auth/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { useTranslation } from '../context/I18nContext';
+import { spacing, radii } from '../theme/tokens';
+import { API_BASE_URL } from '../config/api';
+import ProduceBubble from '../components/decor/ProduceBubble';
 
 let Device: any = null;
-try { Device = require('expo-device'); } catch { }
+try { Device = require('expo-device'); } catch {}
+
+const BENEFITS = [
+  { icon: 'calendar-clear-outline', label: 'Plan görünümü' },
+  { icon: 'restaurant-outline', label: 'Akıllı tarifler' },
+  { icon: 'fitness-outline', label: 'Ölçüm takibi' },
+] as const;
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [testingConnectivity, setTestingConnectivity] = useState(false);
+  const [testingConn, setTestingConn] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
+
   const { login } = useAuth();
   const navigation = useNavigation();
+  const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
 
-  // Log API base URL and login URL before login
-  React.useEffect(() => {
-    const loginUrl = `${API_BASE_URL}/api/auth/client/login`;
-    console.log('=== Login Screen ===');
-    console.log('API_BASE_URL:', API_BASE_URL);
-    console.log('Login URL:', loginUrl);
-    console.log('===================');
-  }, []);
-
-  const [showFixModal, setShowFixModal] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    baseURL: string;
-    duration: number;
-    errorType?: 'timeout' | 'network' | 'http' | 'unknown';
-    statusCode?: number;
-    message?: string;
-  } | null>(null);
+  const isValid = useMemo(() => email.trim().includes('@') && password.trim().length >= 6, [email, password]);
 
   async function testConnectivity() {
-    setTestingConnectivity(true);
-    const startTime = Date.now();
+    setTestingConn(true);
+    const isPhysical = Device?.isDevice === true;
+    const isLocal = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1');
 
-    // Check if baseURL is localhost on PHYSICAL device (not simulator)
-    const isPhysicalDevice = Device?.isDevice === true;
-    const isLocalhost = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1');
-    if (isPhysicalDevice && isLocalhost) {
-      setShowFixModal(true);
-      setTestingConnectivity(false);
+    if (isPhysical && isLocal) {
+      Alert.alert('Yapılandırma', 'Fiziksel cihazda localhost yerine bilgisayarınızın IP adresini kullanmalısınız.');
+      setTestingConn(false);
       return;
     }
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/health`, {
-        timeout: 5000,
-      });
-      const duration = Date.now() - startTime;
-
-      const result = {
-        success: true,
-        baseURL: API_BASE_URL,
-        duration,
-      };
-      setTestResult(result);
-
-      Alert.alert(
-        '✅ Bağlantı Testi Başarılı',
-        `Base URL: ${API_BASE_URL}\n` +
-        `Süre: ${duration}ms\n` +
-        `Durum: ${response.status} OK\n` +
-        `Yanıt: ${JSON.stringify(response.data)}`
-      );
+      const startedAt = Date.now();
+      const result = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 5000 });
+      Alert.alert('Bağlantı başarılı', `${API_BASE_URL}\n${Date.now() - startedAt} ms · ${result.status}`);
     } catch (error: any) {
-      const duration = Date.now() - startTime;
-
-      // Determine error type
-      let errorType: 'timeout' | 'network' | 'http' | 'unknown' = 'unknown';
-      let statusCode: number | undefined;
-      let message = error.message || 'Bilinmeyen hata';
-
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        errorType = 'timeout';
-        message = 'Bağlantı zaman aşımı (5 saniye)';
-      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network')) {
-        errorType = 'network';
-        message = 'Ağ bağlantısı hatası';
-      } else if (error.response) {
-        errorType = 'http';
-        statusCode = error.response.status;
-        message = `HTTP ${statusCode}: ${error.response.statusText || 'Sunucu hatası'}`;
-      }
-
-      const result = {
-        success: false,
-        baseURL: API_BASE_URL,
-        duration,
-        errorType,
-        statusCode,
-        message,
-      };
-      setTestResult(result);
-
-      // Build detailed error message
-      let errorDetails = `Base URL: ${API_BASE_URL}\n`;
-      errorDetails += `Süre: ${duration}ms\n`;
-      errorDetails += `Hata Tipi: ${errorType}\n`;
-      if (statusCode) {
-        errorDetails += `HTTP Durum: ${statusCode}\n`;
-      }
-      errorDetails += `Mesaj: ${message}\n\n`;
-
-      if (errorType === 'timeout') {
-        errorDetails += 'Kontrol edin:\n';
-        errorDetails += '• Backend çalışıyor mu?\n';
-        errorDetails += '• LAN IP doğru mu?\n';
-        errorDetails += '• Firewall port 5000\'i engelliyor mu?';
-      } else if (errorType === 'network') {
-        errorDetails += 'Kontrol edin:\n';
-        errorDetails += '• Telefon ve PC aynı Wi-Fi\'de mi?\n';
-        errorDetails += '• Backend 0.0.0.0:5000\'de çalışıyor mu?\n';
-        errorDetails += '• EXPO_PUBLIC_API_BASE_URL doğru mu?';
-      } else if (errorType === 'http') {
-        errorDetails += `Sunucu yanıt verdi ancak hata döndü (${statusCode})`;
-      }
-
-      Alert.alert('❌ Bağlantı Testi Başarısız', errorDetails);
+      Alert.alert('Bağlantı hatası', `${API_BASE_URL}\n${error.message}`);
     } finally {
-      setTestingConnectivity(false);
+      setTestingConn(false);
     }
   }
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Hata', 'Email ve şifre gereklidir');
+      Alert.alert('Hata', 'Email ve şifre gerekli');
       return;
     }
-
-    // Log login URL before attempting
-    const loginUrl = `${API_BASE_URL}/api/auth/client/login`;
-    console.log('Attempting login to:', loginUrl);
 
     setLoading(true);
     try {
       await login(email, password);
     } catch (error: any) {
-      // DETAILED ERROR LOGGING
-      console.log('=== LOGIN ERROR ===');
-      console.log('Error:', error);
-      console.log('Response:', error?.response);
-      console.log('Status:', error?.response?.status);
-      console.log('Data:', error?.response?.data);
-      console.log('Message:', error?.message);
-      console.log('Code:', error?.code);
-      console.log('==================');
-
       if (error.response?.status === 401) {
-        Alert.alert('Giriş Başarısız', 'Email veya şifre hatalı');
-      } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        Alert.alert(
-          'Bağlantı Zaman Aşımı',
-          'Sunucuya ulaşılamıyor. Kontrol edin:\n' +
-          '- LAN IP adresi\n' +
-          '- Firewall ayarları\n' +
-          '- Backend binding (0.0.0.0:5000)\n' +
-          '- API_BASE_URL değeri'
-        );
-      } else if (error.message?.includes('Network') || error.code === 'ERR_NETWORK') {
-        Alert.alert(
-          'Bağlantı Hatası',
-          `Backend'e ulaşılamıyor: ${API_BASE_URL}\n\n` +
-          'Kontrol edin:\n' +
-          '- LAN IP adresi\n' +
-          '- Firewall ayarları\n' +
-          '- Backend binding (0.0.0.0:5000)\n' +
-          '- API_BASE_URL değeri'
-        );
+        Alert.alert('Giriş başarısız', 'Email veya şifre hatalı');
       } else {
-        Alert.alert(
-          'Sunucu Hatası',
-          error.response?.data?.message || error.message || 'Teknik bir hata oluştu'
-        );
+        Alert.alert('Hata', error.response?.data?.detail || error.response?.data?.message || error.message || 'Teknik hata');
       }
     } finally {
       setLoading(false);
@@ -187,229 +90,320 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[s.root, { backgroundColor: theme.bg }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>MyDietitian</Text>
-        <Text style={styles.subtitle}>Diyet planınıza giriş yapın</Text>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          editable={!loading}
-        />
+      <ProduceBubble
+        icon="food-apple-outline"
+        iconSize={34}
+        iconColor={`${theme.primary}42`}
+        style={[s.topGlow, { backgroundColor: theme.primaryGlow }]}
+      />
+      <ProduceBubble
+        icon="carrot"
+        iconSize={38}
+        iconColor={`${theme.primary}46`}
+        style={[s.bottomGlow, { backgroundColor: theme.emeraldGlow }]}
+      />
+      <ProduceBubble
+        icon="leaf"
+        iconSize={22}
+        iconColor={`${theme.primary}36`}
+        style={[s.midGlow, { backgroundColor: `${theme.accentCyan}16` }]}
+      />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Şifre"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!loading}
-        />
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-          </Text>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={18} color={theme.primaryDark} />
+          <Text style={[s.backText, { color: theme.primaryDark }]}>{t.common.back}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.navigate('Register' as never)} // Routes.Auth.Register
-          disabled={loading}
-        >
-          <Text style={styles.linkText}>
-            Hesabınız yok mu? <Text style={styles.linkTextBold}>Kayıt Ol</Text>
-          </Text>
-        </TouchableOpacity>
+        <View style={[s.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={s.heroHeader}>
+            <View style={[s.brandMark, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
+              <Ionicons name="leaf" size={22} color={theme.primaryDark} />
+            </View>
+            <View style={[s.heroTag, { backgroundColor: theme.surfaceElevated }]}>
+              <Text style={[s.heroTagText, { color: theme.emerald }]}>Healthy routine</Text>
+            </View>
+          </View>
 
-        {/* Connectivity Test Button (Dev Only) */}
-        {__DEV__ && (
-          <TouchableOpacity
-            style={[styles.testButton, testingConnectivity && styles.buttonDisabled]}
-            onPress={testConnectivity}
-            disabled={testingConnectivity || loading}
-          >
-            <Text style={styles.testButtonText}>
-              {testingConnectivity ? 'Test Ediliyor...' : '🔍 Bağlantı Testi'}
-            </Text>
-          </TouchableOpacity>
-        )}
+          <Text style={[s.title, { color: theme.text }]}>{t.auth.loginTitle}</Text>
+          <Text style={[s.subtitle, { color: theme.textSub }]}>{t.auth.loginSubtitle}</Text>
 
-        {/* Fix Steps Modal (shown when localhost detected on device) */}
-        <Modal
-          visible={showFixModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowFixModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>⚠️ Yapılandırma Hatası</Text>
-              <Text style={styles.modalText}>
-                Cihazda localhost kullanılamaz. localhost cihazın kendisini işaret eder.
-              </Text>
-              <Text style={styles.modalSubtitle}>Çözüm Adımları:</Text>
-              <Text style={styles.modalStep}>1. PC'nizin LAN IP adresini bulun:</Text>
-              <Text style={styles.modalCode}>   Windows: ipconfig</Text>
-              <Text style={styles.modalCode}>   Mac/Linux: ifconfig</Text>
-              <Text style={styles.modalStep}>2. mobile-app/.env dosyası oluşturun:</Text>
-              <Text style={styles.modalCode}>   EXPO_PUBLIC_API_BASE_URL=http://YOUR_IP:5000</Text>
-              <Text style={styles.modalStep}>3. Uygulamayı yeniden başlatın:</Text>
-              <Text style={styles.modalCode}>   npx expo start --clear</Text>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => setShowFixModal(false)}
-              >
-                <Text style={styles.modalButtonText}>Tamam</Text>
+          <View style={s.benefitsRow}>
+            {BENEFITS.map((benefit) => (
+              <View key={benefit.label} style={[s.benefitChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
+                <Ionicons name={benefit.icon} size={14} color={theme.primaryDark} />
+                <Text style={[s.benefitText, { color: theme.textSub }]}>{benefit.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={[s.formCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+          <View style={s.field}>
+            <Text style={[s.label, { color: theme.textMuted }]}>{t.auth.email}</Text>
+            <View style={[
+              s.inputShell,
+              { backgroundColor: theme.surface, borderColor: focusedField === 'email' ? theme.primary : theme.border },
+            ]}>
+              <Ionicons name="mail-outline" size={18} color={focusedField === 'email' ? theme.primary : theme.textMuted} />
+              <TextInput
+                style={[s.input, { color: theme.text }]}
+                placeholder="email@example.com"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoCorrect={false}
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+                editable={!loading}
+              />
+            </View>
+          </View>
+
+          <View style={s.field}>
+            <Text style={[s.label, { color: theme.textMuted }]}>{t.auth.password}</Text>
+            <View style={[
+              s.inputShell,
+              { backgroundColor: theme.surface, borderColor: focusedField === 'password' ? theme.primary : theme.border },
+            ]}>
+              <Ionicons name="lock-closed-outline" size={18} color={focusedField === 'password' ? theme.primary : theme.textMuted} />
+              <TextInput
+                style={[s.input, { color: theme.text }]}
+                placeholder="••••••••"
+                placeholderTextColor={theme.textMuted}
+                secureTextEntry={!showPw}
+                autoCorrect={false}
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                editable={!loading}
+              />
+              <TouchableOpacity onPress={() => setShowPw((v) => !v)} disabled={loading} style={s.eyeBtn}>
+                <Ionicons name={showPw ? 'eye-outline' : 'eye-off-outline'} size={18} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
+
+          <TouchableOpacity
+            style={[
+              s.primaryBtn,
+              { backgroundColor: theme.primary, shadowColor: theme.primaryGlow },
+              (!isValid || loading) && s.disabledBtn,
+            ]}
+            onPress={handleLogin}
+            disabled={!isValid || loading}
+            activeOpacity={0.88}
+          >
+            <Text style={s.primaryBtnText}>{loading ? 'Giriş yapılıyor...' : t.auth.loginBtn}</Text>
+            {!loading && <Ionicons name="arrow-forward" size={18} color="#FFF" />}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.secondaryBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            onPress={() => navigation.navigate('Register' as never)}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.secondaryBtnText, { color: theme.primaryDark }]}>
+              {t.auth.noAccount} <Text style={s.secondaryBtnBold}>{t.auth.registerBtn}</Text>
+            </Text>
+          </TouchableOpacity>
+
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[s.devBtn, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
+              onPress={testConnectivity}
+              disabled={loading || testingConn}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="wifi-outline" size={15} color={theme.textMuted} />
+              <Text style={[s.devText, { color: theme.textMuted }]}>
+                {testingConn ? 'Bağlantı test ediliyor...' : 'API bağlantısını test et'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl + 10,
+    paddingBottom: spacing.xxxl,
   },
+
+  topGlow: {
+    position: 'absolute',
+    top: -90,
+    right: -70,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    opacity: 0.95,
+  },
+  bottomGlow: {
+    position: 'absolute',
+    bottom: -90,
+    left: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    opacity: 0.82,
+  },
+  midGlow: {
+    position: 'absolute',
+    top: '48%',
+    right: 18,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    opacity: 0.7,
+  },
+
+  backBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: spacing.lg,
+  },
+  backText: { fontSize: 14, fontWeight: '800' },
+
+  heroCard: {
+    borderRadius: radii.xxl,
+    borderWidth: 1,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    shadowColor: '#183324',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.08,
+    shadowRadius: 28,
+    elevation: 10,
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  brandMark: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  heroTag: {
+    borderRadius: radii.full,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  heroTagText: { fontSize: 12, fontWeight: '800' },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.sage,
-    textAlign: 'center',
+    fontSize: 30,
+    fontWeight: '900',
+    lineHeight: 36,
+    letterSpacing: -1,
     marginBottom: spacing.sm,
   },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
+  subtitle: { fontSize: 15, lineHeight: 22, marginBottom: spacing.lg },
+  benefitsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  benefitChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  benefitText: { fontSize: 12, fontWeight: '700' },
+
+  formCard: {
+    borderRadius: radii.xxl,
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  field: { marginBottom: spacing.base },
+  label: { fontSize: 12, fontWeight: '800', marginBottom: 8, letterSpacing: 0.5 },
+  inputShell: {
+    minHeight: 56,
+    borderWidth: 1.3,
+    borderRadius: radii.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    gap: 10,
   },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 16,
-    marginBottom: spacing.md,
-    backgroundColor: colors.card,
-  },
-  button: {
-    backgroundColor: colors.sage,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  linkButton: {
-    marginTop: spacing.lg,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-  linkTextBold: {
-    color: colors.sage,
-    fontWeight: '600',
-  },
-  testButton: {
-    backgroundColor: colors.textMuted,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  testButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    fontSize: 15,
+    paddingVertical: 14,
+  },
+  eyeBtn: {
+    width: 34,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  primaryBtn: {
+    minHeight: 56,
+    borderRadius: radii.xl,
     alignItems: 'center',
-    padding: spacing.lg,
-  },
-  modalContent: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: spacing.lg,
-    width: '100%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.sage,
-    marginBottom: spacing.md,
-  },
-  modalText: {
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: spacing.md,
-    lineHeight: 22,
-  },
-  modalSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  modalStep: {
-    fontSize: 14,
-    color: colors.text,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
     marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
+    elevation: 10,
   },
-  modalCode: {
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    color: colors.sage,
-    backgroundColor: colors.background,
-    padding: spacing.xs,
-    borderRadius: 4,
-    marginLeft: spacing.md,
-    marginBottom: spacing.xs,
+  disabledBtn: {
+    opacity: 0.55,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  modalButton: {
-    backgroundColor: colors.sage,
-    padding: spacing.md,
-    borderRadius: 8,
+  primaryBtnText: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+
+  secondaryBtn: {
+    minHeight: 52,
+    borderRadius: radii.xl,
+    borderWidth: 1.2,
     alignItems: 'center',
-    marginTop: spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
   },
-  modalButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+  secondaryBtnText: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  secondaryBtnBold: { fontWeight: '900' },
+
+  devBtn: {
+    marginTop: spacing.md,
+    minHeight: 46,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
+  devText: { fontSize: 12, fontWeight: '700' },
 });

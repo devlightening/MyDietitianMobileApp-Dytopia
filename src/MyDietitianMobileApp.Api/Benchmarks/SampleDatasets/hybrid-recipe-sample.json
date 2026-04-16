@@ -1,0 +1,537 @@
+﻿{
+    "name":  "Hybrid Recipe Matching Ground Truth",
+    "version":  "1.0",
+    "description":  "40 hybrid kitchen basket cases for recipe top-1 precision and hit@3 evaluation.",
+    "cases":  [
+                  {
+                      "id":  "hybrid-001",
+                      "description":  "Text tomato plus vision egg",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-002",
+                      "description":  "Barcode tuna plus vision cucumber",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-003",
+                      "description":  "Text milk plus vision banana",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Milk",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-004",
+                      "description":  "Barcode oat plus text milk",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Oat",
+                                                            "Milk"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-oat-bowl",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-oat-bowl",
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-005",
+                      "description":  "Vision tomato plus vision cucumber",
+                      "sourceMix":  "vision+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-salad",
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-006",
+                      "description":  "Text tuna only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-007",
+                      "description":  "Barcode yogurt plus text banana",
+                      "sourceMix":  "barcode+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Yogurt",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-008",
+                      "description":  "Text egg only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-009",
+                      "description":  "Text tomato plus vision egg",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-010",
+                      "description":  "Barcode tuna plus vision cucumber",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-011",
+                      "description":  "Text milk plus vision banana",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Milk",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-012",
+                      "description":  "Barcode oat plus text milk",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Oat",
+                                                            "Milk"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-oat-bowl",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-oat-bowl",
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-013",
+                      "description":  "Vision tomato plus vision cucumber",
+                      "sourceMix":  "vision+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-salad",
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-014",
+                      "description":  "Text tuna only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-015",
+                      "description":  "Barcode yogurt plus text banana",
+                      "sourceMix":  "barcode+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Yogurt",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-016",
+                      "description":  "Text egg only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-017",
+                      "description":  "Text tomato plus vision egg",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-018",
+                      "description":  "Barcode tuna plus vision cucumber",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-019",
+                      "description":  "Text milk plus vision banana",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Milk",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-020",
+                      "description":  "Barcode oat plus text milk",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Oat",
+                                                            "Milk"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-oat-bowl",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-oat-bowl",
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-021",
+                      "description":  "Vision tomato plus vision cucumber",
+                      "sourceMix":  "vision+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-salad",
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-022",
+                      "description":  "Text tuna only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-023",
+                      "description":  "Barcode yogurt plus text banana",
+                      "sourceMix":  "barcode+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Yogurt",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-024",
+                      "description":  "Text egg only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-025",
+                      "description":  "Text tomato plus vision egg",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-026",
+                      "description":  "Barcode tuna plus vision cucumber",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-027",
+                      "description":  "Text milk plus vision banana",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Milk",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-028",
+                      "description":  "Barcode oat plus text milk",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Oat",
+                                                            "Milk"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-oat-bowl",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-oat-bowl",
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-029",
+                      "description":  "Vision tomato plus vision cucumber",
+                      "sourceMix":  "vision+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-salad",
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-030",
+                      "description":  "Text tuna only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-031",
+                      "description":  "Barcode yogurt plus text banana",
+                      "sourceMix":  "barcode+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Yogurt",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-032",
+                      "description":  "Text egg only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-033",
+                      "description":  "Text tomato plus vision egg",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-034",
+                      "description":  "Barcode tuna plus vision cucumber",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad",
+                                                      "recipe-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-035",
+                      "description":  "Text milk plus vision banana",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Milk",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-036",
+                      "description":  "Barcode oat plus text milk",
+                      "sourceMix":  "hybrid",
+                      "availableCanonicalIngredients":  [
+                                                            "Oat",
+                                                            "Milk"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-oat-bowl",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-oat-bowl",
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-037",
+                      "description":  "Vision tomato plus vision cucumber",
+                      "sourceMix":  "vision+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Tomato",
+                                                            "Cucumber"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-salad",
+                                                      "recipe-omelette"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-038",
+                      "description":  "Text tuna only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Tuna"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-tuna-salad",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-tuna-salad"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-039",
+                      "description":  "Barcode yogurt plus text banana",
+                      "sourceMix":  "barcode+text",
+                      "availableCanonicalIngredients":  [
+                                                            "Yogurt",
+                                                            "Banana"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-smoothie",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-smoothie"
+                                                  ]
+                  },
+                  {
+                      "id":  "hybrid-040",
+                      "description":  "Text egg only",
+                      "sourceMix":  "text-only",
+                      "availableCanonicalIngredients":  [
+                                                            "Egg"
+                                                        ],
+                      "expectedTop1RecipeId":  "recipe-omelette",
+                      "acceptableTop3RecipeIds":  [
+                                                      "recipe-omelette"
+                                                  ]
+                  }
+              ]
+}

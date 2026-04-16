@@ -2,9 +2,40 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../config/api';
 
-// Log API base URL on startup
+// Non-blocking startup connectivity probe (dev only).
+// Probes GET /health on the configured API_BASE_URL so the developer sees
+// connectivity status before the first real API call is attempted.
+// Does NOT mutate any state — observe only.
 if (__DEV__) {
-  console.log('API Client initialized with baseURL:', API_BASE_URL);
+  void (async () => {
+    const { checkBackendHealth } = await import('./health');
+    const result = await checkBackendHealth();
+
+    if (result.reachable) {
+      console.log(`✅ Backend reachable in ${result.latencyMs}ms → ${result.environment ?? '?'} | ${result.url}`);
+    } else {
+      const isForced = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
+      console.error(`❌ Backend NOT reachable at: ${result.url}`);
+      console.error(`   Error: ${result.error}`);
+      console.error('');
+      console.error('   ── Checklist ─────────────────────────────────────────────────');
+      console.error('   Option A – Cloudflare Tunnel (physical device / any network):');
+      console.error('     1. dotnet run --launch-profile http');
+      console.error('     2. cloudflared tunnel --url http://localhost:5000');
+      console.error('     3. Copy HTTPS URL → set EXPO_PUBLIC_API_BASE_URL in .env');
+      console.error('        EXPO_PUBLIC_API_BASE_URL_FORCE=1');
+      console.error('');
+      console.error('   Option B – Android emulator (adb reverse):');
+      console.error('     1. dotnet run --launch-profile http');
+      console.error('     2. adb reverse tcp:5000 tcp:5000');
+      console.error('     3. EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:5000');
+      console.error('        EXPO_PUBLIC_API_BASE_URL_FORCE=1');
+      if (!isForced) {
+        console.warn('   ⚠️  FORCE=1 is not set — URL may have been auto-detected incorrectly.');
+      }
+      console.error('   ─────────────────────────────────────────────────────────────');
+    }
+  })();
 }
 
 const apiClient = axios.create({
@@ -93,7 +124,9 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * Helper to change API base URL at runtime (for self-healing)
+ * Changes the API base URL at runtime.
+ * Exported for tooling / manual override in dev console only.
+ * NEVER call this automatically — if FORCE=1 is set, the env URL is authoritative.
  */
 export function setApiBaseUrl(newUrl: string) {
   apiClient.defaults.baseURL = newUrl;

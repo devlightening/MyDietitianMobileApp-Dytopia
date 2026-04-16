@@ -10,10 +10,23 @@ using System.Threading.Tasks;
 
 namespace MyDietitianMobileApp.Application.Queries
 {
+    /// <summary>
+    /// OBSOLETE — DO NOT USE. This handler has no tenant isolation and no premium filtering.
+    /// It loads ALL recipes across ALL dietitians and all visibility states.
+    ///
+    /// The active recipe matching pipeline is in RecipeMatchController (POST /api/recipes/match),
+    /// which implements proper premium candidate scoping, condiment guardrails, explainable scoring,
+    /// and source metadata. This handler must not be wired to any endpoint.
+    ///
+    /// Kept here only to avoid breaking the MediatR registration scan. If MediatR is removed,
+    /// delete this class entirely.
+    /// </summary>
+    [Obsolete("Use RecipeMatchController (POST /api/recipes/match) instead. This handler has no tenant isolation.")]
     public record MatchRecipesQuery(
         List<Guid> ClientIngredientIds
     ) : IRequest<List<RecipeMatchResultDto>>;
 
+    [Obsolete("Use RecipeMatchController (POST /api/recipes/match) instead. This handler has no tenant isolation.")]
     public class MatchRecipesQueryHandler : IRequestHandler<MatchRecipesQuery, List<RecipeMatchResultDto>>
     {
         private readonly IRecipeRepository _recipeRepository;
@@ -25,6 +38,13 @@ namespace MyDietitianMobileApp.Application.Queries
 
         public async Task<List<RecipeMatchResultDto>> Handle(MatchRecipesQuery request, CancellationToken cancellationToken)
         {
+            // SECURITY: This method intentionally throws to prevent accidental use.
+            // It has NO tenant isolation: it would expose all private recipes across all dietitians.
+            throw new InvalidOperationException(
+                "MatchRecipesQueryHandler is deprecated and must not be called. " +
+                "Use POST /api/recipes/match (RecipeMatchController) which enforces premium isolation.");
+
+#pragma warning disable CS0162 // Unreachable code detected
             var recipes = await _recipeRepository.GetAllWithIngredientsAsync(cancellationToken);
             var results = new List<RecipeMatchResultDto>();
 
@@ -39,7 +59,7 @@ namespace MyDietitianMobileApp.Application.Queries
                 // Check for mandatory ingredients
                 var missingMandatory = recipe.MandatoryIngredients
                     .Where(ingredient => !request.ClientIngredientIds.Contains(ingredient.Id))
-                    .Select(ingredient => ingredient.Name)
+                    .Select(ingredient => ingredient.CanonicalName)
                     .ToList();
 
                 if (missingMandatory.Any())
@@ -70,12 +90,12 @@ namespace MyDietitianMobileApp.Application.Queries
                 var matchedIngredients = recipe.MandatoryIngredients
                     .Concat(recipe.OptionalIngredients)
                     .Where(ingredient => request.ClientIngredientIds.Contains(ingredient.Id))
-                    .Select(ingredient => ingredient.Name)
+                    .Select(ingredient => ingredient.CanonicalName)
                     .ToList();
 
                 var missingOptional = recipe.OptionalIngredients
                     .Where(ingredient => !request.ClientIngredientIds.Contains(ingredient.Id))
-                    .Select(ingredient => ingredient.Name)
+                    .Select(ingredient => ingredient.CanonicalName)
                     .ToList();
 
                 results.Add(new RecipeMatchResultDto
@@ -91,6 +111,7 @@ namespace MyDietitianMobileApp.Application.Queries
             }
 
             return results.OrderByDescending(r => r.MatchPercentage).ToList();
+#pragma warning restore CS0162
         }
     }
 }

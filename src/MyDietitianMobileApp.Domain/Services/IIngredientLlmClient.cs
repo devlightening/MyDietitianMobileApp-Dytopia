@@ -26,6 +26,16 @@ public interface IIngredientLlmClient
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Supported LLM provider types for the optional Layer D fallback.
+/// </summary>
+public enum IngredientLlmProvider
+{
+    None = 0,
+    OpenAi = 1,
+    Ollama = 2
+}
+
 /// <summary>A single ingredient candidate surfaced to the LLM.</summary>
 public class LlmCandidateIngredient
 {
@@ -89,6 +99,19 @@ public class LlmNormalizationOptions
     /// <summary>When false, <see cref="NullIngredientLlmClient"/> is registered and no LLM calls are made.</summary>
     public bool Enabled { get; set; } = false;
 
+    /// <summary>
+    /// Provider selection for the optional fallback layer.
+    /// Supported values: "openai", "ollama".
+    /// </summary>
+    public string Provider { get; set; } = "openai";
+
+    /// <summary>
+    /// Optional provider-specific base URL override.
+    /// OpenAI defaults to https://api.openai.com/
+    /// Ollama defaults to http://localhost:11434/
+    /// </summary>
+    public string? BaseUrl { get; set; }
+
     /// <summary>OpenAI model name (e.g. "gpt-4o-mini").</summary>
     public string ModelName { get; set; } = "gpt-4o-mini";
 
@@ -112,4 +135,17 @@ public class LlmNormalizationOptions
 
     /// <summary>Minimum LLM confidence to return Ambiguous (vs. Unmatched).</summary>
     public double MinConfidenceForAmbiguous { get; set; } = 0.50;
+
+    public IngredientLlmProvider ResolveProvider()
+    {
+        if (!Enabled)
+            return IngredientLlmProvider.None;
+
+        return Provider?.Trim().ToLowerInvariant() switch
+        {
+            "openai" => IngredientLlmProvider.OpenAi,
+            "ollama" => IngredientLlmProvider.Ollama,
+            _ => IngredientLlmProvider.None
+        };
+    }
 }

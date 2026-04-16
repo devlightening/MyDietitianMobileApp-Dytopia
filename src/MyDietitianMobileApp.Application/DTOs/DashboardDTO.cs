@@ -39,32 +39,38 @@ public class DashboardDTO
     /// Dashboard summary stats (premium only)
     /// </summary>
     public DashboardSummaryDTO? Summary { get; set; }
+
+    /// <summary>
+    /// Motivation and streak metadata (premium only)
+    /// </summary>
+    public DashboardMotivationDTO? Motivation { get; set; }
 }
 
 /// <summary>
-/// Next meal information
+/// Next meal information (used by Dashboard widget and /api/client/meals/next)
 /// </summary>
 public class NextMealDTO
 {
-    /// <summary>
-    /// Meal time (HH:mm format, e.g., "14:30")
-    /// </summary>
+    /// <summary>PlanMealItem Id — used for navigation and completion actions</summary>
+    public Guid? MealItemId { get; set; }
+
+    /// <summary>Meal time (HH:mm format, e.g., "14:30")</summary>
     public string? Time { get; set; }
 
-    /// <summary>
-    /// Meal title/name
-    /// </summary>
+    /// <summary>Meal category string: Breakfast, Lunch, Dinner, Snack, etc.</summary>
+    public string? MealType { get; set; }
+
+    /// <summary>Meal title/name</summary>
     public string? Title { get; set; }
 
-    /// <summary>
-    /// Optional note or instruction
-    /// </summary>
+    /// <summary>Optional note or instruction</summary>
     public string? Note { get; set; }
 
-    /// <summary>
-    /// Meal ID for navigation
-    /// </summary>
-    public int? MealId { get; set; }
+    /// <summary>Linked recipe (for Kitchen navigation)</summary>
+    public Guid? RecipeId { get; set; }
+
+    /// <summary>Minutes until this meal is scheduled (negative = already past)</summary>
+    public int? MinutesUntil { get; set; }
 }
 
 /// <summary>
@@ -91,4 +97,66 @@ public class DashboardSummaryDTO
     /// Steps count
     /// </summary>
     public int? Steps { get; set; }
+
+    /// <summary>
+    /// Earned badge count from current motivation model
+    /// </summary>
+    public int? BadgeCount { get; set; }
+}
+
+/// <summary>
+/// Motivation payload for gamified daily adherence
+/// </summary>
+public class DashboardMotivationDTO
+{
+    /// <summary>
+    /// Current active adherence streak
+    /// </summary>
+    public int CurrentStreak { get; set; }
+
+    /// <summary>
+    /// Best streak in the lookback window
+    /// </summary>
+    public int BestStreak { get; set; }
+
+    /// <summary>
+    /// Total earned badges from the defined achievement set
+    /// </summary>
+    public int EarnedBadgeCount { get; set; }
+
+    /// <summary>
+    /// Days left until the next streak milestone. 0 when no next milestone remains.
+    /// </summary>
+    public int NextMilestoneDays { get; set; }
+
+    /// <summary>
+    /// Achievement set used by the client for badge UI and notifications
+    /// </summary>
+    public List<DashboardAchievementDTO> Achievements { get; set; } = new();
+}
+
+/// <summary>
+/// Individual achievement progress and unlock state
+/// </summary>
+public class DashboardAchievementDTO
+{
+    /// <summary>
+    /// Stable client-facing achievement id
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Progress value toward the target
+    /// </summary>
+    public int ProgressCurrent { get; set; }
+
+    /// <summary>
+    /// Progress target value
+    /// </summary>
+    public int ProgressTarget { get; set; }
+
+    /// <summary>
+    /// Whether the achievement is currently unlocked
+    /// </summary>
+    public bool Unlocked { get; set; }
 }

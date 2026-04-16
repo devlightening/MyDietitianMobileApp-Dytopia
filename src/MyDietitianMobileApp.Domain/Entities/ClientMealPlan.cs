@@ -24,6 +24,17 @@ public class ClientMealPlan
     // EF Core constructor
     private ClientMealPlan() { }
 
+    private static DateTime NormalizeUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+    private static DateTime? NormalizeUtc(DateTime? value) =>
+        value.HasValue ? NormalizeUtc(value.Value) : null;
+
     public ClientMealPlan(
         Guid clientId,
         Guid dietitianId,
@@ -37,8 +48,8 @@ public class ClientMealPlan
         DietitianId = dietitianId;
         Name = name;
         Description = description;
-        StartDate = startDate;
-        EndDate = endDate;
+        StartDate = NormalizeUtc(startDate);
+        EndDate = NormalizeUtc(endDate);
         IsActive = true;
         CreatedAtUtc = DateTime.UtcNow;
         UpdatedAtUtc = DateTime.UtcNow;
@@ -48,8 +59,8 @@ public class ClientMealPlan
     {
         Name = name;
         Description = description;
-        StartDate = startDate;
-        EndDate = endDate;
+        StartDate = NormalizeUtc(startDate);
+        EndDate = NormalizeUtc(endDate);
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
@@ -110,12 +121,12 @@ public class ClientMeal
         DayOfWeek = dayOfWeek;
         MealType = mealType.ToLower();
         Servings = servings;
-        CreatedAtUtc = DateTime.UtcNow;
+        CreatedAtUtc = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
     }
 
     public void MarkAsCompleted()
     {
-        CompletedAt = DateTime.UtcNow;
+        CompletedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
     }
 
     public void MarkAsIncomplete()

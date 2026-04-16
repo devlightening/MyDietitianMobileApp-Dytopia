@@ -1,181 +1,84 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { Check, ImagePlus, Palette, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { Check, Upload, X, Palette, AlertCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { PRESET_THEMES } from '@/lib/constants/themes';
 import { applyBrandingToDom } from '@/lib/branding/applyBranding';
+import { PRESET_THEMES, ThemePreset } from '@/lib/constants/themes';
+import { cn } from '@/lib/utils';
 import {
+  deleteLogo,
   getSettings,
+  type DietitianSettings,
   updateSettings,
   uploadLogo,
-  deleteLogo,
-  type DietitianSettings,
 } from '@/lib/api/settings';
+import { SettingsCard } from '@/components/settings/SettingsCard';
+import { SettingsSaveBar } from '@/components/settings/SettingsSaveBar';
 
-// Form validation schema
-const settingsSchema = z.object({
-  clinicName: z.string().min(1, 'Clinic name is required').max(100),
-  dietitianDisplayName: z.string().min(1, 'Display name is required').max(100),
-  primaryColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color'),
-  accentColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color'),
+const brandingSchema = z.object({
+  primaryColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Geçerli bir ana renk girin.'),
+  accentColorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Geçerli bir vurgu rengi girin.'),
   themePresetKey: z.string().nullable().optional(),
 });
 
-type SettingsFormData = z.infer<typeof settingsSchema>;
+type BrandingFormData = z.infer<typeof brandingSchema>;
+
+function findPreset(primaryColorHex: string, accentColorHex: string) {
+  return (
+    PRESET_THEMES.find(
+      (preset) =>
+        preset.primary.toUpperCase() === primaryColorHex.toUpperCase() &&
+        preset.accent.toUpperCase() === accentColorHex.toUpperCase()
+    ) ?? null
+  );
+}
 
 export default function BrandingPage() {
   const queryClient = useQueryClient();
-
-  // Separate saved (persisted) vs draft (preview) state
-  const [savedSettings, setSavedSettings] = useState<DietitianSettings | null>(null);
-  const [draftSettings, setDraftSettings] = useState<DietitianSettings | null>(null);
-
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(null);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-
-  // Fetch settings
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
     queryFn: getSettings,
   });
 
-  // Form setup
-  const form = useForm<SettingsFormData>({
-    resolver: zodResolver(settingsSchema),
+  const form = useForm<BrandingFormData>({
+    resolver: zodResolver(brandingSchema),
     defaultValues: {
-      clinicName: '',
-      dietitianDisplayName: '',
       primaryColorHex: '#4A7C59',
       accentColorHex: '#8FBC8F',
       themePresetKey: 'sage',
     },
   });
 
-  // Initialize saved and draft when settings load
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(null);
+  const [isLogoMarkedForRemoval, setIsLogoMarkedForRemoval] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+
   useEffect(() => {
-    if (settings) {
-      setSavedSettings(settings);
-      setDraftSettings(settings);
-      form.reset({
-        clinicName: settings.clinicName,
-        dietitianDisplayName: settings.dietitianDisplayName,
-        primaryColorHex: settings.primaryColorHex,
-        accentColorHex: settings.accentColorHex,
-        themePresetKey: settings.themePresetKey,
-      });
-      setLogoPreview(settings.logoUrl);
-      setLastSaved(new Date(settings.updatedAt));
-    }
-  }, [settings, form]);
-
-  // Detect unsaved changes (deep compare)
-  const hasUnsavedChanges = useMemo(() => {
-    if (!savedSettings || !draftSettings) return false;
-
-    return (
-      savedSettings.primaryColorHex !== draftSettings.primaryColorHex ||
-      savedSettings.accentColorHex !== draftSettings.accentColorHex ||
-      savedSettings.themePresetKey !== draftSettings.themePresetKey ||
-      savedSettings.clinicName !== draftSettings.clinicName ||
-      savedSettings.dietitianDisplayName !== draftSettings.dietitianDisplayName ||
-      logoFile !== null
-    );
-  }, [savedSettings, draftSettings, logoFile]);
-
-  // Warn on browser refresh/close if unsaved changes
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = ''; // Chrome requires returnValue to be set
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [hasUnsavedChanges]);
-
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: updateSettings,
-    onSuccess: (data) => {
-      queryClient.setQueryData(['settings'], data);
-      setLastSaved(new Date(data.updatedAt));
-      form.reset(form.getValues()); // Reset dirty state
-      toast.success('Settings saved successfully!');
-    },
-    onError: () => {
-      toast.error('Failed to save settings');
-    },
-  });
-
-  // Logo upload mutation
-  const uploadMutation = useMutation({
-    mutationFn: uploadLogo,
-    onSuccess: (data) => {
-      queryClient.setQueryData(['settings'], data);
-      setLogoPreview(data.logoUrl);
-      setLogoFile(null);
-      toast.success('Logo uploaded successfully!');
-    },
-    onError: () => {
-      toast.error('Failed to upload logo');
-    },
-  });
-
-  // Logo delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: deleteLogo,
-    onSuccess: (data) => {
-      queryClient.setQueryData(['settings'], data);
-      setLogoPreview(null);
-      setLogoFile(null);
-      toast.success('Logo removed successfully!');
-    },
-    onError: () => {
-      toast.error('Failed to remove logo');
-    },
-  });
-
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
-      toast.error('Only PNG, JPG, and WebP images are allowed');
+    if (!settings) {
       return;
     }
 
-    // Validate file size (2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('File size must be less than 2MB');
-      return;
-    }
+    form.reset({
+      primaryColorHex: settings.primaryColorHex,
+      accentColorHex: settings.accentColorHex,
+      themePresetKey:
+        settings.themePresetKey ??
+        findPreset(settings.primaryColorHex, settings.accentColorHex)?.key ??
+        null,
+    });
+    setLogoPreviewUrl(settings.logoUrl ?? null);
+    setIsLogoMarkedForRemoval(false);
+    setLastSavedAt(settings.updatedAt);
+  }, [form, settings]);
 
-    // Cleanup old object URL
-    if (logoObjectUrl) {
-      URL.revokeObjectURL(logoObjectUrl);
-    }
-
-    // Create new object URL for local preview
-    const objectUrl = URL.createObjectURL(file);
-    setLogoObjectUrl(objectUrl);
-    setLogoFile(file);
-  };
-
-  // Cleanup object URL on unmount
   useEffect(() => {
     return () => {
       if (logoObjectUrl) {
@@ -184,417 +87,460 @@ export default function BrandingPage() {
     };
   }, [logoObjectUrl]);
 
-  const handleSave = async () => {
-    const isValid = await form.trigger();
-    if (!isValid) return;
+  const primaryColorHex = form.watch('primaryColorHex');
+  const accentColorHex = form.watch('accentColorHex');
+  const selectedPresetKey = form.watch('themePresetKey');
 
-    // Prevent double-submit
-    if (uploadMutation.isPending || updateMutation.isPending) return;
+  const selectedPreset = useMemo(
+    () => PRESET_THEMES.find((preset) => preset.key === selectedPresetKey) ?? null,
+    [selectedPresetKey]
+  );
 
-    try {
-      let updatedSettings = savedSettings;
+  const effectiveLogoUrl = isLogoMarkedForRemoval
+    ? null
+    : logoObjectUrl || logoPreviewUrl || settings?.logoUrl || null;
 
-      // 1. Upload logo first if changed
-      if (logoFile) {
-        updatedSettings = await uploadMutation.mutateAsync(logoFile);
-        setLogoFile(null);
-        // Cleanup object URL after upload
-        if (logoObjectUrl) {
-          URL.revokeObjectURL(logoObjectUrl);
-          setLogoObjectUrl(null);
-        }
-      }
+  const isDirty =
+    form.formState.isDirty || logoFile !== null || isLogoMarkedForRemoval || false;
 
-      // 2. Update settings with DRAFT values
-      const values = form.getValues();
-      updatedSettings = await updateMutation.mutateAsync({
-        clinicName: values.clinicName!,
-        dietitianDisplayName: values.dietitianDisplayName!,
-        primaryColorHex: values.primaryColorHex!,
-        accentColorHex: values.accentColorHex!,
-        themePresetKey: values.themePresetKey ?? null,
-      });
-
-      // 3. Update BOTH saved and draft to response
-      setSavedSettings(updatedSettings);
-      setDraftSettings(updatedSettings);
-      setLastSaved(new Date(updatedSettings.updatedAt));
-
-      // 4. Invalidate cache
-      await queryClient.invalidateQueries({ queryKey: ['settings'] });
-
-      // 5. Apply global theme (will happen via BrandingContext watching savedSettings)
-      applyBrandingToDom(updatedSettings);
-
-      toast.success('Settings saved successfully!');
-    } catch (error) {
-      console.error('Save error:', error);
-    }
+  const updatePresetSelection = (primary: string, accent: string) => {
+    const matchedPreset = findPreset(primary, accent);
+    form.setValue('themePresetKey', matchedPreset?.key ?? null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   };
 
-  const handleDiscard = () => {
-    if (!savedSettings) return;
+  const handlePresetSelect = (preset: ThemePreset) => {
+    form.setValue('primaryColorHex', preset.primary, { shouldDirty: true, shouldValidate: true });
+    form.setValue('accentColorHex', preset.accent, { shouldDirty: true, shouldValidate: true });
+    form.setValue('themePresetKey', preset.key, { shouldDirty: true, shouldValidate: true });
+  };
 
-    // 1. Revert draft to saved
-    setDraftSettings(savedSettings);
+  const handleColorInputChange =
+    (field: 'primaryColorHex' | 'accentColorHex') => (event: ChangeEvent<HTMLInputElement>) => {
+      const nextValue = event.target.value.toUpperCase();
+      form.setValue(field, nextValue, { shouldDirty: true, shouldValidate: true });
+      const nextPrimary = field === 'primaryColorHex' ? nextValue : form.getValues('primaryColorHex');
+      const nextAccent = field === 'accentColorHex' ? nextValue : form.getValues('accentColorHex');
+      updatePresetSelection(nextPrimary, nextAccent);
+    };
 
-    // 2. Reset form to saved values
-    form.reset({
-      clinicName: savedSettings.clinicName,
-      dietitianDisplayName: savedSettings.dietitianDisplayName,
-      primaryColorHex: savedSettings.primaryColorHex,
-      accentColorHex: savedSettings.accentColorHex,
-      themePresetKey: savedSettings.themePresetKey,
-    });
-
-    // 3. Clear logo preview
+  const resetLogoObjectUrl = () => {
     if (logoObjectUrl) {
       URL.revokeObjectURL(logoObjectUrl);
       setLogoObjectUrl(null);
     }
-    setLogoPreview(savedSettings.logoUrl);
-    setLogoFile(null);
-
-    toast.success('Changes discarded');
   };
 
-  const handlePresetSelect = (preset: typeof PRESET_THEMES[number]) => {
-    // Update form values
-    form.setValue('primaryColorHex', preset.primary, { shouldDirty: true });
-    form.setValue('accentColorHex', preset.accent, { shouldDirty: true });
-    form.setValue('themePresetKey', preset.key, { shouldDirty: true });
-
-    // Update DRAFT only (not global theme)
-    if (draftSettings) {
-      setDraftSettings({
-        ...draftSettings,
-        primaryColorHex: preset.primary,
-        accentColorHex: preset.accent,
-        themePresetKey: preset.key,
-      });
+  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
     }
 
-    // DO NOT apply globally - only preview should change
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
+      toast.error('Yalnızca PNG, JPG veya WebP dosyaları kullanılabilir.');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo dosyası en fazla 2 MB olabilir.');
+      return;
+    }
+
+    resetLogoObjectUrl();
+    const objectUrl = URL.createObjectURL(file);
+    setLogoObjectUrl(objectUrl);
+    setLogoFile(file);
+    setIsLogoMarkedForRemoval(false);
   };
 
-  const isDirty = form.formState.isDirty || logoFile !== null;
+  const handleMarkLogoForRemoval = () => {
+    resetLogoObjectUrl();
+    setLogoFile(null);
+    setLogoObjectUrl(null);
+    setIsLogoMarkedForRemoval(true);
+  };
 
-  // Use draft settings for preview
-  const previewPrimary = draftSettings?.primaryColorHex || '#4A7C59';
-  const previewAccent = draftSettings?.accentColorHex || '#8FBC8F';
-  const previewClinicName = draftSettings?.clinicName || 'Clinic Name';
+  const handleDiscard = () => {
+    if (!settings) {
+      return;
+    }
 
-  // Use form values for inputs
-  const primaryColor = form.watch('primaryColorHex');
-  const accentColor = form.watch('accentColorHex');
-  const clinicName = form.watch('clinicName');
-  const selectedPreset = form.watch('themePresetKey');
+    form.reset({
+      primaryColorHex: settings.primaryColorHex,
+      accentColorHex: settings.accentColorHex,
+      themePresetKey:
+        settings.themePresetKey ??
+        findPreset(settings.primaryColorHex, settings.accentColorHex)?.key ??
+        null,
+    });
+    resetLogoObjectUrl();
+    setLogoFile(null);
+    setLogoPreviewUrl(settings.logoUrl ?? null);
+    setIsLogoMarkedForRemoval(false);
+    toast.success('Marka ayarları geri alındı.');
+  };
+
+  const handleSave = async () => {
+    if (!settings) {
+      return;
+    }
+
+    const isValid = await form.trigger();
+    if (!isValid) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      let nextSettings: DietitianSettings = settings;
+
+      if (isLogoMarkedForRemoval && settings.logoUrl) {
+        nextSettings = await deleteLogo();
+      } else if (logoFile) {
+        nextSettings = await uploadLogo(logoFile);
+      }
+
+      const values = form.getValues();
+
+      nextSettings = await updateSettings({
+        clinicName: nextSettings.clinicName,
+        dietitianDisplayName: nextSettings.dietitianDisplayName,
+        primaryColorHex: values.primaryColorHex.toUpperCase(),
+        accentColorHex: values.accentColorHex.toUpperCase(),
+        themePresetKey: values.themePresetKey ?? null,
+        phoneNumber: nextSettings.phoneNumber ?? null,
+        bio: nextSettings.bio ?? null,
+        websiteUrl: nextSettings.websiteUrl ?? null,
+      });
+
+      queryClient.setQueryData(['settings'], nextSettings);
+      await queryClient.invalidateQueries({ queryKey: ['settings'] });
+      applyBrandingToDom(nextSettings);
+
+      form.reset({
+        primaryColorHex: nextSettings.primaryColorHex,
+        accentColorHex: nextSettings.accentColorHex,
+        themePresetKey:
+          nextSettings.themePresetKey ??
+          findPreset(nextSettings.primaryColorHex, nextSettings.accentColorHex)?.key ??
+          null,
+      });
+
+      resetLogoObjectUrl();
+      setLogoFile(null);
+      setLogoPreviewUrl(nextSettings.logoUrl ?? null);
+      setIsLogoMarkedForRemoval(false);
+      setLastSavedAt(nextSettings.updatedAt);
+      toast.success('Marka ve tema ayarları kaydedildi.');
+    } catch {
+      toast.error('Marka ayarları kaydedilemedi.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-muted-foreground">Loading settings...</div>
+      <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-slate-200 bg-white">
+        <p className="text-sm text-slate-500">Marka ayarları yükleniyor...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6 pb-24">
-      {/* Last Saved Indicator */}
-      {lastSaved && (
-        <div className="text-sm text-muted-foreground">
-          Last saved: {lastSaved.toLocaleString()}
-        </div>
-      )}
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="space-y-6">
+          <SettingsCard
+            icon={Palette}
+            title="Hazır tema paletleri"
+            description="Klinik görünümünüz için hızlı ve dengeli renk kombinasyonları."
+            className="rounded-[28px] border-emerald-100 shadow-[0_16px_48px_-40px_rgba(16,185,129,0.35)]"
+          >
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {PRESET_THEMES.map((preset) => {
+                const isSelected = selectedPreset?.key === preset.key;
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Settings Form (2/3) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Theme Picker */}
-          <div className="bg-card border border-border rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Palette className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">Theme Colors</h2>
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => handlePresetSelect(preset)}
+                    className={cn(
+                      'relative rounded-3xl border p-4 text-left transition-all',
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/50'
+                    )}
+                  >
+                    {isSelected ? (
+                      <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
+                    <div className="mb-4 flex gap-2">
+                      <span
+                        className="h-10 flex-1 rounded-2xl border border-white/80 shadow-sm"
+                        style={{ backgroundColor: preset.primary }}
+                      />
+                      <span
+                        className="h-10 flex-1 rounded-2xl border border-white/80 shadow-sm"
+                        style={{ backgroundColor: preset.accent }}
+                      />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">{preset.name}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{preset.description}</p>
+                  </button>
+                );
+              })}
             </div>
+          </SettingsCard>
 
-            {/* Preset Themes */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-foreground mb-3">
-                Preset Themes
-              </label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {PRESET_THEMES.map((preset) => {
-                  const isSelected = selectedPreset === preset.key;
-                  return (
-                    <button
-                      key={preset.key}
-                      onClick={() => handlePresetSelect(preset)}
-                      className={cn(
-                        'relative flex flex-col items-start gap-2 p-4 border-2 rounded-lg transition-all',
-                        isSelected
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                      )}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                          <Check className="w-3 h-3 text-white" />
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <div
-                          className="w-8 h-8 rounded border border-border"
-                          style={{ backgroundColor: preset.primary }}
-                        />
-                        <div
-                          className="w-8 h-8 rounded border border-border"
-                          style={{ backgroundColor: preset.accent }}
+          <SettingsCard
+            icon={Palette}
+            title="Renk ayarları"
+            description="Hazır temaları kullanabilir veya kendi renklerinizi belirleyebilirsiniz."
+            className="rounded-[28px] border-slate-200 shadow-sm"
+          >
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-900">Ana renk</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={primaryColorHex}
+                    onChange={handleColorInputChange('primaryColorHex')}
+                    className="h-12 w-16 rounded-2xl border border-slate-200 bg-white p-1"
+                  />
+                  <input
+                    type="text"
+                    value={primaryColorHex}
+                    onChange={handleColorInputChange('primaryColorHex')}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                  />
+                </div>
+                {form.formState.errors.primaryColorHex ? (
+                  <p className="mt-2 text-xs font-medium text-rose-600">
+                    {form.formState.errors.primaryColorHex.message}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Menü aktif durumu ve ana aksiyon butonlarında kullanılır.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-900">Vurgu rengi</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={accentColorHex}
+                    onChange={handleColorInputChange('accentColorHex')}
+                    className="h-12 w-16 rounded-2xl border border-slate-200 bg-white p-1"
+                  />
+                  <input
+                    type="text"
+                    value={accentColorHex}
+                    onChange={handleColorInputChange('accentColorHex')}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                  />
+                </div>
+                {form.formState.errors.accentColorHex ? (
+                  <p className="mt-2 text-xs font-medium text-rose-600">
+                    {form.formState.errors.accentColorHex.message}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Rozetler, ikincil butonlar ve görsel vurgularda kullanılır.
+                  </p>
+                )}
+              </div>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard
+            icon={ImagePlus}
+            title="Logo yönetimi"
+            description="Panelin üst alanlarında ve kurumsal yüzeylerde kullanılacak logoyu belirleyin."
+            className="rounded-[28px] border-slate-200 shadow-sm"
+          >
+            <div className="space-y-5">
+              <div className="rounded-[24px] border border-dashed border-emerald-200 bg-emerald-50/40 p-5">
+                {effectiveLogoUrl ? (
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white p-3 shadow-sm">
+                        <img
+                          src={effectiveLogoUrl}
+                          alt="Klinik logosu"
+                          className="max-h-full max-w-full object-contain"
                         />
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-foreground">{preset.name}</div>
-                        <div className="text-xs text-muted-foreground">{preset.description}</div>
+                        <p className="text-sm font-semibold text-slate-900">Logo hazır</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          PNG, JPG veya WebP formatında yüklediğiniz görsel kullanılacak.
+                        </p>
                       </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleMarkLogoForRemoval}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Logoyu kaldır
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Custom Colors */}
-            <div className="space-y-4">
-              <label className="block text-sm font-medium text-foreground">
-                Custom Colors
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">
-                    Primary Color
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      {...form.register('primaryColorHex')}
-                      className="w-16 h-10 rounded border border-border cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      {...form.register('primaryColorHex')}
-                      className="flex-1 px-3 py-2 border border-border rounded-lg font-mono text-sm bg-background"
-                    />
                   </div>
-                  {form.formState.errors.primaryColorHex && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {form.formState.errors.primaryColorHex.message}
+                ) : (
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Henüz logo eklenmedi</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Kare ya da yatay oranlı, temiz arka plana sahip bir logo en iyi sonucu verir.
                     </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">
-                    Accent Color
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      {...form.register('accentColorHex')}
-                      className="w-16 h-10 rounded border border-border cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      {...form.register('accentColorHex')}
-                      className="flex-1 px-3 py-2 border border-border rounded-lg font-mono text-sm bg-background"
-                    />
                   </div>
-                  {form.formState.errors.accentColorHex && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {form.formState.errors.accentColorHex.message}
-                    </p>
-                  )}
-                </div>
+                )}
               </div>
-            </div>
-          </div>
-
-          {/* Logo Upload */}
-          <div className="bg-card border border-border rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Upload className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">Clinic Logo</h2>
-            </div>
-
-            <div className="space-y-4">
-              {logoPreview && (
-                <div className="relative flex items-center justify-center p-6 bg-muted/30 rounded-lg border border-border">
-                  <img
-                    src={logoPreview}
-                    alt="Logo preview"
-                    className="max-h-32 object-contain"
-                  />
-                  <button
-                    onClick={() => deleteMutation.mutate()}
-                    disabled={deleteMutation.isPending}
-                    className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
 
               <div>
-                <label className="block">
-                  <span className="sr-only">Choose logo</span>
+                <label className="inline-flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                  <ImagePlus className="h-4 w-4 text-emerald-600" />
+                  Logo seç
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/jpg,image/webp"
                     onChange={handleLogoChange}
-                    className="block w-full text-sm text-muted-foreground
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-lg file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-primary file:text-white
-                      hover:file:bg-primary/90
-                      cursor-pointer"
+                    className="sr-only"
                   />
                 </label>
-                <p className="text-xs text-muted-foreground mt-2">
-                  PNG, JPG, or WebP. Maximum 2MB.
+                <p className="mt-2 text-xs text-slate-500">
+                  Maksimum dosya boyutu 2 MB. Önerilen format: saydam arka planlı PNG.
                 </p>
               </div>
             </div>
-          </div>
-
-          {/* Clinic Info */}
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Clinic Information</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Clinic Name
-                </label>
-                <input
-                  type="text"
-                  {...form.register('clinicName')}
-                  placeholder="Enter your clinic name"
-                  className="w-full px-4 py-2 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-                {form.formState.errors.clinicName && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {form.formState.errors.clinicName.message}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Dietitian Display Name
-                </label>
-                <input
-                  type="text"
-                  {...form.register('dietitianDisplayName')}
-                  placeholder="Enter your display name"
-                  className="w-full px-4 py-2 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-                {form.formState.errors.dietitianDisplayName && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {form.formState.errors.dietitianDisplayName.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+          </SettingsCard>
         </div>
 
-        {/* Right Column: Live Preview (1/3, Sticky) */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-6 bg-card border border-border rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Live Preview</h2>
+        <div className="space-y-6">
+          <div className="sticky top-6 rounded-[28px] border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/50 to-slate-50 p-6 shadow-[0_16px_48px_-38px_rgba(16,185,129,0.35)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Canlı ön izleme</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Seçtiğiniz renklerin panel hissine etkisi
+                </p>
+              </div>
+              {lastSavedAt ? (
+                <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
+                  Son kayıt: {new Date(lastSavedAt).toLocaleString('tr-TR')}
+                </span>
+              ) : null}
+            </div>
+
             <div className="space-y-4">
-              {/* Sidebar Preview - uses DRAFT settings */}
-              <div
-                className="rounded-lg p-4"
-                style={{ backgroundColor: previewPrimary }}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  {(logoObjectUrl || logoPreview) ? (
-                    <img
-                      src={logoObjectUrl || `${logoPreview}?v=${lastSaved?.getTime() || Date.now()}`}
-                      alt="Logo"
-                      className="w-10 h-10 rounded object-cover bg-white p-1"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded bg-white/20 flex items-center justify-center text-white font-bold">
-                      {clinicName?.[0]?.toUpperCase() || 'C'}
+              <div className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
+                <div
+                  className="flex items-center justify-between px-4 py-3 text-white"
+                  style={{ backgroundColor: primaryColorHex }}
+                >
+                  <div className="flex items-center gap-3">
+                    {effectiveLogoUrl ? (
+                      <img
+                        src={effectiveLogoUrl}
+                        alt="Logo ön izlemesi"
+                        className="h-9 w-9 rounded-xl bg-white p-1 object-contain"
+                      />
+                    ) : (
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-sm font-bold">
+                        {(settings?.clinicName || 'K').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div>
+                      <p className="text-sm font-semibold">{settings?.clinicName || 'Klinik adı'}</p>
+                      <p className="text-xs text-white/80">
+                        {settings?.dietitianDisplayName || 'Diyetisyen'}
+                      </p>
                     </div>
-                  )}
-                  <div className="text-white font-semibold truncate">
-                    {clinicName || 'Clinic Name'}
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-white/70 text-sm">Dashboard</div>
-                  <div className="text-white/70 text-sm">Clients</div>
-                  <div
-                    className="text-white text-sm font-medium px-3 py-2 rounded"
-                    style={{ backgroundColor: accentColor }}
+                  <span
+                    className="rounded-full px-3 py-1 text-xs font-semibold"
+                    style={{ backgroundColor: accentColorHex, color: '#0f172a' }}
                   >
-                    Settings
+                    Aktif görünüm
+                  </span>
+                </div>
+
+                <div className="space-y-3 p-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Dashboard kartı
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      Günlük operasyon özeti
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Danışan takibi, plan akışı ve care hub mesajları bu tonda görünür.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      className="rounded-2xl px-4 py-3 text-sm font-semibold text-white"
+                      style={{ backgroundColor: primaryColorHex }}
+                    >
+                      Birincil buton
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-900"
+                      style={{ backgroundColor: accentColorHex }}
+                    >
+                      İkincil vurgu
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Button Previews */}
-              <div className="space-y-2">
-                <button
-                  className="w-full px-4 py-2 rounded-lg text-white font-medium"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  Primary Button
-                </button>
-                <button
-                  className="w-full px-4 py-2 rounded-lg text-white font-medium"
-                  style={{ backgroundColor: accentColor }}
-                >
-                  Accent Button
-                </button>
-              </div>
-
-              {/* Color Info */}
-              <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t border-border">
-                <div>Primary: {primaryColor}</div>
-                <div>Accent: {accentColor}</div>
+              <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Renk özeti
+                </p>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span>Ana renk</span>
+                    <span className="font-medium text-slate-900">{primaryColorHex}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Vurgu rengi</span>
+                    <span className="font-medium text-slate-900">{accentColorHex}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Seçili tema</span>
+                    <span className="font-medium text-slate-900">
+                      {selectedPreset?.name || 'Özel renkler'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Unsaved Changes Banner */}
-      {hasUnsavedChanges && (
-        <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border shadow-lg z-50">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-500" />
-              <span className="text-sm font-medium">You have unsaved changes</span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleDiscard}
-                disabled={!hasUnsavedChanges}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted disabled:opacity-50 transition-colors"
-              >
-                Discard
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!hasUnsavedChanges || uploadMutation.isPending || updateMutation.isPending}
-                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {uploadMutation.isPending || uploadMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SettingsSaveBar
+        isDirty={isDirty}
+        isSaving={isSaving}
+        onSave={handleSave}
+        onDiscard={handleDiscard}
+        saveLabel="Marka ayarlarını kaydet"
+      />
     </div>
   );
 }

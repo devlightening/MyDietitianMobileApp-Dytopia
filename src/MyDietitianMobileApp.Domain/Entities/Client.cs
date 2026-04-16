@@ -60,6 +60,19 @@ namespace MyDietitianMobileApp.Domain.Entities
         public void Activate() => IsActive = true;
         public void Deactivate() => IsActive = false;
 
+        public void UpdateProfile(string fullName)
+        {
+            var normalizedName = fullName?.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedName))
+                throw new ArgumentException("Ad soyad zorunludur.", nameof(fullName));
+
+            if (normalizedName.Length > 120)
+                throw new ArgumentException("Ad soyad 120 karakteri gecemez.", nameof(fullName));
+
+            FullName = normalizedName;
+        }
+
         public void ActivatePremium(Guid dietitianId, DateTime? startDate = null, DateTime? endDate = null)
         {
             ActiveDietitianId = dietitianId;

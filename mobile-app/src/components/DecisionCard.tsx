@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import type { AlternativeRecipe } from '../types/alternative';
-import { colors, spacing } from '../theme';
+import { radii, spacing } from '../theme/tokens';
+import { useTheme } from '../context/ThemeContext';
 
 interface DecisionCardProps {
   canCookOriginal: boolean;
@@ -10,126 +11,56 @@ interface DecisionCardProps {
   originalRecipeName: string;
 }
 
-export default function DecisionCard({
-  canCookOriginal,
-  explanation,
-  alternativeRecipe,
-  originalRecipeName,
-}: DecisionCardProps) {
-  // State 1: Can cook original (Green)
+export default function DecisionCard({ canCookOriginal, explanation, alternativeRecipe, originalRecipeName }: DecisionCardProps) {
+  const { theme } = useTheme();
+
   if (canCookOriginal) {
     return (
-      <View style={[styles.card, styles.greenCard]}>
-        <Text style={styles.emoji}>🎉</Text>
-        <Text style={styles.title}>Harika!</Text>
-        <Text style={styles.message}>{explanation}</Text>
-        <Text style={styles.recipeName}>{originalRecipeName}</Text>
-        <Text style={styles.subtitle}>Bu öğünü güvenle yapabilirsin</Text>
+      <View style={[s.card, { backgroundColor: theme.success + '18', borderColor: theme.success + '50' }]}>
+        <Text style={s.emoji}>🎉</Text>
+        <Text style={[s.title, { color: theme.text }]}>Harika!</Text>
+        <Text style={[s.message, { color: theme.textSub }]}>{explanation}</Text>
+        <Text style={[s.recipeName, { color: theme.primary }]}>{originalRecipeName}</Text>
+        <Text style={[s.subtitle, { color: theme.textMuted }]}>Bu öğünü güvenle yapabilirsin</Text>
       </View>
     );
   }
 
-  // State 2: Alternative recommended (Yellow)
   if (alternativeRecipe) {
     return (
-      <View style={[styles.card, styles.yellowCard]}>
-        <Text style={styles.emoji}>⚠️</Text>
-        <Text style={styles.title}>Dikkat!</Text>
-        <Text style={styles.message}>{explanation}</Text>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.alternativeLabel}>Bunun yerine şunu öneriyoruz:</Text>
-        <Text style={styles.alternativeRecipe}>{alternativeRecipe.recipeName}</Text>
-        <Text style={styles.matchText}>
+      <View style={[s.card, { backgroundColor: theme.warning + '15', borderColor: theme.warning + '50' }]}>
+        <Text style={s.emoji}>⚠️</Text>
+        <Text style={[s.title, { color: theme.text }]}>Dikkat!</Text>
+        <Text style={[s.message, { color: theme.textSub }]}>{explanation}</Text>
+        <View style={[s.divider, { backgroundColor: theme.borderLight }]} />
+        <Text style={[s.alternativeLabel, { color: theme.textMuted }]}>Bunun yerine şunu öneriyoruz:</Text>
+        <Text style={[s.alternativeRecipe, { color: theme.warning }]}>{alternativeRecipe.recipeName}</Text>
+        <Text style={[s.matchText, { color: theme.textMuted }]}>
           Uygunluk: %{Math.round(alternativeRecipe.matchPercentage)}
         </Text>
       </View>
     );
   }
 
-  // State 3: No suitable option (Red)
   return (
-    <View style={[styles.card, styles.redCard]}>
-      <Text style={styles.emoji}>😕</Text>
-      <Text style={styles.title}>Üzgünüz</Text>
-      <Text style={styles.message}>{explanation}</Text>
-      <Text style={styles.subtitle}>
-        Diyetisyeninle iletişime geçmeni öneririz
-      </Text>
+    <View style={[s.card, { backgroundColor: theme.error + '15', borderColor: theme.error + '50' }]}>
+      <Text style={s.emoji}>😕</Text>
+      <Text style={[s.title, { color: theme.text }]}>Üzgünüz</Text>
+      <Text style={[s.message, { color: theme.textSub }]}>{explanation}</Text>
+      <Text style={[s.subtitle, { color: theme.textMuted }]}>Diyetisyeninle iletişime geçmeni öneririz</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    margin: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  greenCard: {
-    backgroundColor: '#d1fae5',
-    borderWidth: 2,
-    borderColor: colors.success,
-  },
-  yellowCard: {
-    backgroundColor: '#fef3c7',
-    borderWidth: 2,
-    borderColor: colors.mandatory,
-  },
-  redCard: {
-    backgroundColor: '#fee2e2',
-    borderWidth: 2,
-    borderColor: colors.error,
-  },
-  emoji: {
-    fontSize: 48,
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  message: {
-    fontSize: 16,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    lineHeight: 24,
-  },
-  recipeName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  divider: {
-    width: '100%',
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
-  },
-  alternativeLabel: {
-    fontSize: 14,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  alternativeRecipe: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.mandatory,
-    marginBottom: spacing.sm,
-  },
-  matchText: {
-    fontSize: 14,
-    color: colors.textMuted,
-  },
+const s = StyleSheet.create({
+  card: { margin: spacing.lg, padding: spacing.lg, borderRadius: radii.xl, alignItems: 'center', borderWidth: 1.5 },
+  emoji: { fontSize: 48, marginBottom: spacing.md },
+  title: { fontSize: 24, fontWeight: '900', marginBottom: spacing.sm },
+  message: { fontSize: 14, textAlign: 'center', marginBottom: spacing.md, lineHeight: 22 },
+  recipeName: { fontSize: 18, fontWeight: '900', marginBottom: spacing.sm },
+  subtitle: { fontSize: 13, textAlign: 'center' },
+  divider: { width: '100%', height: 1, marginVertical: spacing.md },
+  alternativeLabel: { fontSize: 13, marginBottom: spacing.sm },
+  alternativeRecipe: { fontSize: 18, fontWeight: '900', marginBottom: spacing.sm },
+  matchText: { fontSize: 13 },
 });

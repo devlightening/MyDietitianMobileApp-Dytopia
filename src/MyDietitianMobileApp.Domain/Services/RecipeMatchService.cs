@@ -14,8 +14,7 @@ public class RecipeMatchService
         List<Guid> basketIngredientIds,
         List<Guid> clientProhibitedIngredientIds,
         List<Recipe> recipePool,
-        List<RecipeIngredient> allRecipeIngredients,
-        List<RecipeProhibition> allRecipeProhibitions)
+        List<RecipeIngredient> allRecipeIngredients)
     {
         var results = new List<RecipeMatchResult>();
 
@@ -26,13 +25,9 @@ public class RecipeMatchService
                 .Where(ri => ri.RecipeId == recipe.Id)
                 .ToList();
 
-            var recipeProhibitions = allRecipeProhibitions
-                .Where(rp => rp.RecipeId == recipe.Id)
-                .ToList();
-
             // Check if recipe is compatible with client restrictions
-            var prohibitedIngredientIds = recipeProhibitions
-                .Select(rp => rp.IngredientId)
+            var prohibitedIngredientIds = recipe.ProhibitedIngredients
+                .Select(ingredient => ingredient.Id)
                 .ToHashSet();
 
             var hasProhibitedIngredient = prohibitedIngredientIds

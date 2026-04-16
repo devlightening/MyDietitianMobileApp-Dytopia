@@ -2,10 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using MyDietitianMobileApp.Application.Services;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Options;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using MyDietitianMobileApp.Infrastructure.Services;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
 using System.Security.Claims;
@@ -28,6 +31,7 @@ public class KitchenController : ControllerBase
     private readonly IClientActivityWriter _activityWriter;
     private readonly IRecipeRecommendationEngine _engine;
     private readonly ILogger<KitchenController> _logger;
+    private readonly IOptions<PremiumKitchenMatchOptions> _kitchenMatchOptions;
 
     public KitchenController(
         AppDbContext appDb,
@@ -36,6 +40,7 @@ public class KitchenController : ControllerBase
         IKitchenNarrator narrator,
         IClientActivityWriter activityWriter,
         IRecipeRecommendationEngine engine,
+        IOptions<PremiumKitchenMatchOptions> kitchenMatchOptions,
         ILogger<KitchenController> logger)
     {
         _appDb = appDb;
@@ -44,6 +49,7 @@ public class KitchenController : ControllerBase
         _narrator = narrator;
         _activityWriter = activityWriter;
         _engine = engine;
+        _kitchenMatchOptions = kitchenMatchOptions;
         _logger = logger;
     }
 
@@ -87,6 +93,26 @@ public class KitchenController : ControllerBase
                 });
             }
 
+            // Canonical name expansion: include all ingredient records that share
+            // the same canonical name as a basket ingredient (handles taxonomy vs.
+            // regular UUID duplicates for the same food).
+            var basketCanonicalNames = await _appDb.Ingredients
+                .AsNoTracking()
+                .Where(i => ingredientIds.Contains(i.Id) && i.IsActive)
+                .Select(i => i.CanonicalName)
+                .ToListAsync();
+
+            if (basketCanonicalNames.Any())
+            {
+                var expanded = await _appDb.Ingredients
+                    .AsNoTracking()
+                    .Where(i => i.IsActive && basketCanonicalNames.Contains(i.CanonicalName))
+                    .Select(i => i.Id)
+                    .ToListAsync();
+
+                ingredientIds = ingredientIds.Concat(expanded).Distinct().ToList();
+            }
+
             // Get premium status
             var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userGuid, CancellationToken.None);
 
@@ -97,17 +123,21 @@ public class KitchenController : ControllerBase
                 .ToListAsync())
                 .ToHashSet();
 
-            // Determine candidate recipes
-            var candidateQuery = _appDb.Recipes.AsNoTracking();
-            if (!premiumStatus.IsPremium)
-            {
-                candidateQuery = candidateQuery.Where(r => r.IsPublic);
-            }
-            else
-            {
-                candidateQuery = candidateQuery.Where(r =>
-                    r.IsPublic || (r.DietitianId.HasValue && r.DietitianId == premiumStatus.ActiveDietitianId));
-            }
+            // Candidate recipes — aligned with POST /api/recipes/match (production safety + premium policy)
+            var candidateQuery = _appDb.Recipes
+                .AsNoTracking()
+                .Where(r => !r.IsDemo)
+                .Where(r => !r.IsDraft)
+                .Where(r => !r.IsHiddenFromProduction)
+                .Where(r => !r.IsArchived)
+                .Where(r => r.IsPublic || r.DietitianId.HasValue)
+                .Where(r => r.Name != null && r.Name.Length > 3);
+
+            candidateQuery = PremiumKitchenCandidateFilter.ApplyVisibilityPolicy(
+                candidateQuery,
+                premiumStatus.IsPremium,
+                premiumStatus.ActiveDietitianId,
+                premiumStatus.IsPremium && _kitchenMatchOptions.Value.AllowGlobalPublicFallback);
 
             // Optional search filter
             if (!string.IsNullOrWhiteSpace(request.Q))
@@ -135,6 +165,40 @@ public class KitchenController : ControllerBase
                 .Include(r => r.ProhibitedIngredients)
                 .AsSplitQuery()
                 .ToListAsync();
+
+            // Orphan fallback — hydrate recipes missing shadow table rows from explicit table.
+            // Mirrors RecipeMatchController fallback. Run repair-recipe-shadow-tables.sql to fix permanently.
+            var orphanedKitchenIds = candidateRecipes
+                .Where(r => r.MandatoryIngredients.Count + r.OptionalIngredients.Count == 0)
+                .Select(r => r.Id)
+                .ToList();
+
+            if (orphanedKitchenIds.Any())
+            {
+                _logger.LogWarning(
+                    "[KITCHEN] {Count} recipe(s) have empty shadow ingredient tables — loading from RecipeIngredients fallback. " +
+                    "Run scripts/repair-recipe-shadow-tables.sql to fix this permanently.",
+                    orphanedKitchenIds.Count);
+
+                var kitchenExplicitRows = await _appDb.RecipeIngredients
+                    .AsNoTracking()
+                    .Where(ri => orphanedKitchenIds.Contains(ri.RecipeId))
+                    .Include(ri => ri.Ingredient)
+                    .ToListAsync();
+
+                foreach (var recipe in candidateRecipes)
+                {
+                    if (!orphanedKitchenIds.Contains(recipe.Id)) continue;
+                    var rows = kitchenExplicitRows.Where(ri => ri.RecipeId == recipe.Id).ToList();
+                    var mandatory = rows
+                        .Where(ri => ri.Role == "Mandatory" && ri.Ingredient != null)
+                        .Select(ri => ri.Ingredient);
+                    var optional = rows
+                        .Where(ri => (ri.Role == RecipeIngredient.OptionalRole || ri.Role == RecipeIngredient.FlavoringRole) && ri.Ingredient != null)
+                        .Select(ri => ri.Ingredient);
+                    recipe.HydrateFromExplicitIngredients(mandatory, optional);
+                }
+            }
 
             var recipeIds = candidateRecipes.Select(r => r.Id).ToList();
 
@@ -167,6 +231,12 @@ public class KitchenController : ControllerBase
             var results = new List<object>();
             var evaluationSummaries = new List<(Guid RecipeId, decimal MatchPercentage, int MissingMandatoryCount, bool ProhibitedRejected, bool UsedSubstitutes, IReadOnlyCollection<Guid> MissingMandatoryIds)>();
 
+            var condimentIds = await _appDb.Ingredients
+                .AsNoTracking()
+                .Where(i => i.IsCondiment)
+                .Select(i => i.Id)
+                .ToListAsync();
+
             // Build shared evaluation context, including substitutes and client prohibitions
             var context = new RecipeEvaluationContext(
                 availableIngredientIds: ingredientIds,
@@ -174,10 +244,28 @@ public class KitchenController : ControllerBase
                 substitutesByRecipeAndRequired: substitutesByRecipeAndRequired
                     .ToDictionary(
                         kvp => (kvp.Key.RecipeId, kvp.Key.RequiredIngredientId),
-                        kvp => (IReadOnlySet<Guid>)kvp.Value));
+                        kvp => (IReadOnlySet<Guid>)kvp.Value),
+                condimentIngredientIds: condimentIds);
 
+            var activeDForKitchen = premiumStatus.ActiveDietitianId;
             foreach (var recipe in candidateRecipes)
             {
+                if (recipe.MandatoryIngredients.Count + recipe.OptionalIngredients.Count == 0)
+                    continue;
+
+                // Hard tenant isolation guard — must mirror RecipeMatchController.
+                // Detect and hard-reject any private recipe from another dietitian that
+                // somehow survived the candidate filter (data anomaly, config error, etc.).
+                var kitchenSourceMeta = KitchenRecipeSourceLabels.Classify(recipe, activeDForKitchen);
+                if (kitchenSourceMeta.SourceType == KitchenRecipeSourceLabels.OtherDietitianPrivateViolation)
+                {
+                    _logger.LogError(
+                        "[KITCHEN] TENANT_ISOLATION_VIOLATION — private recipe from another dietitian in evaluation pool | " +
+                        "id={RecipeId} name={Name} recipeDietitianId={RecipeDId} activeDietitianId={ActiveDId} premium={Premium}",
+                        recipe.Id, recipe.Name, recipe.DietitianId, activeDForKitchen, premiumStatus.IsPremium);
+                    continue;
+                }
+
                 var eval = _engine.EvaluateRecipe(recipe, context);
 
                 // A) Elimination by prohibitions
@@ -194,6 +282,15 @@ public class KitchenController : ControllerBase
                 {
                     evaluationSummaries.Add((recipe.Id, eval.MatchPercentage, missingCount, false, eval.Explanation.UsedSubstituteIngredientIds.Any(), eval.MissingMandatoryIngredientIds));
                     continue; // ELIMINATE (>1 missing)
+                }
+
+                // B2) ONE_MISSING no-overlap guardrail: drop recipes where the only mandatory
+                // ingredient is the missing one — the basket shares no core ingredient with the recipe.
+                var matchedMandatoryForGuardrail = recipe.MandatoryIngredients.Count - missingCount;
+                if (missingCount == 1 && matchedMandatoryForGuardrail == 0)
+                {
+                    evaluationSummaries.Add((recipe.Id, eval.MatchPercentage, missingCount, false, eval.Explanation.UsedSubstituteIngredientIds.Any(), eval.MissingMandatoryIngredientIds));
+                    continue; // ELIMINATE — no meaningful ingredient overlap
                 }
 
                 MatchStatus matchStatus = missingCount == 0
@@ -290,6 +387,9 @@ public class KitchenController : ControllerBase
                         prohibitedRejected: summary.ProhibitedRejected,
                         usedSubstitutes: summary.UsedSubstitutes,
                         missingMandatoryIdsJson: summary.MissingMandatoryIds.Any() ? System.Text.Json.JsonSerializer.Serialize(summary.MissingMandatoryIds) : null,
+                        rejectionReasonSummary: null,
+                        missingMandatoryNamesJson: null,
+                        substituteUsageSummaryJson: null,
                         additionalMetaJson: System.Text.Json.JsonSerializer.Serialize(meta),
                         correlationId: HttpContext.TraceIdentifier);
 

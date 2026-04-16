@@ -11,7 +11,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         {
             _context = context;
         }
-        public Client GetById(Guid id)
+        public Client? GetById(Guid id)
         {
             return _context.Clients
                 .Include(c => c.AccessKeys)

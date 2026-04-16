@@ -2,7 +2,6 @@
 
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
-import { LanguageSwitcher } from '@/components/theme/LanguageSwitcher';
 import { useTranslations } from 'next-intl';
 
 export function Topbar() {
@@ -23,7 +22,10 @@ export function Topbar() {
     if (pathname === '/dashboard/recipe-match') return tCommon('recipeMatch');
     if (pathname === '/dashboard/clients') return tCommon('clients');
     if (pathname?.startsWith('/dashboard/clients/')) return tClients('title');
+    if (pathname === '/dashboard/plans') return tCommon('plans');
+    if (pathname === '/dashboard/care-hub') return tCommon('careHub');
     if (pathname === '/dashboard/access-keys') return tCommon('accessKeys');
+    if (pathname === '/dashboard/settings') return tCommon('settings');
     return tCommon('dashboard');
   };
 
@@ -35,7 +37,6 @@ export function Topbar() {
         <h1 className="text-xl font-semibold text-foreground">{title}</h1>
       </div>
       <div className="flex items-center gap-3">
-        <LanguageSwitcher />
         <ThemeToggle />
       </div>
     </header>

@@ -24,5 +24,12 @@
     <ProjectReference Include="..\..\src\MyDietitianMobileApp.Infrastructure\MyDietitianMobileApp.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Copy benchmark datasets from API project so BenchmarkController can find them via AppContext.BaseDirectory -->
+    <None Include="..\..\src\MyDietitianMobileApp.Api\Benchmarks\SampleDatasets\**\*.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="Benchmarks\SampleDatasets\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>
 

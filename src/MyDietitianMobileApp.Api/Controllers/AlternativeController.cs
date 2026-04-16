@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
 using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 
 namespace MyDietitianMobileApp.Api.Controllers;
@@ -21,17 +22,20 @@ public class AlternativeController : ControllerBase
     private readonly AppDbContext _appDb;
     private readonly AuthDbContext _authDb;
     private readonly IMediator _mediator;
+    private readonly IRecipeRepository _recipeRepository;
     private readonly ILogger<AlternativeController> _logger;
 
     public AlternativeController(
         AppDbContext appDb,
         AuthDbContext authDb,
         IMediator mediator,
+        IRecipeRepository recipeRepository,
         ILogger<AlternativeController> logger)
     {
         _appDb = appDb;
         _authDb = authDb;
         _mediator = mediator;
+        _recipeRepository = recipeRepository;
         _logger = logger;
     }
 
@@ -98,6 +102,21 @@ public class AlternativeController : ControllerBase
                 clientAvailableIngredients: ingredientIds);
 
             var result = await _mediator.Send(query, cancellationToken);
+
+            // Enrich with human-readable ingredient names for mobile display
+            if (result.MissingIngredients.Count > 0)
+            {
+                var ids = result.MissingIngredients.ToHashSet();
+                var nameMap = await _appDb.Ingredients
+                    .Where(i => ids.Contains(i.Id))
+                    .Select(i => new { i.Id, i.CanonicalName })
+                    .ToListAsync(cancellationToken);
+                result.MissingIngredientNames = result.MissingIngredients
+                    .Select(id => nameMap.FirstOrDefault(n => n.Id == id)?.CanonicalName ?? string.Empty)
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToList();
+            }
+
             return Ok(result);
         }
         catch (Exception ex)
@@ -116,6 +135,92 @@ public class AlternativeController : ControllerBase
     [ProducesResponseType(typeof(DecideAlternativeMealResult), (int)HttpStatusCode.OK)]
     public Task<IActionResult> DecideAlias([FromBody] AlternativeDecisionRequest request, CancellationToken cancellationToken)
         => Decide(request, cancellationToken);
+
+    /// <summary>
+    /// Returns the full ingredient list and recipe detail for a planned recipe.
+    /// Used by the mobile CheckIngredientsScreen and PlanRecipeDetail flow.
+    /// </summary>
+    [HttpGet("~/api/client/recipes/{recipeId:guid}/plan-context")]
+    [ProducesResponseType(typeof(RecipePlanContextResult), (int)HttpStatusCode.OK)]
+    public async Task<IActionResult> GetRecipePlanContext(Guid recipeId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userId = User.GetUserId();
+            if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out _))
+                return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Kimlik doğrulama gerekli"));
+
+            // Load all recipes with ingredients (uses proven, cached repository path)
+            var allRecipes = await _recipeRepository.GetAllWithIngredientsAsync(cancellationToken);
+            var recipe = allRecipes.FirstOrDefault(r => r.Id == recipeId);
+
+            if (recipe == null)
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Recipe not found",
+                    Detail = "Tarif bulunamadı"
+                });
+
+            var result = new RecipePlanContextResult
+            {
+                RecipeId = recipe.Id,
+                RecipeName = recipe.Name,
+                Description = recipe.Description,
+                Steps = recipe.Steps.ToList(),
+                CaloriesKcal = recipe.CaloriesKcal,
+                ProteinGrams = recipe.ProteinGrams,
+                CarbsGrams = recipe.CarbsGrams,
+                FatGrams = recipe.FatGrams,
+                Ingredients = new RecipeIngredientGroupsDto
+                {
+                    Mandatory = recipe.MandatoryIngredients
+                        .Select(i => new IngredientInfoDto { Id = i.Id, Name = i.CanonicalName })
+                        .ToList(),
+                    Optional = recipe.OptionalIngredients
+                        .Select(i => new IngredientInfoDto { Id = i.Id, Name = i.CanonicalName })
+                        .ToList()
+                }
+            };
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Recipe plan context fetch failed for recipeId={RecipeId}", recipeId);
+            return StatusCode(
+                (int)HttpStatusCode.InternalServerError,
+                ApiProblems.InternalServerError("PLAN_CONTEXT_FAILED", "Tarif detayı alınamadı"));
+        }
+    }
+}
+
+/// <summary>
+/// Plan context for a recipe — used by the mobile ingredient checklist and recipe detail screens.
+/// </summary>
+public class RecipePlanContextResult
+{
+    public Guid RecipeId { get; set; }
+    public string RecipeName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<string> Steps { get; set; } = new();
+    public int? CaloriesKcal { get; set; }
+    public decimal? ProteinGrams { get; set; }
+    public decimal? CarbsGrams { get; set; }
+    public decimal? FatGrams { get; set; }
+    public RecipeIngredientGroupsDto Ingredients { get; set; } = new();
+}
+
+public class RecipeIngredientGroupsDto
+{
+    public List<IngredientInfoDto> Mandatory { get; set; } = new();
+    public List<IngredientInfoDto> Optional { get; set; } = new();
+}
+
+public class IngredientInfoDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
 }
 
 /// <summary>

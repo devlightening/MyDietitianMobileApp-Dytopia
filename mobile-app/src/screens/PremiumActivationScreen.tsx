@@ -1,112 +1,321 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../auth/AuthContext";
-import { colors, radii, shadows, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
+import { radii, spacing } from "../theme/tokens";
 
 export default function PremiumActivationScreen() {
   const nav = useNavigation();
   const { activatePremium } = useAuth();
+  const { theme, isDark } = useTheme();
 
   const [key, setKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  // Entrance
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(32)).current;
+  // Icon bounce
+  const iconScale = useRef(new Animated.Value(0.7)).current;
+  // Success check scale
+  const successScale = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 340, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, damping: 18, stiffness: 120, useNativeDriver: true }),
+      Animated.spring(iconScale, { toValue: 1, damping: 12, stiffness: 140, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   async function onActivate() {
     setLoading(true);
     setMsg(null);
+    setIsSuccess(false);
+    successScale.setValue(0);
     try {
       const res = await activatePremium(key.trim());
       setMsg(res.message);
+      setIsSuccess(res.success);
       if (res.success) {
-        setTimeout(() => (nav as any).goBack(), 500);
+        // Animate success check in
+        Animated.spring(successScale, { toValue: 1, damping: 10, stiffness: 160, useNativeDriver: true }).start();
+        setTimeout(() => (nav as any).goBack(), 1800);
       }
     } finally {
       setLoading(false);
     }
   }
 
+  const isDisabled = loading || key.trim().length < 4;
+
   return (
-    <View style={styles.root}>
-      <View style={[styles.card, shadows.soft]}>
-        <Text style={styles.title}>Premium Activation</Text>
-        <Text style={styles.sub}>
-          Diyetisyeninin verdiği Access Key ile premium’u aç. Bu ekran asla “zorla” gelmez — sen isteyince açılır.
+    <KeyboardAvoidingView
+      style={[s.root, { backgroundColor: theme.bg }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+
+      {/* Subtle tint backdrop */}
+      <View style={[s.backdrop, { backgroundColor: theme.primaryLight }]} />
+
+      <Animated.View
+        style={[
+          s.card,
+          {
+            backgroundColor: theme.surface,
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.border,
+            borderWidth: isDark ? 0.5 : 1,
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        {/* Key icon */}
+        <Animated.View
+          style={[
+            s.iconWrap,
+            {
+              backgroundColor: theme.accentGold + '1A',
+              borderColor: theme.accentGold + '50',
+            },
+            { transform: [{ scale: iconScale }] },
+          ]}
+        >
+          <Text style={s.iconEmoji}>🔑</Text>
+        </Animated.View>
+
+        {/* Title */}
+        <Text style={[s.title, { color: theme.text }]}>Premium'u Aktifleştir</Text>
+        <Text style={[s.sub, { color: theme.textSub }]}>
+          Diyetisyeninin sana verdiği{" "}
+          <Text style={[s.subBold, { color: theme.text }]}>Access Key</Text>'i gir.{"\n"}
+          Planlarına, notlarına ve klinik tariflere anında erişim kazanırsın.
         </Text>
 
-        <TextInput
-          value={key}
-          onChangeText={setKey}
-          placeholder="Enter access key"
-          placeholderTextColor={colors.subtle}
-          style={[styles.input, shadows.subtle]}
-          autoCapitalize="characters"
-        />
+        {/* Success state */}
+        {isSuccess && (
+          <Animated.View
+            style={[
+              s.successWrap,
+              { backgroundColor: theme.success + '12', borderColor: theme.success + '40' },
+              { transform: [{ scale: successScale }] },
+            ]}
+          >
+            <Text style={s.successCheck}>✅</Text>
+            <Text style={[s.successTxt, { color: theme.success }]}>{msg}</Text>
+          </Animated.View>
+        )}
 
+        {/* Input */}
+        {!isSuccess && (
+          <View style={s.inputWrap}>
+            <TextInput
+              value={key}
+              onChangeText={(t) => {
+                setKey(t);
+                if (msg) setMsg(null);
+              }}
+              placeholder="Access Key kodunu gir"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                s.input,
+                {
+                  backgroundColor: theme.surfaceElevated,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={isDisabled ? undefined : onActivate}
+            />
+            {key.length > 0 && (
+              <Text style={[s.inputHint, { color: theme.textMuted }]}>
+                {key.trim().length} karakter girdin
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Error message */}
+        {!isSuccess && msg && (
+          <View style={[s.errorWrap, { backgroundColor: theme.error + '10', borderColor: theme.error + '35' }]}>
+            <Text style={[s.errorTxt, { color: theme.error }]}>✕ {msg}</Text>
+          </View>
+        )}
+
+        {/* CTA */}
+        {!isSuccess && (
+          <TouchableOpacity
+            style={[
+              s.btn,
+              { backgroundColor: theme.primary, shadowColor: theme.primary },
+              isDisabled && s.btnDisabled,
+            ]}
+            onPress={onActivate}
+            disabled={isDisabled}
+            activeOpacity={0.82}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={s.btnText}>Aktifleştir</Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Divider */}
+        <View style={[s.divider, { backgroundColor: theme.borderLight }]} />
+
+        {/* Close */}
         <TouchableOpacity
-          style={[styles.btn, shadows.soft]}
-          onPress={onActivate}
-          disabled={loading || key.trim().length < 4}
+          style={s.close}
+          onPress={() => (nav as any).goBack()}
+          hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}
         >
-          {loading ? (
-            <ActivityIndicator color={colors.text} />
-          ) : (
-            <Text style={styles.btnText}>Activate</Text>
-          )}
+          <Text style={[s.closeText, { color: theme.textMuted }]}>Kapat</Text>
         </TouchableOpacity>
-
-        {msg ? <Text style={styles.msg}>{msg}</Text> : null}
-
-        <TouchableOpacity style={styles.close} onPress={() => (nav as any).goBack()}>
-          <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.oat,
     justifyContent: "center",
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.5,
+  },
+
   card: {
-    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+
+  iconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.lg,
+  },
+  iconEmoji: { fontSize: 34 },
+
+  title: {
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  sub: {
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: spacing.md,
+  },
+  subBold: { fontWeight: "800" },
+
+  successWrap: {
+    alignItems: "center",
     borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+    width: "100%",
   },
-  title: { fontSize: 18, fontWeight: "900", color: colors.text },
-  sub: { marginTop: 10, fontSize: 12, color: colors.muted, fontWeight: "700", lineHeight: 18 },
+  successCheck: { fontSize: 36 },
+  successTxt: { fontSize: 15, fontWeight: "900", textAlign: "center" },
 
-  input: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontWeight: "800",
-    color: colors.text,
+  inputWrap: {
+    width: "100%",
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
+  input: {
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 16,
+    fontWeight: "800",
+    fontSize: 16,
+    textAlign: "center",
+    letterSpacing: 2,
+    width: "100%",
+  },
+  inputHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "right",
+  },
+
+  errorWrap: {
+    marginTop: spacing.sm,
+    width: "100%",
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderWidth: 1,
+  },
+  errorTxt: { fontSize: 13, fontWeight: "800", textAlign: "center" },
 
   btn: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     borderRadius: radii.xl,
     paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "rgba(244,211,94,0.40)",
-    borderWidth: 1,
-    borderColor: "rgba(244,211,94,0.55)",
+    width: "100%",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  btnText: { color: colors.text, fontWeight: "900", letterSpacing: 0.6 },
+  btnDisabled: { opacity: 0.4, shadowOpacity: 0, elevation: 0 },
+  btnText: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 15,
+    letterSpacing: 0.4,
+  },
 
-  msg: { marginTop: spacing.md, color: colors.muted, fontWeight: "800" },
-
-  close: { marginTop: spacing.lg, alignItems: "center" },
-  closeText: { color: colors.muted, fontWeight: "900" },
+  divider: {
+    height: 1,
+    width: "100%",
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  close: { alignItems: "center" },
+  closeText: { fontWeight: "800", fontSize: 14 },
 });

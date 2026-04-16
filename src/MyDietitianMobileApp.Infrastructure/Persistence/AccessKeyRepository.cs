@@ -12,7 +12,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         {
             _context = context;
         }
-        public AccessKey GetById(Guid id)
+        public AccessKey? GetById(Guid id)
         {
             return _context.AccessKeys.FirstOrDefault(a => a.Id == id);
         }

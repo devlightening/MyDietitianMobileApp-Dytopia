@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MediatR;
 
 namespace MyDietitianMobileApp.Application.Commands
 {
-    public class CreateIngredientCommand
+    public class CreateIngredientCommand : IRequest<CreateIngredientResult>
     {
         public string CanonicalName { get; }
         public IEnumerable<string> Aliases { get; }

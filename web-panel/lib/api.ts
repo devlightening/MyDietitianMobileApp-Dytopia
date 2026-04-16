@@ -1,6 +1,14 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
 import { toast } from '@/components/ui/Toast';
 
+// Endpoints where a 404 means "no data yet" — not an error the user should see
+const SILENT_NOT_FOUND_PATTERNS: RegExp[] = [
+  /\/api\/dietitian\/clients\/[^/]+\/active-plan/,
+  /\/api\/dietitian\/clients\/[^/]+\/activities/,
+  /\/api\/dietitian\/clients\/[^/]+\/measurements/,
+  /\/api\/dietitian\/clients\/[^/]+\/notes/,
+];
+
 // Use same-origin API calls via Next.js rewrites
 // Next.js rewrites /api/* to backend, making requests same-origin
 // This eliminates cookie policy issues (SameSite/Secure) in development
@@ -63,9 +71,15 @@ api.interceptors.response.use(
     };
 
     // Show toast notification for errors (except 401 which triggers redirect)
+    // Suppress NOT_FOUND toast for expected empty-state endpoints (valid empties, not errors)
     if (errorType !== ApiErrorType.UNAUTHORIZED) {
-      const friendlyMessage = getFriendlyErrorMessage(apiError);
-      toast.error(friendlyMessage);
+      const reqUrl = error.config?.url ?? '';
+      const isSilentNotFound =
+        errorType === ApiErrorType.NOT_FOUND && SILENT_NOT_FOUND_PATTERNS.some(p => p.test(reqUrl));
+      if (!isSilentNotFound) {
+        const friendlyMessage = getFriendlyErrorMessage(apiError);
+        toast.error(friendlyMessage);
+      }
     }
 
     // Handle authentication/authorization errors
@@ -83,19 +97,19 @@ api.interceptors.response.use(
 function getFriendlyErrorMessage(error: ApiError): string {
   switch (error.type) {
     case ApiErrorType.NETWORK:
-      return 'Network error. Please check your connection and try again.';
+      return 'Ağ bağlantısı kurulamadı. Lütfen bağlantınızı kontrol edip tekrar deneyin.';
     case ApiErrorType.UNAUTHORIZED:
-      return 'Your session has expired. Please log in again.';
+      return 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.';
     case ApiErrorType.FORBIDDEN:
-      return 'You do not have permission to perform this action.';
+      return 'Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor.';
     case ApiErrorType.NOT_FOUND:
-      return 'The requested resource was not found.';
+      return 'İstenen kayıt bulunamadı.';
     case ApiErrorType.VALIDATION:
-      return error.message || 'Please check your input and try again.';
+      return error.message || 'Lütfen girdiğiniz bilgileri kontrol edip tekrar deneyin.';
     case ApiErrorType.SERVER:
-      return 'A server error occurred. Please try again later.';
+      return 'Sunucuda bir hata oluştu. Lütfen daha sonra tekrar deneyin.';
     default:
-      return error.message || 'An unexpected error occurred.';
+      return error.message || 'Beklenmeyen bir hata oluştu.';
   }
 }
 

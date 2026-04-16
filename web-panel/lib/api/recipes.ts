@@ -1,45 +1,144 @@
 import api from '../api';
 
-export interface Recipe {
+export interface RecipeIngredientSummary {
   id: string;
   name: string;
-  description?: string;
+}
+
+export interface RecipeAnalyticsPreview {
+  assignmentCount: number;
+  plannedCompletionCount: number;
+  plannedCompletionRate: number;
+  alternativeSelectedCount: number;
+  recommendationPickCount: number;
+  uniqueClientCount: number;
+  lastUsedAt?: string | null;
+  lastCompletedAt?: string | null;
+  recentTrendDelta: number;
+  preferenceScore: number;
+}
+
+export interface RecipeListItem {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
   isPublic: boolean;
-  ingredients: RecipeIngredient[];
-  createdAt: string;
+  isArchived: boolean;
+  isFavorited: boolean;
+  sourceType: 'clinic' | 'general';
+  mandatoryIngredientCount: number;
+  optionalIngredientCount: number;
+  prohibitedIngredientCount: number;
+  prepTimeMinutes?: number | null;
+  cookTimeMinutes?: number | null;
+  servings?: number | null;
+  caloriesKcal?: number | null;
+  proteinGrams?: number | null;
+  carbsGrams?: number | null;
+  fatGrams?: number | null;
+  tags: string[];
+  isActiveInPlans: boolean;
+  analyticsPreview: RecipeAnalyticsPreview;
 }
 
-export interface RecipeIngredient {
-  ingredientId: string;
-  ingredientName: string;
-  quantity: number;
-  unit: string;
+export type Recipe = RecipeListItem;
+
+export interface RecipeDetail {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  isPublic: boolean;
+  isArchived: boolean;
+  isFavorited: boolean;
+  sourceType: 'clinic' | 'general';
+  tags: string[];
+  steps: string[];
+  prepTimeMinutes?: number | null;
+  cookTimeMinutes?: number | null;
+  servings?: number | null;
+  caloriesKcal?: number | null;
+  proteinGrams?: number | null;
+  carbsGrams?: number | null;
+  fatGrams?: number | null;
+  mandatoryIngredients: RecipeIngredientSummary[];
+  optionalIngredients: RecipeIngredientSummary[];
+  flavoringIngredients: RecipeIngredientSummary[];
+  prohibitedIngredients: RecipeIngredientSummary[];
+  canEdit: boolean;
+  canDelete: boolean;
+  canArchive: boolean;
+  deleteMode: 'archive' | 'delete';
+  isActiveInPlans: boolean;
+  analyticsPreview: RecipeAnalyticsPreview;
 }
 
-// FIX: Field names must match backend CreateRecipeRequest DTO exactly.
-// Backend record: (Name, Description, IsPublic, MandatoryIngredients:Guid[], OptionalIngredients:Guid[]?, Prohibitions:Guid[]?)
-export interface CreateRecipeRequest {
+export interface RecipeClientPreference {
+  clientId: string;
+  clientName: string;
+  assignmentCount: number;
+  completionCount: number;
+  alternativeSelectionCount: number;
+  lastInteractionAt?: string | null;
+}
+
+export interface RecipeAnalytics {
+  recipeId: string;
+  assignmentCount: number;
+  plannedCompletionCount: number;
+  plannedCompletionRate: number;
+  alternativeSelectedCount: number;
+  recommendationPickCount: number;
+  uniqueClientCount: number;
+  lastUsedAt?: string | null;
+  lastCompletedAt?: string | null;
+  recentTrendDelta: number;
+  preferenceScore: number;
+  strengthReasons: string[];
+  clientPreferences: RecipeClientPreference[];
+}
+
+export interface RecipeOverviewSummary {
+  totalRecipes: number;
+  archivedRecipes: number;
+  favoriteRecipes: number;
+  activePlanRecipes: number;
+}
+
+export interface RecipeOverview {
+  summary: RecipeOverviewSummary;
+  favorites: RecipeListItem[];
+  mostCompleted: RecipeListItem[];
+  mostPreferred: RecipeListItem[];
+  rising: RecipeListItem[];
+}
+
+export interface Ingredient {
+  id: string;
+  canonicalName: string;
+  name: string;
+  aliases?: string[];
+  category?: string;
+}
+
+export interface SaveRecipeRequest {
   name: string;
   description?: string;
   isPublic: boolean;
   mandatoryIngredients: string[];
   optionalIngredients?: string[];
+  flavoringIngredients?: string[];
   prohibitions?: string[];
   tags?: string[];
-  instructions?: string[];
+  steps?: string[];
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
   servings?: number;
-}
-
-// FIX: Backend IngredientDto uses `canonicalName`, not `name`.
-// We expose both for backward compatibility inside the app.
-export interface Ingredient {
-  id: string;
-  canonicalName: string;  // primary field from backend IngredientDto
-  name: string;           // alias for canonicalName — populated by searchIngredients mapper
-  aliases?: string[];
-  category?: string;
+  caloriesKcal?: number;
+  proteinGrams?: number;
+  carbsGrams?: number;
+  fatGrams?: number;
 }
 
 export interface PopularRecipe {
@@ -48,79 +147,91 @@ export interface PopularRecipe {
   completionCount: number;
 }
 
-/**
- * Search ingredients with autocomplete.
- * FIX: Backend returns { page, pageSize, total, ingredients: [{id, canonicalName, aliases}] }
- * but the rest of the app expects { items: Ingredient[] }.
- * This function normalises the response.
- */
-export async function searchIngredients(query: string, limit = 20): Promise<{ items: Ingredient[] }> {
-  const res = await api.get('/api/ingredients/search', {
-    params: { q: query, limit }
-  });
-  // Backend shape: { page, pageSize, total, ingredients: IngredientDto[] }
-  const raw: Array<{ id: string; canonicalName: string; aliases?: string[] }> =
-    res.data?.ingredients ?? res.data?.items ?? [];
-  const items: Ingredient[] = raw.map((i) => ({
-    id: i.id,
-    canonicalName: i.canonicalName,
-    name: i.canonicalName,   // alias so old code using .name still works
-    aliases: i.aliases,
-  }));
-  return { items };
+export function getRecipeRoute(recipe: { id: string; slug?: string | null }): string {
+  return `/dashboard/recipes/${recipe.slug || recipe.id}`;
 }
 
-/**
- * Get all recipes created by the authenticated dietitian
- */
+export async function searchIngredients(query: string, limit = 20): Promise<{ items: Ingredient[] }> {
+  const res = await api.get('/api/ingredients/search', {
+    params: { q: query, limit },
+  });
+  const raw: Array<{ id: string; canonicalName: string; aliases?: string[] }> =
+    res.data?.ingredients ?? res.data?.items ?? [];
+  return {
+    items: raw.map((item) => ({
+      id: item.id,
+      canonicalName: item.canonicalName,
+      name: item.canonicalName,
+      aliases: item.aliases,
+    })),
+  };
+}
+
 export async function getRecipes(params?: {
   page?: number;
   pageSize?: number;
   visibility?: 'public' | 'private';
   q?: string;
-}): Promise<{ items: Recipe[]; total: number; page: number; pageSize: number }> {
+  tag?: string;
+  source?: 'all' | 'clinic' | 'public';
+  status?: 'active' | 'archived' | 'all';
+  range?: '7d' | '30d' | 'all';
+}): Promise<{ items: RecipeListItem[]; total: number; page: number; pageSize: number }> {
   const res = await api.get('/api/dietitian/recipes', { params });
   return res.data;
 }
 
-/**
- * Get a specific recipe by ID
- */
-export async function getRecipeById(recipeId: string): Promise<Recipe> {
-  const res = await api.get(`/api/dietitian/recipes/${recipeId}`);
+export async function getRecipeOverview(range: '7d' | '30d' | 'all' = '30d'): Promise<RecipeOverview> {
+  const res = await api.get('/api/dietitian/recipes/overview', {
+    params: { range },
+  });
   return res.data;
 }
 
-/**
- * Create a new recipe
- */
-export async function createRecipe(data: CreateRecipeRequest): Promise<Recipe> {
+export async function getRecipeById(recipeId: string, range: '7d' | '30d' | 'all' = '30d'): Promise<RecipeDetail> {
+  const recipeIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const endpoint = recipeIdPattern.test(recipeId)
+    ? `/api/dietitian/recipes/${recipeId}`
+    : `/api/dietitian/recipes/slug/${encodeURIComponent(recipeId)}`;
+  const res = await api.get(endpoint, { params: { range } });
+  return res.data;
+}
+
+export async function getRecipeAnalytics(recipeId: string, range: '7d' | '30d' | 'all' = '30d'): Promise<RecipeAnalytics> {
+  const res = await api.get(`/api/dietitian/recipes/${recipeId}/analytics`, {
+    params: { range },
+  });
+  return res.data;
+}
+
+export async function createRecipe(data: SaveRecipeRequest): Promise<RecipeDetail> {
   const res = await api.post('/api/dietitian/recipes', data);
   return res.data;
 }
 
-/**
- * Update an existing recipe
- */
-export async function updateRecipe(recipeId: string, data: CreateRecipeRequest): Promise<Recipe> {
+export async function updateRecipe(recipeId: string, data: SaveRecipeRequest): Promise<RecipeDetail> {
   const res = await api.put(`/api/dietitian/recipes/${recipeId}`, data);
   return res.data;
 }
 
-/**
- * Delete a recipe
- */
-export async function deleteRecipe(recipeId: string): Promise<{ success: boolean }> {
+export async function deleteRecipe(recipeId: string): Promise<{ mode: 'archive' | 'deleted'; message: string }> {
   const res = await api.delete(`/api/dietitian/recipes/${recipeId}`);
   return res.data;
 }
 
-/**
- * Get popular recipes
- */
+export async function favoriteRecipe(recipeId: string): Promise<{ isFavorited: boolean; message: string }> {
+  const res = await api.post(`/api/dietitian/recipes/${recipeId}/favorite`);
+  return res.data;
+}
+
+export async function unfavoriteRecipe(recipeId: string): Promise<{ isFavorited: boolean; message: string }> {
+  const res = await api.delete(`/api/dietitian/recipes/${recipeId}/favorite`);
+  return res.data;
+}
+
 export async function getPopularRecipes(range: 'week' | 'month' | 'all' = 'week'): Promise<{ items: PopularRecipe[] }> {
   const res = await api.get('/api/dietitian/recipes/popular', {
-    params: { range }
+    params: { range },
   });
   return res.data;
 }

@@ -19,6 +19,24 @@ public class IngredientNormalizationLog
     public double Confidence { get; private set; }
 
     /// <summary>
+    /// Total time in milliseconds to complete the normalization pipeline for this input.
+    /// Used for Chapter 4 performance/latency analysis in the thesis.
+    /// </summary>
+    public long ElapsedTimeMs { get; private set; }
+
+    /// <summary>
+    /// Number of candidate ingredients considered across all layers (canonical + alias + fuzzy top-N).
+    /// Supports complexity analysis: high candidate counts indicate broad fuzzy fan-out.
+    /// </summary>
+    public int CandidateCount { get; private set; }
+
+    /// <summary>
+    /// Number of candidates with equal or near-equal confidence scores that triggered an Ambiguous result.
+    /// Zero for deterministic matches (canonical/alias). Non-zero indicates disambiguation was needed.
+    /// </summary>
+    public int AmbiguousCandidateCount { get; private set; }
+
+    /// <summary>
     /// Optional JSON summary of top candidates and their confidences.
     /// Used for offline analysis; not required for all events.
     /// </summary>
@@ -45,6 +63,9 @@ public class IngredientNormalizationLog
         Guid? matchedIngredientId,
         string? matchedCanonicalName,
         double confidence,
+        long elapsedTimeMs,
+        int candidateCount,
+        int ambiguousCandidateCount,
         string? candidateSummaryJson,
         string? correlationId,
         string? requestPath)
@@ -58,6 +79,9 @@ public class IngredientNormalizationLog
         MatchedIngredientId = matchedIngredientId;
         MatchedCanonicalName = matchedCanonicalName;
         Confidence = confidence;
+        ElapsedTimeMs = elapsedTimeMs;
+        CandidateCount = candidateCount;
+        AmbiguousCandidateCount = ambiguousCandidateCount;
         CandidateSummaryJson = candidateSummaryJson;
         CorrelationId = correlationId;
         RequestPath = requestPath;

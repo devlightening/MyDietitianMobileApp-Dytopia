@@ -30,7 +30,10 @@ public class IngredientSearchAndAlternativeSmokeTests : IClassFixture<SmokeWebAp
         using var scope = _factory.Services.CreateScope();
         var appDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        if (await appDb.Ingredients.AnyAsync())
+        // Guard against the shared-factory scenario where other tests (e.g. Alternative
+        // Decision tests) add their own ingredients first. Check for the specific
+        // ingredients this method owns, not just AnyAsync().
+        if (await appDb.Ingredients.AnyAsync(i => i.CanonicalName == "Tomato"))
             return;
 
         var tomato = new Ingredient(Guid.NewGuid(), "Tomato");

@@ -55,13 +55,14 @@ public class DietitianNotesController : ControllerBase
         if (link == null)
             return NotFound(ApiProblems.NotFound("LINK_NOT_FOUND", "Bu client ile aktif bağlantınız yok"));
 
-        if (string.IsNullOrWhiteSpace(request.Text))
+        var text = string.IsNullOrWhiteSpace(request.Text) ? request.Content : request.Text;
+        if (string.IsNullOrWhiteSpace(text))
             return BadRequest(ApiProblems.Validation("INVALID_TEXT", "Not metni boş olamaz"));
 
-        if (request.Text.Length > 2000)
+        if (text.Length > 2000)
             return BadRequest(ApiProblems.Validation("INVALID_TEXT", "Not metni en fazla 2000 karakter olabilir"));
 
-        var note = new DietitianNote(dietitianId.Value, clientId, request.Text);
+        var note = new DietitianNote(dietitianId.Value, clientId, text);
         _appDb.DietitianNotes.Add(note);
         await _appDb.SaveChangesAsync();
 
@@ -135,4 +136,4 @@ public class DietitianNotesController : ControllerBase
     }
 }
 
-public record CreateNoteRequest(string Text);
+public record CreateNoteRequest(string? Text, string? Content);

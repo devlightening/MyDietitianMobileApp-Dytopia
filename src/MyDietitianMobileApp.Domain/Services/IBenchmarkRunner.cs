@@ -23,6 +23,22 @@ public interface IBenchmarkRunner
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Execute the normalization benchmark twice: once with the deterministic baseline
+    /// (LLM disabled) and once with the currently configured runtime pipeline.
+    /// </summary>
+    Task<IngredientNormalizationBenchmarkComparisonResult> RunNormalizationBenchmarkComparisonAsync(
+        string datasetFilePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Execute the normalization benchmark twice: once with the deterministic baseline
+    /// (LLM disabled) and once with the currently configured runtime pipeline.
+    /// </summary>
+    Task<IngredientNormalizationBenchmarkComparisonResult> RunNormalizationBenchmarkComparisonAsync(
+        IngredientNormalizationBenchmarkDataset dataset,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Execute recipe recommendation benchmark from a dataset file.
     /// </summary>
     Task<RecipeRecommendationBenchmarkResult> RunRecommendationBenchmarkAsync(
@@ -34,5 +50,21 @@ public interface IBenchmarkRunner
     /// </summary>
     Task<RecipeRecommendationBenchmarkResult> RunRecommendationBenchmarkAsync(
         RecipeRecommendationBenchmarkDataset dataset,
+        CancellationToken cancellationToken = default);
+
+    Task<MultimodalAcquisitionBenchmarkResult> RunMultimodalAcquisitionBenchmarkAsync(
+        string datasetFilePath,
+        CancellationToken cancellationToken = default);
+
+    Task<MultimodalAcquisitionBenchmarkResult> RunMultimodalAcquisitionBenchmarkAsync(
+        MultimodalAcquisitionBenchmarkDataset dataset,
+        CancellationToken cancellationToken = default);
+
+    Task<HybridRecipeBenchmarkResult> RunHybridRecipeBenchmarkAsync(
+        string datasetFilePath,
+        CancellationToken cancellationToken = default);
+
+    Task<HybridRecipeBenchmarkResult> RunHybridRecipeBenchmarkAsync(
+        HybridRecipeBenchmarkDataset dataset,
         CancellationToken cancellationToken = default);
 }

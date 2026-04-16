@@ -13,7 +13,7 @@ export function Card({ children, className, interactive, onClick }: CardProps) {
     <div
       onClick={onClick}
       className={cn(
-        'card-premium',
+        'card-sfcos',
         interactive && 'interactive-card cursor-pointer',
         className
       )}

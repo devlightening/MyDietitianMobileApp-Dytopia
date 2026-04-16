@@ -1,18 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/Button'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Search, Loader2, CheckCircle2, AlertCircle, ChefHat, X, Sparkles, ShoppingBasket, Users } from 'lucide-react'
+import { motion, type Variants } from 'motion/react'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 
+const fadeRise: Variants = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.34, ease: [0.16, 1, 0.3, 1] } },
+}
+const stagger: Variants = {
+  hidden:  {},
+  visible: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+}
+
 interface RecipeMatch {
   recipeId: string
   recipeName: string
-  matchScore: number
-  missingIngredients: string[]
+  score: number           // API uses 'score'
+  missingIngredients: { id: string; name: string }[] // API returns objects
   substitutes?: string[]
   isPublic: boolean
   explanation?: string
@@ -86,14 +95,16 @@ export default function RecipeMatchPage() {
   const matches: RecipeMatch[] = matchMutation.data?.matches ?? []
 
   return (
-    <div className="space-y-6 fade-in">
+    <motion.div className="space-y-6" initial="hidden" animate="visible" variants={stagger}>
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gradient-sage">Tarif Eşleştirici</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
+      <motion.div variants={fadeRise}>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-display)', color: 'hsl(var(--foreground))' }}>
+          Tarif Eşleştirici
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'hsl(var(--muted-foreground))' }}>
           Danışanın mutfağındaki malzemelere göre en uygun tarifleri keşfedin
         </p>
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* ── Left Panel: Controls ──────────────────────── */}
@@ -110,11 +121,8 @@ export default function RecipeMatchPage() {
             <select
               value={selectedClientId}
               onChange={e => setSelectedClientId(e.target.value)}
-              className={cn(
-                'w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm',
-                'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow',
-                !selectedClientId && 'text-muted-foreground'
-              )}
+              className="input-sfcos"
+              style={{ color: !selectedClientId ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))' }}
             >
               <option value="">— Genel eşleştirme (opsiyonel) —</option>
               {clients.map((c) => (
@@ -145,10 +153,7 @@ export default function RecipeMatchPage() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Malzeme ara..."
-                className={cn(
-                  'w-full pl-9 pr-3 py-2.5 rounded-lg border border-input bg-background text-sm',
-                  'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow'
-                )}
+                className="input-sfcos pl-9"
               />
             </div>
 
@@ -229,10 +234,8 @@ export default function RecipeMatchPage() {
               onClick={() => matchMutation.mutate()}
               disabled={basketIngredients.length === 0 || matchMutation.isPending}
               className={cn(
-                'w-full mt-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all',
-                basketIngredients.length === 0
-                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                  : 'bg-action text-action-foreground hover:opacity-90 active:scale-[0.98] shadow-md hover:shadow-lg'
+                'w-full mt-4 btn-primary justify-center',
+                (basketIngredients.length === 0 || matchMutation.isPending) && 'opacity-50 cursor-not-allowed'
               )}
             >
               {matchMutation.isPending ? (
@@ -268,13 +271,9 @@ export default function RecipeMatchPage() {
               <AlertCircle className="w-12 h-12 mx-auto mb-3 text-destructive/50" />
               <h3 className="text-base font-semibold text-foreground mb-1">Bir şeyler ters gitti</h3>
               <p className="text-sm text-muted-foreground">Eşleştirme motoruna şu an ulaşılamıyor. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.</p>
-              <Button 
-                variant="secondary" 
-                className="mt-4"
-                onClick={() => matchMutation.mutate()}
-              >
+              <button className="btn-ghost mt-4" onClick={() => matchMutation.mutate()}>
                 Yeniden Dene
-              </Button>
+              </button>
             </div>
           ) : matches.length === 0 ? (
             <div className="card-premium p-14 text-center">
@@ -309,27 +308,25 @@ export default function RecipeMatchPage() {
                     <div className="flex flex-col items-center flex-shrink-0">
                       <div className={cn(
                         'w-14 h-14 rounded-xl flex items-center justify-center text-lg font-bold',
-                        match.matchScore >= 80 ? 'kpi-forest' :
-                        match.matchScore >= 50 ? 'kpi-sage' : 'kpi-coral'
+                        match.score >= 80 ? 'kpi-forest' :
+                        match.score >= 50 ? 'kpi-sage' : 'kpi-coral'
                       )}>
-                        {match.matchScore}%
+                        {match.score}%
                       </div>
                       <span className="text-xs text-muted-foreground mt-1">uyum</span>
                     </div>
                   </div>
 
-                  {match.matchScore === 100 && (
+                  {match.score === 100 && (
                     <div className="flex items-center gap-1.5 text-xs font-medium text-action mb-3">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Tüm malzemeler mevcut
                     </div>
                   )}
 
-                  {match.missingIngredients?.length > 0 && (
                     <div className="text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">Eksik: </span>
-                      {match.missingIngredients.join(', ')}
+                      {match.missingIngredients.map(i => i.name).join(', ')}
                     </div>
-                  )}
 
                   {match.substitutes?.length > 0 && (
                     <div className="text-xs text-muted-foreground mt-1">
@@ -343,6 +340,6 @@ export default function RecipeMatchPage() {
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

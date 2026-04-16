@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
+using MyDietitianMobileApp.Api.Time;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 
 namespace MyDietitianMobileApp.Api.Controllers;
@@ -45,7 +46,8 @@ public class RetentionController : ControllerBase
 
         var dietitianId = user.LinkedDietitianId.Value;
 
-        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+        var nowUtc = AppTime.UtcNow;
+        var thirtyDaysAgo = AppTime.EnsureUtc(nowUtc.AddDays(-30));
 
         // Get clients with expired plans or no active plans
         var expiredClients = await _appDb.DietitianClientLinks
@@ -54,7 +56,7 @@ public class RetentionController : ControllerBase
                 link => link.ClientId,
                 client => client.Id,
                 (link, client) => new { link, client })
-            .GroupJoin(_appDb.ClientMealPlans.Where(p => p.EndDate >= thirtyDaysAgo),
+            .GroupJoin(_appDb.ClientMealPlans.Where(p => !p.EndDate.HasValue || p.EndDate.Value >= thirtyDaysAgo),
                 x => x.client.Id,
                 plan => plan.ClientId,
                 (x, plans) => new
@@ -63,7 +65,7 @@ public class RetentionController : ControllerBase
                     x.client.FullName,
                     x.client.Email,
                     linkCreatedAt = x.link.LinkCreatedAtUtc,
-                    hasActivePlan = plans.Any(p => p.EndDate == null || p.EndDate >= DateTime.UtcNow),
+                    hasActivePlan = plans.Any(p => p.EndDate == null || p.EndDate >= nowUtc),
                     lastPlanEndDate = plans.Max(p => p.EndDate),
                     planCount = plans.Count()
                 })

@@ -20,7 +20,9 @@ export default function RetentionPage() {
     queryKey: ['expired-clients'],
     queryFn: async () => {
       const res = await fetch('/api/dietitian/retention/expired-clients')
-      if (!res.ok) throw new Error('Failed to fetch expired clients')
+      if (!res.ok) {
+        return { total: 0, clients: [] }
+      }
       return res.json() as Promise<{ total: number; clients: ExpiredClient[] }>
     }
   })
