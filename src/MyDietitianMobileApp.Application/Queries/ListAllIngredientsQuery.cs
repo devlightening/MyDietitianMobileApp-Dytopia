@@ -13,8 +13,8 @@ namespace MyDietitianMobileApp.Application.Queries
     public class AdminIngredientDto
     {
         public Guid Id { get; set; }
-        public string CanonicalName { get; set; }
-        public IReadOnlyCollection<string> Aliases { get; set; }
+        public string CanonicalName { get; set; } = string.Empty;
+        public IReadOnlyCollection<string> Aliases { get; set; } = Array.Empty<string>();
         public bool IsActive { get; set; }
     }
 

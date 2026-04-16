@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace MyDietitianMobileApp.Application.Commands
 {
-    public class ToggleIngredientActiveCommand
+    public class ToggleIngredientActiveCommand : IRequest<ToggleIngredientActiveResult>
     {
         public Guid IngredientId { get; }
         public bool IsActive { get; }

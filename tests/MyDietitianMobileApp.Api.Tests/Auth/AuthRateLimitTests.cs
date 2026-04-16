@@ -1,4 +1,5 @@
 using System.Net;
+using System.Threading.Tasks;
 using System.Net.Http.Json;
 using FluentAssertions;
 using MyDietitianMobileApp.Api.Tests.Infrastructure;

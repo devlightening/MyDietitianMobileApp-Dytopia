@@ -15,6 +15,12 @@ public class DietitianClientLink
     
     public DateTime LinkedAt { get; private set; }
     public DateTime? UnlinkedAt { get; private set; }
+
+    /// <summary>
+    /// Backwards-compatible alias for <see cref="LinkedAt"/> to satisfy older usages.
+    /// Not mapped as a separate column by EF Core (getter-only).
+    /// </summary>
+    public DateTime LinkCreatedAtUtc => LinkedAt;
     
     public bool IsActive { get; private set; }
 

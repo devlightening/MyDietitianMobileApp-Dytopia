@@ -1,35 +1,40 @@
 {
   "pages": {
+    "/dashboard/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/dashboard/page.css",
+      "static/chunks/app/dashboard/page.js"
+    ],
+    "/dashboard/layout": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/dashboard/layout.css",
+      "static/chunks/app/dashboard/layout.js"
+    ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/dashboard/recipes/create/page": [
+    "/dashboard/appointments/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/recipes/create/page.js"
+      "static/css/app/dashboard/appointments/page.css",
+      "static/chunks/app/dashboard/appointments/page.js"
     ],
-    "/dashboard/layout": [
+    "/dashboard/plans/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/layout.js"
+      "static/css/app/dashboard/plans/page.css",
+      "static/chunks/app/dashboard/plans/page.js"
     ],
-    "/auth/login/page": [
+    "/dashboard/clients/[clientId]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/auth/login/page.js"
-    ],
-    "/auth/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/auth/layout.js"
-    ],
-    "/_not-found/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+      "static/css/app/dashboard/clients/[clientId]/page.css",
+      "static/chunks/app/dashboard/clients/[clientId]/page.js"
     ]
   }
 }

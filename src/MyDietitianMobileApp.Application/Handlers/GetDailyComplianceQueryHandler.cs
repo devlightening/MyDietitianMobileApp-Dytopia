@@ -93,7 +93,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                 var ingredientIds = mealItems.Select(mi => mi.IngredientId).Distinct().ToList();
                 var ingredients = await _context.Ingredients
                     .Where(i => ingredientIds.Contains(i.Id))
-                    .ToDictionaryAsync(i => i.Id, i => i.Name);
+                    .ToDictionaryAsync(i => i.Id, i => i.CanonicalName);
 
                 // Build item DTOs
                 var itemDtos = mealItems.Select(mi =>

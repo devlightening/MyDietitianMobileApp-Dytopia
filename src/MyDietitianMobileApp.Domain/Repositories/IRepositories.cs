@@ -7,17 +7,17 @@ namespace MyDietitianMobileApp.Domain.Repositories
 {
     public interface IClientRepository
     {
-        Client GetById(Guid id);
+        Client? GetById(Guid id);
     }
 
     public interface IDietitianRepository
     {
-        Dietitian GetById(Guid id);
+        Dietitian? GetById(Guid id);
     }
 
     public interface IIngredientRepository
     {
-        Ingredient GetById(Guid id);
+        Ingredient? GetById(Guid id);
         IEnumerable<Ingredient> Search(string searchTerm, int maxResults = 20);
         IEnumerable<Ingredient> GetAll();
         bool ExistsByCanonicalName(string canonicalName, Guid? excludeId = null);

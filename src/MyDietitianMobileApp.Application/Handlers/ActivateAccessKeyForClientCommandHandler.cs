@@ -24,7 +24,7 @@ namespace MyDietitianMobileApp.Application.Handlers
             foreach (var key in client.AccessKeys.Where(k => k.DietitianId == toActivate.DietitianId && k.IsActive && k.Id != toActivate.Id))
                 key.Deactivate();
             if (!toActivate.IsActive)
-                toActivate = new AccessKey(toActivate.Id, toActivate.Key, toActivate.DietitianId, toActivate.ClientId, toActivate.StartDate, toActivate.EndDate, true);
+                toActivate = new AccessKey(toActivate.Id, toActivate.KeyValue, toActivate.DietitianId, toActivate.ClientId, toActivate.CreatedAtUtc, toActivate.ExpiresAtUtc, true);
             // Domain: enforce only one active key (already enforced in AddAccessKey)
             return new ActivateAccessKeyForClientResult(true);
         }

@@ -1,41 +1,79 @@
-import React from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import React, { useEffect, useRef } from "react";
+import { View, Text, ActivityIndicator, StyleSheet, Animated } from "react-native";
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { useAuth } from "../auth/AuthContext";
-import { colors } from "../theme";
 import { Routes } from "./routes";
+import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
 import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
+import FreeHomeScreen from "../screens/FreeHomeScreen";
 
 import AppShell from "./AppShell";
 import PremiumActivationScreen from "../screens/PremiumActivationScreen";
 import CheckIngredientsScreen from "../screens/CheckIngredientsScreen";
 import AlternativeResultScreen from "../screens/AlternativeResultScreen";
+import KitchenResultScreen from "../screens/KitchenResultScreen";
+import RecipeDetailScreen from "../screens/RecipeDetailScreen";
 import ProfileMeasurementsScreen from "../screens/ProfileMeasurementsScreen";
+import ProfileNotificationsScreen from "../screens/ProfileNotificationsScreen";
+import ShoppingListScreen from "../screens/ShoppingListScreen";
+import GoalPreferencesScreen from "../screens/GoalPreferencesScreen";
+import PrivacyScreen from "../screens/PrivacyScreen";
+import RateAppScreen from "../screens/RateAppScreen";
+import IngredientScanScreen from "../screens/IngredientScanScreen";
+import BarcodeScanScreen from "../screens/BarcodeScanScreen";
 
 const Root = createNativeStackNavigator();
 
 function Splash() {
+  const { theme } = useTheme();
+  const scale = useRef(new Animated.Value(0.82)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, damping: 14, stiffness: 180, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 320, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   return (
-    <View style={styles.splash}>
-      <ActivityIndicator size="large" color={colors.sage} />
+    <View style={[s.splash, { backgroundColor: theme.bg }]}>
+      <Animated.View style={[s.splashContent, { opacity, transform: [{ scale }] }]}>
+        <View style={[s.splashLogo, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '40' }]}>
+          <View style={[s.splashLogoBg, { backgroundColor: theme.primary }]} />
+          <Text style={s.splashEmoji}>🥗</Text>
+        </View>
+        <Text style={[s.splashTitle, { color: theme.text }]}>MyDietitian</Text>
+        <Text style={[s.splashSub, { color: theme.textMuted }]}>Sağlıklı yaşam rehberin</Text>
+      </Animated.View>
+      <ActivityIndicator
+        size="small"
+        color={theme.primary}
+        style={s.splashSpinner}
+      />
     </View>
   );
 }
 
-export default function RootNavigator() {
-  const { isAuthenticated, isLoading, isStateLoaded } = useAuth();
-
+function AppNavigator() {
+  const { isAuthenticated, isLoading, isStateLoaded, isPremium } = useAuth();
+  const { isDark, theme } = useTheme();
   const ready = !isLoading && isStateLoaded;
 
+  const navTheme = isDark
+    ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: theme.bg } }
+    : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: theme.bg } };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Root.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
+          /* ── Unauthenticated: Auth stack ─────────────────────────── */
           <Root.Screen name="Auth">
             {() =>
               ready ? (
@@ -49,7 +87,21 @@ export default function RootNavigator() {
               )
             }
           </Root.Screen>
+        ) : !isPremium ? (
+          /* ── Authenticated, Free user: FreeHome stack ────────────── */
+          <Root.Screen name="Free">
+            {() =>
+              ready ? (
+                <Root.Navigator screenOptions={{ headerShown: false }}>
+                  <Root.Screen name={Routes.Free.Home} component={FreeHomeScreen} />
+                </Root.Navigator>
+              ) : (
+                <Splash />
+              )
+            }
+          </Root.Screen>
         ) : (
+          /* ── Authenticated, Premium: Full App stack ──────────────── */
           <Root.Screen name="App">
             {() =>
               ready ? (
@@ -57,7 +109,24 @@ export default function RootNavigator() {
                   <Root.Screen name={Routes.App.Shell} component={AppShell} />
                   <Root.Screen name={Routes.App.CheckIngredients} component={CheckIngredientsScreen} />
                   <Root.Screen name={Routes.App.AlternativeResult} component={AlternativeResultScreen} />
+                  <Root.Screen name={Routes.App.KitchenResult} component={KitchenResultScreen} />
+                  <Root.Screen name={Routes.App.RecipeDetail} component={RecipeDetailScreen} />
                   <Root.Screen name={Routes.App.ProfileMeasurements} component={ProfileMeasurementsScreen} />
+                  <Root.Screen name={Routes.App.ProfileNotifications} component={ProfileNotificationsScreen} />
+                  <Root.Screen name={Routes.App.ShoppingList} component={ShoppingListScreen} />
+                  <Root.Screen name={Routes.App.GoalPreferences} component={GoalPreferencesScreen} />
+                  <Root.Screen name={Routes.App.Privacy} component={PrivacyScreen} />
+                  <Root.Screen name={Routes.App.RateApp} component={RateAppScreen} />
+                  <Root.Screen
+                    name={Routes.App.IngredientScan}
+                    component={IngredientScanScreen}
+                    options={{ presentation: 'modal' }}
+                  />
+                  <Root.Screen
+                    name={Routes.App.BarcodeScan}
+                    component={BarcodeScanScreen}
+                    options={{ presentation: 'modal' }}
+                  />
                 </Root.Navigator>
               ) : (
                 <Splash />
@@ -65,8 +134,7 @@ export default function RootNavigator() {
             }
           </Root.Screen>
         )}
-
-        {/* Modal group: Premium Activation is ALWAYS modal and NEVER forced */}
+        {/* Modal: accessible from both Free and App stacks via navigation.getParent() */}
         <Root.Group screenOptions={{ presentation: "modal", headerShown: false }}>
           <Root.Screen name={Routes.Modal.ActivatePremium} component={PremiumActivationScreen} />
         </Root.Group>
@@ -75,6 +143,31 @@ export default function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  splash: { flex: 1, backgroundColor: colors.oat, justifyContent: "center", alignItems: "center" },
+export default function RootNavigator() {
+  return (
+    <ThemeProvider>
+      <AppNavigator />
+    </ThemeProvider>
+  );
+}
+
+const s = StyleSheet.create({
+  splash: { flex: 1, justifyContent: "center", alignItems: "center" },
+  splashContent: { alignItems: "center", marginBottom: 48 },
+  splashLogo: {
+    width: 88, height: 88, borderRadius: 44,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, overflow: "hidden",
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  splashLogoBg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.12 },
+  splashEmoji: { fontSize: 42 },
+  splashTitle: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 6 },
+  splashSub: { fontSize: 14, fontWeight: "600" },
+  splashSpinner: { position: "absolute", bottom: 60 },
 });

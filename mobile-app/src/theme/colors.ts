@@ -1,31 +1,47 @@
-// src/theme/colors.ts
 export const colors = {
-  // Backgrounds
-  oat: "#F9F7F2",
-  surface: "#FFFFFF",          // card surface (pure white kullanmıyoruz ana bg'de, ama kart için olur)
-  surfaceSoft: "#F6F4EE",      // oat'a yakın soft surface
+  bg: "#F6FBF7",
+  surface: "#FFFFFF",
+  surfaceElevated: "#ECF7EE",
 
-  // Brand
-  sage: "#4A7C59",
-  forest: "#2F5233",
+  primary: "#47B972",
+  primaryDark: "#2F8F57",
+  emerald: "#2C9D66",
 
-  // Accents
-  coral: "#FF8C61",
-  gold: "#F4D35E",
+  accentBlue: "#57B8C7",
+  accentAmber: "#E3C45D",
+  accentCoral: "#E57E6B",
+  accentViolet: "#8BCF92",
 
-  // System
-  border: "rgba(47, 82, 51, 0.10)",
-  text: "#142019",
-  muted: "rgba(20, 32, 25, 0.55)",
-  subtle: "rgba(20, 32, 25, 0.35)",
+  macroProtein: "#E57E6B",
+  macroCarb: "#57B8C7",
+  macroFat: "#E3C45D",
+  macroCalorie: "#8BCF92",
 
-  // Semantic (gerekirse)
-  success: "#4A7C59",
-  warning: "#F4D35E",
-  error: "#E35B5B",
+  zinc200: "#EAF5EC",
+  zinc300: "#D6E9DB",
+  zinc400: "#A9C7B2",
+  zinc500: "#7E9D86",
+  zinc600: "#5C7C65",
+  zinc700: "#42624E",
+  zinc800: "#294735",
+  zinc900: "#183324",
 
-  // Backward compatibility aliases (for existing screens)
-  background: "#FFFFFF",       // maps to surface
-  card: "#F6F4EE",            // maps to surfaceSoft
-  textMuted: "rgba(20, 32, 25, 0.55)", // maps to muted
+  success: "#2F8F57",
+  warning: "#CFB145",
+  error: "#D2665C",
+  info: "#57B8C7",
+
+  text: "#183324",
+  textSub: "rgba(24,51,36,0.70)",
+  textMuted: "rgba(24,51,36,0.44)",
+
+  border: "rgba(52,111,73,0.10)",
+  borderBrand: "rgba(71,185,114,0.30)",
+
+  background: "#F6FBF7",
+  card: "#FFFFFF",
+  mandatory: "#D2665C",
+  secondary: "#2C9D66",
+  tertiary: "#57B8C7",
+  textMuted_alias: "rgba(24,51,36,0.44)",
 };

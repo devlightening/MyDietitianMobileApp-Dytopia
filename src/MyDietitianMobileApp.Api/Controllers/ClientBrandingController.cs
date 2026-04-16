@@ -54,7 +54,17 @@ public class ClientBrandingController : ControllerBase
 
         if (!premiumStatus.IsPremium || !premiumStatus.ActiveDietitianId.HasValue)
         {
-            return Ok(new { branding = (object?)null });
+            // Return default branding for free users (better UX than null)
+            return Ok(new
+            {
+                branding = new
+                {
+                    clinicName = "MyDietitian",
+                    logoUrl = (string?)null,
+                    primaryColorHex = "#111111",
+                    accentColorHex = "#22C55E"
+                }
+            });
         }
 
         var dietitianId = premiumStatus.ActiveDietitianId.Value;

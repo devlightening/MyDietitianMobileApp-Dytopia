@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, spacing } from '../theme';
+import { radii, spacing } from '../theme/tokens';
+import { useTheme } from '../context/ThemeContext';
 import type { DashboardError } from '../data/dashboardRepo';
 
 interface ErrorStateProps {
@@ -9,131 +10,38 @@ interface ErrorStateProps {
   onLogout?: () => void;
 }
 
-/**
- * Professional error state component with action-specific UI
- * AG-DASH-FIX-03: Different UI for 401/404/500/network errors
- */
 export default function ErrorState({ error, onRetry, onLogout }: ErrorStateProps) {
-  // 401 Unauthorized - Session expired
-  if (error.type === 'Unauthorized') {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.icon}>🔒</Text>
-        <Text style={styles.title}>Oturum Süreniz Doldu</Text>
-        <Text style={styles.message}>{error.message}</Text>
-        {onLogout && (
-          <TouchableOpacity style={styles.button} onPress={onLogout}>
-            <Text style={styles.buttonText}>Giriş Yap</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }
+  const { theme } = useTheme();
 
-  // 404 Not Found - Endpoint missing
-  if (error.type === 'NotFound') {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.icon}>🔍</Text>
-        <Text style={styles.title}>Endpoint Bulunamadı</Text>
-        <Text style={styles.message}>{error.message}</Text>
-        {__DEV__ && (
-          <Text style={styles.devInfo}>
-            Status: {error.status} | Path: /api/client/dashboard
-          </Text>
-        )}
-        <TouchableOpacity style={styles.button} onPress={onRetry}>
-          <Text style={styles.buttonText}>Tekrar Dene</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const content = (() => {
+    if (error.type === 'Unauthorized') return { icon: '🔒', title: 'Oturum Süreniz Doldu', action: onLogout ? { label: 'Giriş Yap', fn: onLogout } : null };
+    if (error.type === 'NotFound')      return { icon: '🔍', title: 'Bağlantı Kurulamadı',  action: { label: 'Tekrar Dene', fn: onRetry } };
+    if (error.type === 'NetworkError')  return { icon: '📡', title: 'Bağlantı Hatası',       action: { label: 'Tekrar Dene', fn: onRetry } };
+    return { icon: '⚠️', title: 'Sunucu Hatası', action: { label: 'Tekrar Dene', fn: onRetry } };
+  })();
 
-  // Network Error - Cannot reach server
-  if (error.type === 'NetworkError') {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.icon}>📡</Text>
-        <Text style={styles.title}>Bağlantı Hatası</Text>
-        <Text style={styles.message}>{error.message}</Text>
-        <Text style={styles.hint}>
-          Wi-Fi bağlantınızı kontrol edin veya backend'in çalıştığından emin olun.
-        </Text>
-        <TouchableOpacity style={styles.button} onPress={onRetry}>
-          <Text style={styles.buttonText}>Tekrar Dene</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // Server Error (500+)
   return (
-    <View style={styles.container}>
-      <Text style={styles.icon}>⚠️</Text>
-      <Text style={styles.title}>Sunucu Hatası</Text>
-      <Text style={styles.message}>{error.message}</Text>
-      {__DEV__ && error.status && (
-        <Text style={styles.devInfo}>HTTP Status: {error.status}</Text>
+    <View style={s.container}>
+      <Text style={s.icon}>{content.icon}</Text>
+      <Text style={[s.title, { color: theme.text }]}>{content.title}</Text>
+      <Text style={[s.message, { color: theme.textSub }]}>{error.message}</Text>
+      {content.action && (
+        <TouchableOpacity
+          style={[s.button, { backgroundColor: theme.primary }]}
+          onPress={content.action.fn}
+        >
+          <Text style={s.buttonText}>{content.action.label}</Text>
+        </TouchableOpacity>
       )}
-      <TouchableOpacity style={styles.button} onPress={onRetry}>
-        <Text style={styles.buttonText}>Tekrar Dene</Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  icon: {
-    fontSize: 48,
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 16,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    lineHeight: 24,
-  },
-  hint: {
-    fontSize: 14,
-    color: colors.muted,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-    lineHeight: 20,
-  },
-  devInfo: {
-    fontSize: 12,
-    color: colors.muted,
-    fontFamily: 'monospace',
-    marginBottom: spacing.md,
-    padding: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: 4,
-  },
-  button: {
-    backgroundColor: colors.sage,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: 8,
-    minWidth: 140,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  icon: { fontSize: 48, marginBottom: spacing.md },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: spacing.sm, textAlign: 'center' },
+  message: { fontSize: 14, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 21 },
+  button: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radii.lg, minWidth: 140 },
+  buttonText: { color: '#FFF', fontSize: 15, fontWeight: '700', textAlign: 'center' },
 });

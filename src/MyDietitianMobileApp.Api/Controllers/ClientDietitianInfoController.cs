@@ -49,10 +49,12 @@ public class ClientDietitianInfoController : ControllerBase
 
         var (userId, clientId, _) = identity.Value;
 
-        // Premium gate
+        // For free users, return null dietitian (graceful degradation)
         var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userId, CancellationToken.None);
         if (!premiumStatus.IsPremium || !premiumStatus.ActiveDietitianId.HasValue)
-            return StatusCode(403, ApiProblems.PremiumRequired());
+        {
+            return Ok(new { dietitian = (object?)null });
+        }
 
         var dietitianId = premiumStatus.ActiveDietitianId.Value;
 
@@ -67,24 +69,20 @@ public class ClientDietitianInfoController : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.DietitianId == dietitianId);
 
+        var brandingPayload = new
+        {
+            clinicName = branding?.ClinicName ?? dietitian.ClinicName ?? dietitian.FullName,
+            logoUrl = branding?.LogoUrl,
+            primaryColorHex = branding?.PrimaryColorHex ?? "#111111",
+            accentColorHex = branding?.AccentColorHex ?? "#22C55E"
+        };
+
         return Ok(new
         {
             dietitianId = dietitian.Id,
             fullName = dietitian.FullName,
             clinicName = dietitian.ClinicName ?? dietitian.FullName,
-            branding = branding != null ? new
-            {
-                clinicName = branding.ClinicName,
-                logoUrl = branding.LogoUrl,
-                primaryColorHex = branding.PrimaryColorHex,
-                accentColorHex = branding.AccentColorHex
-            } : new
-            {
-                clinicName = dietitian.ClinicName ?? dietitian.FullName,
-                logoUrl = (string?)null,
-                primaryColorHex = "#111111",
-                accentColorHex = "#22C55E"
-            }
+            branding = brandingPayload
         });
     }
 }

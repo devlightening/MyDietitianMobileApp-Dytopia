@@ -3,8 +3,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Infrastructure.Services;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -39,114 +42,272 @@ public class AuthenticationController : ControllerBase
     /// Dietitian login (legacy route, use /api/dietitian/login instead)
     /// </summary>
     [HttpPost("dietitian/login")]
-    [EnableRateLimiting("auth")]
-    [ApiExplorerSettings(IgnoreApi = true)] // Hidden from Swagger (use /api/dietitian/login instead)
+    [EnableRateLimiting("auth-strict")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<IActionResult> DietitianLogin([FromBody] DietitianLoginRequest request)
     {
         var user = await _authDb.UserAccounts
             .FirstOrDefaultAsync(u => u.Email == request.Email && u.Role == "Dietitian");
 
         if (user == null)
-            return Unauthorized(new { message = "Invalid credentials" });
+            return Unauthorized(new { message = "Geçersiz giriş bilgileri." });
 
-        // Handle legacy password hashes that aren't Identity-compatible
         try
         {
             if (!_hasher.VerifyPassword(user.PasswordHash, request.Password))
-                return Unauthorized(new { message = "Invalid credentials" });
+                return Unauthorized(new { message = "Geçersiz giriş bilgileri." });
         }
         catch (FormatException)
         {
-            // Legacy hash format - user needs password reset
-            return Unauthorized(new { message = "Invalid credentials. Please contact admin for password reset." });
+            return Unauthorized(new { message = "Şifre doğrulanamadı. Lütfen yöneticinizle iletişime geçin." });
         }
 
         var dietitian = await _appDb.Dietitians.FindAsync(user.LinkedDietitianId);
         if (dietitian == null || !dietitian.IsActive)
-            return Unauthorized(new { message = "Dietitian account not active" });
+            return Unauthorized(new { message = "Diyetisyen hesabı aktif değil." });
 
-        var jwtSecret = _config["Jwt:SecretKey"] ?? throw new InvalidOperationException("JWT Secret missing");
-        var jwtIssuer = _config["Jwt:Issuer"] ?? "MyDietitian.Api";
-        var jwtAudience = _config["Jwt:Audience"] ?? "MyDietitian.Mobile";
-        var expiresMinutes = int.Parse(_config["Jwt:ExpiresMinutes"] ?? "43200");
+        user.EnsureSecurityStamp();
+        user.LastLoginAtUtc = DateTime.UtcNow;
+        await _authDb.SaveChangesAsync();
 
-        var token = MyDietitianMobileApp.Infrastructure.Services.JwtTokenGenerator.GenerateToken(
-            user.Id.ToString(),
-            "Dietitian",
-            jwtSecret,
-            jwtIssuer,
-            jwtAudience,
-            expiresMinutes
-        );
+        var expiresMinutes = GetJwtExpiresMinutes();
+        var token = GenerateTokenForUser(user, expiresMinutes);
+        AppendAccessTokenCookie(token, DateTime.UtcNow.AddMinutes(expiresMinutes));
 
-        // Environment-aware cookie configuration
-        // Development: Use Lax (works with same-origin requests, no HTTPS required)
-        // Production: Use None + Secure (required for cross-origin requests)
-        var isDevelopment = _env.IsDevelopment();
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = !isDevelopment, // Only require HTTPS in production
-            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None,
-            Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
-            Path = "/"
-        };
-
-        Response.Cookies.Append("access_token", token, cookieOptions);
-        return Ok(new { ok = true });
+        return Ok(new { ok = true, token });
     }
 
     /// <summary>
     /// Admin login
     /// </summary>
     [HttpPost("admin/login")]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> AdminLogin([FromBody] AdminLoginRequest request)
     {
         var user = await _authDb.UserAccounts
             .FirstOrDefaultAsync(u => u.Email == request.Email && u.Role == "Admin");
 
         if (user == null)
-            return Unauthorized(new { message = "Invalid credentials" });
+            return Unauthorized(new { message = "Geçersiz giriş bilgileri." });
 
-        // Handle legacy password hashes
         try
         {
             if (!_hasher.VerifyPassword(user.PasswordHash, request.Password))
-                return Unauthorized(new { message = "Invalid credentials" });
+                return Unauthorized(new { message = "Geçersiz giriş bilgileri." });
         }
         catch (FormatException)
         {
-            return Unauthorized(new { message = "Invalid credentials. Please contact admin for password reset." });
+            return Unauthorized(new { message = "Şifre doğrulanamadı. Lütfen yöneticinizle iletişime geçin." });
         }
 
-        var jwtSecret = _config["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret missing");
-        var jwtIssuer = _config["Jwt:Issuer"] ?? "MyDietitian.Api";
-        var jwtAudience = _config["Jwt:Audience"] ?? "MyDietitian.Mobile";
-        var expiresMinutes = int.Parse(_config["Jwt:ExpiresMinutes"] ?? "43200");
+        user.EnsureSecurityStamp();
+        user.LastLoginAtUtc = DateTime.UtcNow;
+        await _authDb.SaveChangesAsync();
 
-        var token = MyDietitianMobileApp.Infrastructure.Services.JwtTokenGenerator.GenerateToken(
-            user.Id.ToString(),
-            "Admin",
-            jwtSecret,
-            jwtIssuer,
-            jwtAudience,
-            expiresMinutes
+        var expiresMinutes = GetJwtExpiresMinutes();
+        var token = GenerateTokenForUser(user, expiresMinutes);
+        AppendAccessTokenCookie(token, DateTime.UtcNow.AddMinutes(expiresMinutes));
+
+        return Ok(new { ok = true, token });
+    }
+
+    /// <summary>
+    /// Dietitian register for web panel
+    /// </summary>
+    [HttpPost("dietitian/register")]
+    [EnableRateLimiting("auth-strict")]
+    public async Task<IActionResult> RegisterDietitian([FromBody] DietitianRegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "E-posta ve şifre zorunludur." });
+
+        var exists = await _authDb.UserAccounts
+            .AnyAsync(u => u.Email == request.Email && u.Role == "Dietitian");
+
+        if (exists)
+            return Conflict(new { message = "Bu e-posta zaten kullanımda." });
+
+        var passwordValidation = PasswordPolicy.Validate(request.Password);
+        if (!passwordValidation.IsValid)
+        {
+            return BadRequest(new { message = passwordValidation.ErrorMessage ?? "Şifre gereksinimleri karşılanmadı." });
+        }
+
+        var dietitian = new MyDietitianMobileApp.Domain.Entities.Dietitian(
+            Guid.NewGuid(),
+            request.FullName,
+            request.ClinicName,
+            true
         );
 
-        // Environment-aware cookie configuration (same as dietitian login)
-        var isDevelopment = _env.IsDevelopment();
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = !isDevelopment,
-            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None,
-            Expires = DateTime.UtcNow.AddMinutes(expiresMinutes),
-            Path = "/"
-        };
+        _appDb.Dietitians.Add(dietitian);
+        await _appDb.SaveChangesAsync();
 
-        Response.Cookies.Append("access_token", token, cookieOptions);
+        try
+        {
+            var user = new UserAccount
+            {
+                Id = Guid.NewGuid(),
+                Email = request.Email,
+                Role = "Dietitian",
+                LinkedDietitianId = dietitian.Id,
+                PasswordHash = _hasher.HashPassword(request.Password),
+                PasswordChangedAtUtc = DateTime.UtcNow
+            };
+            user.EnsureSecurityStamp();
+
+            _authDb.UserAccounts.Add(user);
+            await _authDb.SaveChangesAsync();
+        }
+        catch
+        {
+            _appDb.Dietitians.Remove(dietitian);
+            await _appDb.SaveChangesAsync();
+            throw;
+        }
+
         return Ok(new { ok = true });
+    }
+
+    /// <summary>
+    /// Change current account password and optionally invalidate other sessions.
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    [EnableRateLimiting("auth-strict")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return BadRequest(new { message = "Mevcut şifre ve yeni şifre zorunludur." });
+        }
+
+        var user = await GetAuthenticatedUserAccountAsync();
+        if (user == null)
+        {
+            return Unauthorized(new { message = "Kullanıcı oturumu doğrulanamadı." });
+        }
+
+        try
+        {
+            if (!_hasher.VerifyPassword(user.PasswordHash, request.CurrentPassword))
+            {
+                return BadRequest(new { message = "Mevcut şifre hatalı." });
+            }
+        }
+        catch (FormatException)
+        {
+            return BadRequest(new { message = "Şifre doğrulanamadı. Lütfen destek ile iletişime geçin." });
+        }
+
+        if (_hasher.VerifyPassword(user.PasswordHash, request.NewPassword))
+        {
+            return BadRequest(new { message = "Yeni şifre mevcut şifreyle aynı olamaz." });
+        }
+
+        var passwordValidation = PasswordPolicy.Validate(request.NewPassword);
+        if (!passwordValidation.IsValid)
+        {
+            return BadRequest(new { message = passwordValidation.ErrorMessage ?? "Yeni şifre gereksinimleri karşılanmadı." });
+        }
+
+        user.EnsureSecurityStamp();
+        if (request.SignOutOtherSessions)
+        {
+            user.RotateSecurityStamp();
+        }
+
+        user.PasswordHash = _hasher.HashPassword(request.NewPassword);
+        user.PasswordChangedAtUtc = DateTime.UtcNow;
+        await _authDb.SaveChangesAsync();
+
+        var expiresMinutes = GetJwtExpiresMinutes();
+        var token = GenerateTokenForUser(user, expiresMinutes);
+        var expiresAtUtc = DateTime.UtcNow.AddMinutes(expiresMinutes);
+        AppendAccessTokenCookie(token, expiresAtUtc);
+
+        return Ok(new
+        {
+            ok = true,
+            token,
+            expiresAtUtc = expiresAtUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            message = request.SignOutOtherSessions
+                ? "Şifreniz güncellendi ve diğer cihazlardaki oturumlar kapatıldı."
+                : "Şifreniz güncellendi."
+        });
+    }
+
+    /// <summary>
+    /// Get current authenticated user information
+    /// </summary>
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetCurrentUser()
+    {
+        try
+        {
+            var user = await GetAuthenticatedUserAccountAsync();
+            if (user == null)
+            {
+                return Unauthorized(new { message = "Kullanıcı hesabı bulunamadı." });
+            }
+
+            if (user.Role == "Dietitian")
+            {
+                var dietitian = await _appDb.Dietitians
+                    .FirstOrDefaultAsync(d => d.Id == user.LinkedDietitianId);
+
+                if (dietitian == null || !dietitian.IsActive)
+                {
+                    return StatusCode(403, new { message = "Diyetisyen hesabı aktif değil." });
+                }
+
+                return Ok(new
+                {
+                    userId = user.Id.ToString(),
+                    email = user.Email,
+                    fullName = dietitian.FullName,
+                    role = "dietitian",
+                    dietitianId = dietitian.Id.ToString(),
+                    clinicName = dietitian.ClinicName,
+                    lastPasswordChangedAtUtc = user.PasswordChangedAtUtc,
+                    lastLoginAtUtc = user.LastLoginAtUtc
+                });
+            }
+
+            if (user.Role == "Admin")
+            {
+                return Ok(new
+                {
+                    userId = user.Id.ToString(),
+                    email = user.Email,
+                    role = "admin",
+                    lastPasswordChangedAtUtc = user.PasswordChangedAtUtc,
+                    lastLoginAtUtc = user.LastLoginAtUtc
+                });
+            }
+
+            if (user.Role == "Client")
+            {
+                return Ok(new
+                {
+                    userId = user.Id.ToString(),
+                    email = user.Email,
+                    role = "client",
+                    clientId = user.LinkedClientId?.ToString(),
+                    publicUserId = user.PublicUserId,
+                    lastPasswordChangedAtUtc = user.PasswordChangedAtUtc,
+                    lastLoginAtUtc = user.LastLoginAtUtc
+                });
+            }
+
+            return StatusCode(403, new { message = "Bilinmeyen kullanıcı rolü." });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in /api/auth/me: {ex.Message}");
+            return StatusCode(500, new { message = "Kullanıcı bilgileri alınırken bir hata oluştu." });
+        }
     }
 
     /// <summary>
@@ -155,28 +316,93 @@ public class AuthenticationController : ControllerBase
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        // Delete cookie using same Path/SameSite/Secure options as login
-        // Use both Delete and overwrite with expired cookie for maximum reliability
         var isDevelopment = _env.IsDevelopment();
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
             Path = "/",
-            Secure = !isDevelopment, // MUST match login cookie settings
-            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None // MUST match login
+            Secure = !isDevelopment,
+            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None
         };
-        
-        // First, try to delete the cookie
+
         Response.Cookies.Delete("access_token", cookieOptions);
-        
-        // Then, overwrite with expired cookie (Unix epoch) to ensure it's cleared
         cookieOptions.Expires = DateTimeOffset.UnixEpoch.UtcDateTime;
         Response.Cookies.Append("access_token", "", cookieOptions);
-        
+
         return Ok(new { ok = true });
     }
+
+    private async Task<UserAccount?> GetAuthenticatedUserAccountAsync()
+    {
+        var userId = User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+
+        if (!Guid.TryParse(userId, out var parsedUserId))
+        {
+            return null;
+        }
+
+        return await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == parsedUserId);
+    }
+
+    private string GenerateTokenForUser(UserAccount user, int expiresMinutes)
+    {
+        user.EnsureSecurityStamp();
+
+        var additionalClaims = new List<Claim>();
+        if (user.Role == "Client")
+        {
+            if (user.LinkedClientId.HasValue)
+            {
+                additionalClaims.Add(new Claim("clientId", user.LinkedClientId.Value.ToString()));
+            }
+
+            if (!string.IsNullOrWhiteSpace(user.PublicUserId))
+            {
+                additionalClaims.Add(new Claim("publicUserId", user.PublicUserId));
+            }
+        }
+
+        return JwtTokenGenerator.GenerateToken(
+            user.Id.ToString(),
+            user.Role,
+            GetJwtSecret(),
+            GetJwtIssuer(),
+            GetJwtAudience(),
+            expiresMinutes,
+            securityStamp: user.SecurityStamp,
+            additionalClaims: additionalClaims);
+    }
+
+    private void AppendAccessTokenCookie(string token, DateTime expiresAtUtc)
+    {
+        var isDevelopment = _env.IsDevelopment();
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !isDevelopment,
+            SameSite = isDevelopment ? SameSiteMode.Lax : SameSiteMode.None,
+            Expires = expiresAtUtc,
+            Path = "/"
+        };
+
+        Response.Cookies.Append("access_token", token, cookieOptions);
+    }
+
+    private string GetJwtSecret()
+        => _config["Jwt:SecretKey"]
+           ?? _config["Jwt:Secret"]
+           ?? throw new InvalidOperationException("JWT Secret missing");
+
+    private string GetJwtIssuer() => _config["Jwt:Issuer"] ?? "MyDietitian.Api";
+
+    private string GetJwtAudience() => _config["Jwt:Audience"] ?? "MyDietitian.Mobile";
+
+    private int GetJwtExpiresMinutes() => int.Parse(_config["Jwt:ExpiresMinutes"] ?? "43200");
 }
 
 // DTOs
 public record DietitianLoginRequest(string Email, string Password);
 public record AdminLoginRequest(string Email, string Password);
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword, bool SignOutOtherSessions = true);

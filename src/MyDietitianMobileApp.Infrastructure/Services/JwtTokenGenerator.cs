@@ -13,7 +13,9 @@ public static class JwtTokenGenerator
         string secret,
         string issuer,
         string audience,
-        int expiresMinutes)
+        int expiresMinutes,
+        string? securityStamp = null,
+        IEnumerable<Claim>? additionalClaims = null)
     {
         var claims = new List<Claim>
         {
@@ -26,6 +28,16 @@ public static class JwtTokenGenerator
             new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        if (!string.IsNullOrWhiteSpace(securityStamp))
+        {
+            claims.Add(new Claim("sst", securityStamp));
+        }
+
+        if (additionalClaims is not null)
+        {
+            claims.AddRange(additionalClaims);
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

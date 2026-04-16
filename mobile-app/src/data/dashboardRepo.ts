@@ -32,6 +32,9 @@ export interface DashboardDTO {
     mealId?: number;
   };
 
+  /** Pinned dietitian note (premium only) */
+  dietitianNote?: string;
+
   /** Dashboard summary statistics (premium only) */
   summary?: {
     /** Current streak (days) */
@@ -42,6 +45,23 @@ export interface DashboardDTO {
     waterGlasses?: number;
     /** Steps count */
     steps?: number;
+
+    /** Earned badge count */
+    badgeCount?: number;
+  };
+
+  /** Motivation metadata used by streak UI and notifications */
+  motivation?: {
+    currentStreak: number;
+    bestStreak: number;
+    earnedBadgeCount: number;
+    nextMilestoneDays: number;
+    achievements: Array<{
+      id: string;
+      progressCurrent: number;
+      progressTarget: number;
+      unlocked: boolean;
+    }>;
   };
 }
 

@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Application.Services;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Problems;
+using MyDietitianMobileApp.Api.Realtime;
 using System.Security.Claims;
 
 namespace MyDietitianMobileApp.Api.Controllers;
@@ -20,16 +22,25 @@ public class ClientProgressController : ControllerBase
 {
     private readonly AppDbContext _appDb;
     private readonly IClientIdentityResolver _identityResolver;
+    private readonly IPremiumStatusService _premiumStatusService;
+    private readonly IClientGamificationService _gamificationService;
     private readonly ILogger<ClientProgressController> _logger;
+    private readonly ISyncEventPublisher _syncPublisher;
 
     public ClientProgressController(
         AppDbContext appDb,
         IClientIdentityResolver identityResolver,
-        ILogger<ClientProgressController> logger)
+        IPremiumStatusService premiumStatusService,
+        IClientGamificationService gamificationService,
+        ILogger<ClientProgressController> logger,
+        ISyncEventPublisher syncPublisher)
     {
         _appDb = appDb;
         _identityResolver = identityResolver;
+        _premiumStatusService = premiumStatusService;
+        _gamificationService = gamificationService;
         _logger = logger;
+        _syncPublisher = syncPublisher;
     }
 
     /// <summary>
@@ -104,6 +115,21 @@ public class ClientProgressController : ControllerBase
 
         tracking.Update(request.WaterGlasses, request.Steps, request.Notes);
         await _appDb.SaveChangesAsync();
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId);
+        if (request.WaterGlasses >= 8)
+        {
+            await _gamificationService.TrackEventAsync(
+                clientId,
+                premium.IsPremium,
+                premium.ActiveDietitianId,
+                ClientGamificationService.EventTypes.WaterGoalHit,
+                new { request.WaterGlasses });
+        }
+        else
+        {
+            await _gamificationService.GetSummaryAsync(clientId, premium.IsPremium, premium.ActiveDietitianId);
+        }
+        await PublishClientMetricsAsync(clientId, premium.ActiveDietitianId, "tracking");
 
         return Ok(new
         {
@@ -225,6 +251,8 @@ public class ClientProgressController : ControllerBase
         var entry = new ClientWeightEntry(clientId, atUtc, request.WeightKg);
         _appDb.ClientWeightEntries.Add(entry);
         await _appDb.SaveChangesAsync();
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId);
+        await PublishClientMetricsAsync(clientId, premium.ActiveDietitianId, "weight");
 
         return CreatedAtAction(nameof(GetWeights), new { id = entry.Id }, new
         {
@@ -255,12 +283,15 @@ public class ClientProgressController : ControllerBase
 
         _appDb.ClientWeightEntries.Remove(entry);
         await _appDb.SaveChangesAsync();
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId);
+        await PublishClientMetricsAsync(clientId, premium.ActiveDietitianId, "weight");
 
         return NoContent();
     }
 
     /// <summary>
-    /// Get measurement entries with pagination
+    /// Get measurement history (paginated), newest first.
+    /// Returns unified ClientMeasurement records (weight + body measurements in one record).
     /// </summary>
     [HttpGet("measurements")]
     public async Task<IActionResult> GetMeasurements(
@@ -278,28 +309,40 @@ public class ClientProgressController : ControllerBase
         page = page <= 0 ? 1 : page;
         pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
 
-        var query = _appDb.ClientMeasurementEntries
+        var query = _appDb.ClientMeasurements
             .AsNoTracking()
             .Where(m => m.ClientId == clientId);
 
         if (!string.IsNullOrEmpty(from) && DateTime.TryParse(from, out var fromDt))
-            query = query.Where(m => m.AtUtc >= fromDt);
+            query = query.Where(m => m.RecordedAtUtc >= fromDt);
         if (!string.IsNullOrEmpty(to) && DateTime.TryParse(to, out var toDt))
-            query = query.Where(m => m.AtUtc <= toDt);
+            query = query.Where(m => m.RecordedAtUtc <= toDt);
 
         var total = await query.CountAsync();
 
         var measurements = await query
-            .OrderByDescending(m => m.AtUtc)
+            .OrderByDescending(m => m.RecordedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(m => new
             {
-                id = m.Id,
-                atUtc = m.AtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                waistCm = m.WaistCm,
-                hipCm = m.HipCm,
-                chestCm = m.ChestCm
+                id            = m.Id,
+                recordedAtUtc = m.RecordedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                sourceType    = m.SourceType,
+                weightKg      = m.WeightKg,
+                heightCm      = m.HeightCm,
+                bodyFatPercent= m.BodyFatPercent,
+                musclePercent = m.MusclePercent,
+                waterPercent  = m.WaterPercent,
+                waistCm       = m.WaistCm,
+                hipCm         = m.HipCm,
+                chestCm       = m.ChestCm,
+                bmi           = m.Bmi,
+                bmiCategory   = m.BmiCategory,
+                bmr           = m.Bmr,
+                waistHipRatio = m.WaistHipRatio,
+                notes         = m.Notes,
+                isClinicallyVerified = m.IsClinicallyVerified,
             })
             .ToListAsync();
 
@@ -307,7 +350,53 @@ public class ClientProgressController : ControllerBase
     }
 
     /// <summary>
-    /// Add measurement entry
+    /// Get the single most recent measurement for the current client.
+    /// Used by the mobile summary card on the measurements screen.
+    /// </summary>
+    [HttpGet("measurements/latest")]
+    public async Task<IActionResult> GetLatestMeasurement()
+    {
+        var identity = await _identityResolver.ResolveClientAsync(User);
+        if (!identity.HasValue)
+            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Client hesabı bulunamadı"));
+
+        var (_, clientId, _) = identity.Value;
+
+        var m = await _appDb.ClientMeasurements
+            .AsNoTracking()
+            .Where(m => m.ClientId == clientId)
+            .OrderByDescending(m => m.RecordedAtUtc)
+            .Select(m => new
+            {
+                id            = m.Id,
+                recordedAtUtc = m.RecordedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                sourceType    = m.SourceType,
+                weightKg      = m.WeightKg,
+                heightCm      = m.HeightCm,
+                bodyFatPercent= m.BodyFatPercent,
+                musclePercent = m.MusclePercent,
+                waterPercent  = m.WaterPercent,
+                waistCm       = m.WaistCm,
+                hipCm         = m.HipCm,
+                chestCm       = m.ChestCm,
+                bmi           = m.Bmi,
+                bmiCategory   = m.BmiCategory,
+                bmr           = m.Bmr,
+                waistHipRatio = m.WaistHipRatio,
+                notes         = m.Notes,
+                isClinicallyVerified = m.IsClinicallyVerified,
+            })
+            .FirstOrDefaultAsync();
+
+        if (m == null)
+            return Ok(new { measurement = (object?)null });
+
+        return Ok(new { measurement = m });
+    }
+
+    /// <summary>
+    /// Record a new measurement (self-reported by client: sourceType = "client").
+    /// Accepts weight, body fat %, circumferences, etc. At least one metric required.
     /// </summary>
     [HttpPost("measurements")]
     [EnableRateLimiting("progress-write")]
@@ -319,24 +408,92 @@ public class ClientProgressController : ControllerBase
 
         var (_, clientId, _) = identity.Value;
 
-        var atUtc = request.AtUtc ?? DateTime.UtcNow;
+        // At least one metric must be present
+        if (!request.WeightKg.HasValue && !request.HeightCm.HasValue &&
+            !request.BodyFatPercent.HasValue && !request.WaistCm.HasValue &&
+            !request.HipCm.HasValue && !request.ChestCm.HasValue)
+        {
+            return BadRequest(ApiProblems.Validation("MEASUREMENT_EMPTY",
+                "En az bir ölçüm değeri girilmelidir."));
+        }
 
-        var entry = new ClientMeasurementEntry(clientId, atUtc, request.WaistCm, request.HipCm, request.ChestCm);
-        _appDb.ClientMeasurementEntries.Add(entry);
+        // Try to compute BMR from client profile
+        decimal? bmr = null;
+        try
+        {
+            var client = await _appDb.Clients
+                .AsNoTracking()
+                .Where(c => c.Id == clientId)
+                .Select(c => new { c.Gender, c.BirthDate })
+                .FirstOrDefaultAsync();
+
+            if (client != null)
+                bmr = ClientMeasurement.ComputeBmr(
+                    request.WeightKg,
+                    request.HeightCm,
+                    client.BirthDate.Year > 0
+                        ? DateTime.UtcNow.Year - client.BirthDate.Year
+                        : null,
+                    (int)client.Gender);
+        }
+        catch { /* BMR is optional — never fail the save */ }
+
+        var entry = new ClientMeasurement(
+            clientId:           clientId,
+            sourceType:         "client",
+            recordedByUserId:   identity.Value.userId,
+            recordedAtUtc:      request.RecordedAtUtc,
+            weightKg:           request.WeightKg,
+            heightCm:           request.HeightCm,
+            bodyFatPercent:     request.BodyFatPercent,
+            musclePercent:      request.MusclePercent,
+            waterPercent:       request.WaterPercent,
+            waistCm:            request.WaistCm,
+            hipCm:              request.HipCm,
+            chestCm:            request.ChestCm,
+            bmr:                bmr,
+            notes:              request.Notes,
+            isClinicallyVerified: false);
+
+        _appDb.ClientMeasurements.Add(entry);
+
+        // Write a ClientActivity event so it surfaces in the dietitian's activity feed
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId,
+            dietitianId: null,
+            type: "measurement_logged",
+            metadata: new { weightKg = entry.WeightKg, bmi = entry.Bmi, sourceType = "client" }));
+
         await _appDb.SaveChangesAsync();
+
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId);
+        await _gamificationService.TrackEventAsync(
+            clientId,
+            premium.IsPremium,
+            premium.ActiveDietitianId,
+            ClientGamificationService.EventTypes.MeasurementLogged,
+            new { entry.Id });
+        await PublishClientMetricsAsync(clientId, premium.ActiveDietitianId, "measurement");
 
         return CreatedAtAction(nameof(GetMeasurements), new { id = entry.Id }, new
         {
-            id = entry.Id,
-            atUtc = entry.AtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-            waistCm = entry.WaistCm,
-            hipCm = entry.HipCm,
-            chestCm = entry.ChestCm
+            id            = entry.Id,
+            recordedAtUtc = entry.RecordedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            sourceType    = entry.SourceType,
+            weightKg      = entry.WeightKg,
+            heightCm      = entry.HeightCm,
+            bmi           = entry.Bmi,
+            bmiCategory   = entry.BmiCategory,
+            bmr           = entry.Bmr,
+            waistCm       = entry.WaistCm,
+            hipCm         = entry.HipCm,
+            chestCm       = entry.ChestCm,
+            waistHipRatio = entry.WaistHipRatio,
         });
     }
 
     /// <summary>
-    /// Delete measurement entry
+    /// Delete a measurement entry (client can only delete their own records).
     /// </summary>
     [HttpDelete("measurements/{id:guid}")]
     [EnableRateLimiting("progress-write")]
@@ -348,19 +505,50 @@ public class ClientProgressController : ControllerBase
 
         var (_, clientId, _) = identity.Value;
 
-        var entry = await _appDb.ClientMeasurementEntries
+        var entry = await _appDb.ClientMeasurements
             .FirstOrDefaultAsync(m => m.Id == id && m.ClientId == clientId);
 
         if (entry == null)
             return NotFound(ApiProblems.NotFound("MEASUREMENT_NOT_FOUND", "Ölçüm kaydı bulunamadı"));
 
-        _appDb.ClientMeasurementEntries.Remove(entry);
+        _appDb.ClientMeasurements.Remove(entry);
         await _appDb.SaveChangesAsync();
 
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId);
+        await PublishClientMetricsAsync(clientId, premium.ActiveDietitianId, "measurement");
+
         return NoContent();
+    }
+
+    private async Task PublishClientMetricsAsync(Guid clientId, Guid? dietitianId, string source)
+    {
+        if (!dietitianId.HasValue)
+            return;
+
+        await _syncPublisher.PublishToLinkAsync(dietitianId.Value, clientId, "client.metrics.updated", new
+        {
+            clientId,
+            source
+        });
+
+        await _syncPublisher.PublishToLinkAsync(dietitianId.Value, clientId, "gamification.summary.updated", new
+        {
+            clientId,
+            source
+        });
     }
 }
 
 public record UpdateTrackingRequest(int WaterGlasses, int Steps, string? Notes);
 public record AddWeightRequest(decimal WeightKg, DateTime? AtUtc = null);
-public record AddMeasurementRequest(decimal? WaistCm, decimal? HipCm, decimal? ChestCm, DateTime? AtUtc = null);
+public record AddMeasurementRequest(
+    decimal? WeightKg,
+    decimal? HeightCm,
+    decimal? BodyFatPercent,
+    decimal? MusclePercent,
+    decimal? WaterPercent,
+    decimal? WaistCm,
+    decimal? HipCm,
+    decimal? ChestCm,
+    string? Notes,
+    DateTime? RecordedAtUtc = null);

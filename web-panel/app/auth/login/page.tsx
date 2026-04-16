@@ -1,99 +1,123 @@
 "use client";
+
 import { useState } from "react";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
+import { dietitianLogin } from "@/lib/auth-api";
 
 export default function DietitianLoginPage() {
-  const [values, setValues] = useState({ email: '', password: '', remember: false });
+  const [values, setValues] = useState({ email: "", password: "", remember: false });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value, type, checked } = e.target;
-    setValues((v) => ({ ...v, [name]: type === 'checkbox' ? checked : value }));
-    setError('');
+    setValues((current) => ({ ...current, [name]: type === "checkbox" ? checked : value }));
+    setError("");
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
+
     try {
-      const res = await fetch('/api/auth/dietitian/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: values.email.trim(), password: values.password })
-      });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || 'E-posta veya şifre hatalı.');
-      }
-      const data = await res.json();
-
-      // Store in localStorage for client-side axios interceptor
-      localStorage.setItem("accessToken", data.token);
-
-      // Store in cookie for ServerGuard
-      document.cookie = `access_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
-
-      window.location.href = '/dashboard';
+      await dietitianLogin({ email: values.email.trim(), password: values.password });
+      window.location.href = "/dashboard";
     } catch (err: any) {
-      setError(err?.message || 'E-posta veya şifre hatalı.');
+      setError(err?.message || "E-posta veya şifre hatalı.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md p-8 space-y-6 shadow-lg">
-        <h1 className="text-3xl font-bold text-center mb-2">Diyetisyen Girişi</h1>
-        <p className="text-center text-muted-foreground mb-4 text-base">
-          Klinik hesabınıza giriş yapın.
-        </p>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <Input
-            label="E-posta"
-            name="email"
-            type="email"
-            value={values.email}
-            onChange={handleChange}
-            required
-            className="text-base"
-          />
-          <Input
-            label="Şifre"
-            name="password"
-            type="password"
-            value={values.password}
-            onChange={handleChange}
-            required
-            className="text-base"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              id="remember"
-              type="checkbox"
-              name="remember"
-              checked={values.remember}
+    <div className="relative min-h-screen overflow-hidden bg-[var(--surface-base)]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full blur-3xl" style={{ background: "rgba(71,185,114,0.16)" }} />
+        <div className="absolute -bottom-24 right-0 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(0,191,179,0.10)" }} />
+      </div>
+
+      <div className="relative flex min-h-screen items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md rounded-[30px] border border-border/80 bg-white/88 p-8 shadow-[0_24px_80px_rgba(31,73,46,0.10)] backdrop-blur-xl">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 7v10M7 12h10" />
+                <circle cx="12" cy="12" r="9" opacity="0.35" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Diyetisyen girişi</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Aktif aboneliği olan panel hesabınıza giriş yapın.
+            </p>
+          </div>
+
+          <form className="space-y-4" onSubmit={handleSubmit} method="POST">
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              label="E-posta"
+              value={values.email}
               onChange={handleChange}
-              className="accent-accent"
+              required
+              placeholder="isim@klinik.com"
+              className="input-sfcos"
             />
-            <label htmlFor="remember" className="text-sm text-muted-foreground select-none">
+
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              label="Şifre"
+              value={values.password}
+              onChange={handleChange}
+              required
+              placeholder="Şifrenizi girin"
+              className="input-sfcos"
+            />
+
+            <label htmlFor="remember" className="flex cursor-pointer items-center gap-2 text-sm select-none text-muted-foreground">
+              <input
+                id="remember"
+                type="checkbox"
+                name="remember"
+                checked={values.remember}
+                onChange={handleChange}
+                className="h-4 w-4 rounded accent-[#1A9D6C]"
+              />
               Beni hatırla
             </label>
+
+            {error ? (
+              <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+                {error}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary mt-2 h-12 w-full text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "Giriş yapılıyor..." : "Giriş yap"}
+            </button>
+          </form>
+
+          <div className="mt-6 rounded-2xl border border-border/70 bg-secondary/70 px-4 py-4 text-center">
+            <p className="text-sm font-semibold text-foreground">
+              Erişim yalnızca satın alma ve aktivasyon sonrası açılır.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Henüz aktif hesabınız yoksa önce satış sayfasındaki paketleri inceleyin veya size
+              iletilen aktivasyon bağlantısını kullanın.
+            </p>
+            <a href="/" className="mt-3 inline-flex text-sm font-semibold text-primary transition hover:underline">
+              Satış sayfasına dön
+            </a>
           </div>
-          {error && <div className="text-danger text-sm font-medium">{error}</div>}
-          <Button type="submit" className="w-full mt-2" loading={loading} disabled={loading}>
-            Giriş Yap
-          </Button>
-        </form>
-        <div className="text-center text-sm mt-4">
-          Hesabınız yok mu? <a href="/auth/register" className="text-primary hover:underline font-medium">Kayıt Ol</a>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

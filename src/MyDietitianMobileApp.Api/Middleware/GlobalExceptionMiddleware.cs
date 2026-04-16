@@ -28,7 +28,14 @@ public class GlobalExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
+            try
+            {
+                _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
+            }
+            catch
+            {
+                // Logging should never prevent the API from returning an error response.
+            }
             await HandleExceptionAsync(context, ex);
         }
     }

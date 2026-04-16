@@ -14,6 +14,7 @@ using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -95,6 +96,11 @@ public class ClientAuthenticationController : ControllerBase
             if (string.Equals(result.ErrorCode, "REGISTRATION_NOT_ALLOWED", StringComparison.OrdinalIgnoreCase))
             {
                 return BadRequest(ApiProblems.Validation("REGISTRATION_NOT_ALLOWED", result.Message));
+            }
+
+            if (string.Equals(result.ErrorCode, "WEAK_PASSWORD", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(ApiProblems.Validation("WEAK_PASSWORD", result.Message));
             }
 
             return BadRequest(ApiProblems.Validation("REGISTER_FAILED", result.Message));
@@ -292,12 +298,14 @@ public class ClientAuthenticationController : ControllerBase
         Guid userId;
         Guid clientId;
         string publicUserId;
+        UserAccount? userAccount = null;
 
         if (existingUser != null && existingUser.LinkedClientId.HasValue)
         {
             userId = existingUser.Id;
             clientId = existingUser.LinkedClientId.Value;
             publicUserId = existingUser.PublicUserId;
+            userAccount = existingUser;
         }
         else
         {
@@ -323,13 +331,16 @@ public class ClientAuthenticationController : ControllerBase
                 var randomPassword = Guid.NewGuid().ToString("N");
                 var hashedPassword = _hasher.HashPassword(randomPassword);
 
-                var userAccount = new UserAccount(
+                userAccount = new UserAccount(
                     userId,
                     email,
                     hashedPassword,
                     "Client"
                 );
                 userAccount.LinkedClientId = clientId;
+                userAccount.EnsureSecurityStamp();
+                userAccount.PasswordChangedAtUtc = DateTime.UtcNow;
+                userAccount.LastLoginAtUtc = DateTime.UtcNow;
 
                 // Generate unique PublicUserId
                 do
@@ -352,40 +363,50 @@ public class ClientAuthenticationController : ControllerBase
             }
         }
 
+        userAccount ??= existingUser;
+        if (userAccount == null)
+        {
+            return Unauthorized(ApiProblems.Validation("CLIENT_ACCOUNT_NOT_FOUND", "Kullanıcı hesabı bulunamadı."));
+        }
+
+        userAccount.EnsureSecurityStamp();
+        userAccount.LastLoginAtUtc = DateTime.UtcNow;
+        userAccount.PasswordChangedAtUtc ??= DateTime.UtcNow;
+        await _authDb.SaveChangesAsync();
+
         // Generate JWT (same shape as normal client login)
-        var secret = _config["Jwt:SecretKey"];
+        var secret = _config["Jwt:SecretKey"] ?? _config["Jwt:Secret"];
         var issuer = _config["Jwt:Issuer"] ?? "MyDietitian.Api";
         var audience = _config["Jwt:Audience"] ?? "MyDietitian.Mobile";
 
         if (string.IsNullOrWhiteSpace(secret))
             throw new InvalidOperationException("JWT_SECRET_IS_NULL - Check appsettings.json");
 
-        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-        var key = System.Text.Encoding.UTF8.GetBytes(secret);
-
-        var claims = new List<System.Security.Claims.Claim>
+        var claims = new List<Claim>
         {
             new("sub", userId.ToString()),
             new("role", "Client"),
-            new(System.Security.Claims.ClaimTypes.Role, "Client"),
+            new(ClaimTypes.Role, "Client"),
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new("sst", userAccount.SecurityStamp),
             new("clientId", clientId.ToString()),
             new("publicUserId", publicUserId)
         };
 
-        var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
-        {
-            Subject = new System.Security.Claims.ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddDays(30),
-            Issuer = issuer,
-            Audience = audience,
-            SigningCredentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
-                new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),
-                Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256Signature)
-        };
-
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        var jwt = tokenHandler.WriteToken(token);
-        var expiresAtUtc = token.ValidTo;
+        var jwt = JwtTokenGenerator.GenerateToken(
+            userId.ToString(),
+            "Client",
+            secret,
+            issuer,
+            audience,
+            expiresMinutes: 60 * 24 * 30,
+            securityStamp: userAccount.SecurityStamp,
+            additionalClaims: claims.Where(c => c.Type is not JwtRegisteredClaimNames.Sub
+                and not "role"
+                and not ClaimTypes.Role
+                and not ClaimTypes.NameIdentifier
+                and not "sst"));
+        var expiresAtUtc = DateTime.UtcNow.AddDays(30);
 
         // Resolve premium status
         var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userId);

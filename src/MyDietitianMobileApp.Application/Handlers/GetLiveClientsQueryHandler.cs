@@ -92,7 +92,7 @@ namespace MyDietitianMobileApp.Application.Handlers
                         {
                             var ingredient = await _context.Ingredients
                                 .FirstOrDefaultAsync(i => i.Id == lastMealItemEntity.IngredientId);
-                            lastMealItem = ingredient?.Name ?? "Unknown";
+                            lastMealItem = ingredient?.CanonicalName ?? "Unknown";
                         }
                     }
                 }

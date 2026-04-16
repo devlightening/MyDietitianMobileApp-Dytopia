@@ -1,3 +1,4 @@
+using MediatR;
 using MyDietitianMobileApp.Application.Commands;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
@@ -5,10 +6,12 @@ using MyDietitianMobileApp.Domain.Exceptions;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MyDietitianMobileApp.Application.Handlers
 {
-    public class CreateIngredientCommandHandler : ICreateIngredientHandler
+    public class CreateIngredientCommandHandler : ICreateIngredientHandler, IRequestHandler<CreateIngredientCommand, CreateIngredientResult>
     {
         private readonly IIngredientRepository _ingredientRepository;
         private readonly AppDbContext _context;
@@ -41,5 +44,9 @@ namespace MyDietitianMobileApp.Application.Handlers
 
             return new CreateIngredientResult(ingredient.Id);
         }
+
+        // MediatR dispatch entry point — delegates to the sync Handle above
+        public Task<CreateIngredientResult> Handle(CreateIngredientCommand request, CancellationToken cancellationToken)
+            => Task.FromResult(Handle(request));
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Domain.Entities;
+using MyDietitianMobileApp.Infrastructure.Services;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -18,6 +19,9 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public Guid? LinkedClientId { get; set; } // For Client
         public Guid? ActiveDietitianContextId { get; set; } // For Client context
         public string PublicUserId { get; private set; } = string.Empty;
+        public string SecurityStamp { get; set; } = SecurityStampGenerator.Create();
+        public DateTime? PasswordChangedAtUtc { get; set; }
+        public DateTime? LastLoginAtUtc { get; set; }
 
         public UserAccount() { }
 
@@ -35,6 +39,19 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
             if (!string.IsNullOrEmpty(PublicUserId))
                 throw new InvalidOperationException("PublicUserId cannot be changed once set");
             PublicUserId = publicUserId;
+        }
+
+        public void EnsureSecurityStamp()
+        {
+            if (string.IsNullOrWhiteSpace(SecurityStamp))
+            {
+                SecurityStamp = SecurityStampGenerator.Create();
+            }
+        }
+
+        public void RotateSecurityStamp()
+        {
+            SecurityStamp = SecurityStampGenerator.Create();
         }
     }
 

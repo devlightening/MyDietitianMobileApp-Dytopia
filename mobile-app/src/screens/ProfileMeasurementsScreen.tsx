@@ -1,254 +1,502 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
-import { useAuth } from '../auth/AuthContext';
-import { colors, spacing } from '../theme';
-import api from '../api/client';
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  ActivityIndicator,
+  StatusBar,
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { radii, spacing } from "../theme/tokens";
+import { useTheme } from "../context/ThemeContext";
+import api from "../api/client";
 
-export default function ProfileMeasurementsScreen({ navigation }: any) {
-  const { user } = useAuth();
-  const [weightKg, setWeightKg] = useState('');
-  const [heightCm, setHeightCm] = useState('');
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Measurement {
+  id: string;
+  recordedAtUtc: string;
+  sourceType: "client" | "dietitian" | "smart_scale" | "system";
+  weightKg: number | null;
+  heightCm: number | null;
+  bodyFatPercent: number | null;
+  musclePercent: number | null;
+  waterPercent: number | null;
+  waistCm: number | null;
+  hipCm: number | null;
+  chestCm: number | null;
+  bmi: number | null;
+  bmiCategory: string | null;
+  bmr: number | null;
+  waistHipRatio: number | null;
+  notes: string | null;
+  isClinicallyVerified: boolean;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("tr-TR", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+}
+
+function delta(current: number | null, previous: number | null, unit: string): string | null {
+  if (current == null || previous == null) return null;
+  const diff = current - previous;
+  if (diff === 0) return null;
+  return `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ${unit}`;
+}
+
+function sourceBadge(sourceType: string): string {
+  switch (sourceType) {
+    case "dietitian": return "Klinik";
+    case "smart_scale": return "Akıllı tartı";
+    default: return "Kendi girişi";
+  }
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function ProfileMeasurementsScreen() {
+  const nav = useNavigation();
+  const { theme, isDark } = useTheme();
+
+  // ── State: view ────────────────────────────────────────────────────────────
+  const [tab, setTab] = useState<"quick" | "clinical">("quick");
+  const [fetching, setFetching] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [latestMeasurement, setLatestMeasurement] = useState<any>(null);
+  const [latest, setLatest] = useState<Measurement | null>(null);
+  const [history, setHistory] = useState<Measurement[]>([]);
 
-  React.useEffect(() => {
-    loadLatestMeasurement();
+  // ── State: form ────────────────────────────────────────────────────────────
+  const [weightKg, setWeightKg] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [bodyFat, setBodyFat] = useState("");
+  const [musclePercent, setMusclePercent] = useState("");
+  const [waterPercent, setWaterPercent] = useState("");
+  const [waistCm, setWaistCm] = useState("");
+  const [hipCm, setHipCm] = useState("");
+  const [chestCm, setChestCm] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // ── Data loading ───────────────────────────────────────────────────────────
+
+  const loadData = useCallback(async () => {
+    try {
+      const [latestRes, historyRes] = await Promise.all([
+        api.get<{ measurement: Measurement | null }>("/api/client/measurements/latest"),
+        api.get<{ measurements: Measurement[] }>("/api/client/measurements", {
+          params: { page: 1, pageSize: 10 },
+        }),
+      ]);
+      const m = latestRes.data?.measurement;
+      setLatest(m ?? null);
+      if (m) {
+        if (m.weightKg) setWeightKg(String(m.weightKg));
+        if (m.heightCm) setHeightCm(String(m.heightCm));
+        if (m.waistCm)  setWaistCm(String(m.waistCm));
+        if (m.hipCm)    setHipCm(String(m.hipCm));
+        if (m.chestCm)  setChestCm(String(m.chestCm));
+      }
+      setHistory(historyRes.data?.measurements ?? []);
+    } catch {
+      // no prior measurements — that's fine
+    } finally {
+      setFetching(false);
+    }
   }, []);
 
-  async function loadLatestMeasurement() {
-    try {
-      const response = await api.get('/api/profile/measurements');
-      if (response.data.latest) {
-        setLatestMeasurement(response.data.latest);
-        setHeightCm(response.data.latest.heightCm.toString());
-      }
-    } catch (error) {
-      console.log('No measurements yet');
-    }
-  }
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Submit ─────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
-    if (!weightKg || !heightCm) {
-      Alert.alert('Eksik Bilgi', 'Lütfen kilo ve boyunuzu girin');
+    const w   = parseFloat(weightKg) || null;
+    const h   = parseFloat(heightCm) || null;
+    const bf  = parseFloat(bodyFat) || null;
+    const mu  = parseFloat(musclePercent) || null;
+    const wa  = parseFloat(waterPercent) || null;
+    const wst = parseFloat(waistCm) || null;
+    const hip = parseFloat(hipCm) || null;
+    const ch  = parseFloat(chestCm) || null;
+
+    const hasAtLeastOne = w || h || bf || wst || hip || ch;
+    if (!hasAtLeastOne) {
+      Alert.alert("Geçersiz", "En az bir ölçüm değeri giriniz.");
       return;
     }
 
-    const weight = parseFloat(weightKg);
-    const height = parseInt(heightCm);
+    const inRange = (v: number | null, min: number, max: number) =>
+      v === null || (v >= min && v <= max);
 
-    if (weight <= 0 || weight > 500) {
-      Alert.alert('Geçersiz', 'Kilo 0-500 kg arasında olmalı');
-      return;
-    }
-
-    if (height <= 0 || height > 300) {
-      Alert.alert('Geçersiz', 'Boy 0-300 cm arasında olmalı');
-      return;
-    }
+    if (!inRange(w, 10, 500)) return Alert.alert("Geçersiz", "Kilo 10–500 kg arasında olmalı.");
+    if (!inRange(h, 50, 300)) return Alert.alert("Geçersiz", "Boy 50–300 cm arasında olmalı.");
+    if (!inRange(bf, 0, 70))  return Alert.alert("Geçersiz", "Yağ oranı 0–70% arasında olmalı.");
+    if (!inRange(wst, 30, 300) || !inRange(hip, 30, 300) || !inRange(ch, 30, 300))
+      return Alert.alert("Geçersiz", "Çevre ölçümleri 30–300 cm arasında olmalı.");
 
     setLoading(true);
     try {
-      const response = await api.post('/api/profile/measurements', {
-        weightKg: weight,
-        heightCm: height
+      await api.post("/api/client/measurements", {
+        weightKg:       w,
+        heightCm:       h,
+        bodyFatPercent: bf,
+        musclePercent:  mu,
+        waterPercent:   wa,
+        waistCm:        wst,
+        hipCm:          hip,
+        chestCm:        ch,
+        notes:          notes.trim() || null,
       });
-
-      Alert.alert(
-        '✅ Harika!',
-        `${response.data.message}\n\nBMI: ${response.data.bmi.toFixed(1)} (${response.data.bmiCategory})\nBMR: ${response.data.bmr.toFixed(0)} kalori`
-      );
-
-      setWeightKg('');
-      loadLatestMeasurement();
-    } catch (error: any) {
-      Alert.alert('Hata', error.response?.data?.message || 'Ölçüm kaydedilemedi');
+      Alert.alert("Kaydedildi", "Ölçümünüz başarıyla kaydedildi.");
+      setNotes("");
+      await loadData();
+    } catch (e: any) {
+      Alert.alert("Hata", e.response?.data?.message || "Ölçüm kaydedilemedi.");
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Ölçümlerim</Text>
-        <Text style={styles.subtitle}>
-          Kendin için güzel bir adım - verile rin planını daha iyi hale getirecek
-        </Text>
-      </View>
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-      {latestMeasurement && (
-        <View style={styles.latestCard}>
-          <Text style={styles.cardTitle}>Son Ölçüm</Text>
-          <View style={styles.metricsRow}>
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>{latestMeasurement.weightKg} kg</Text>
-              <Text style={styles.metricLabel}>Kilo</Text>
+  if (fetching) {
+    return (
+      <View style={[s.root, s.centered, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
+  const prevRecord = history.length >= 2 ? history[1] : null;
+
+  return (
+    <View style={[s.root, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+
+        {/* Header */}
+        <TouchableOpacity onPress={() => (nav as any).goBack()} style={s.backRow}>
+          <Text style={[s.backText, { color: theme.primary }]}>← Geri</Text>
+        </TouchableOpacity>
+        <Text style={[s.title, { color: theme.text }]}>Ölçümlerim</Text>
+        <Text style={[s.sub, { color: theme.textSub }]}>
+          Düzenli ölçüm planı ve hedef takibini güçlendirir.
+        </Text>
+
+        {/* Latest measurement summary card */}
+        {latest ? (
+          <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={s.cardHeaderRow}>
+              <Text style={[s.cardTitle, { color: theme.text }]}>Son Ölçüm</Text>
+              <View style={[s.badge, { backgroundColor: theme.primary + "18" }]}>
+                <Text style={[s.badgeText, { color: theme.primary }]}>
+                  {sourceBadge(latest.sourceType)}
+                </Text>
+              </View>
             </View>
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>{latestMeasurement.bmi.toFixed(1)}</Text>
-              <Text style={styles.metricLabel}>BMI ({latestMeasurement.bmiCategory})</Text>
+            <Text style={[s.dateText, { color: theme.textMuted }]}>
+              {formatDate(latest.recordedAtUtc)}
+              {latest.isClinicallyVerified && " · Klinik onaylı"}
+            </Text>
+
+            {/* Primary metrics row */}
+            <View style={s.metricsRow}>
+              {latest.weightKg != null && (
+                <MetricBox
+                  value={`${latest.weightKg}`}
+                  unit="kg"
+                  label="Kilo"
+                  delta={delta(latest.weightKg, prevRecord?.weightKg ?? null, "kg")}
+                  color={theme.primary}
+                />
+              )}
+              {latest.bmi != null && (
+                <MetricBox
+                  value={`${latest.bmi}`}
+                  unit=""
+                  label={`BMI${latest.bmiCategory ? ` · ${latest.bmiCategory}` : ""}`}
+                  delta={delta(latest.bmi, prevRecord?.bmi ?? null, "")}
+                  color={theme.accent}
+                />
+              )}
+              {latest.waistCm != null && (
+                <MetricBox
+                  value={`${latest.waistCm}`}
+                  unit="cm"
+                  label="Bel"
+                  delta={delta(latest.waistCm, prevRecord?.waistCm ?? null, "cm")}
+                  color={theme.accentGold}
+                />
+              )}
             </View>
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>{latestMeasurement.bmr.toFixed(0)}</Text>
-              <Text style={styles.metricLabel}>BMR (kcal)</Text>
+
+            {/* Secondary metrics */}
+            <View style={s.secondaryRow}>
+              {latest.bodyFatPercent != null && (
+                <SecondaryMetric label="Yağ %" value={`${latest.bodyFatPercent}%`} theme={theme} />
+              )}
+              {latest.heightCm != null && (
+                <SecondaryMetric label="Boy" value={`${latest.heightCm} cm`} theme={theme} />
+              )}
+              {latest.hipCm != null && (
+                <SecondaryMetric label="Kalça" value={`${latest.hipCm} cm`} theme={theme} />
+              )}
+              {latest.chestCm != null && (
+                <SecondaryMetric label="Göğüs" value={`${latest.chestCm} cm`} theme={theme} />
+              )}
+              {latest.waistHipRatio != null && (
+                <SecondaryMetric label="B/K oranı" value={`${latest.waistHipRatio}`} theme={theme} />
+              )}
+              {latest.bmr != null && (
+                <SecondaryMetric label="BMR" value={`${latest.bmr} kcal`} theme={theme} />
+              )}
             </View>
           </View>
-          <Text style={styles.dateText}>
-            {new Date(latestMeasurement.createdAt).toLocaleDateString('tr-TR')}
-          </Text>
-        </View>
-      )}
+        ) : (
+          <View style={[s.card, s.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[s.emptyTitle, { color: theme.text }]}>Henüz ölçüm yok</Text>
+            <Text style={[s.emptyText, { color: theme.textMuted }]}>
+              İlk ölçümünüzü ekleyin, zaman içindeki değişiminizi takip edin.
+            </Text>
+          </View>
+        )}
 
-      <View style={styles.form}>
-        <Text style={styles.formTitle}>Yeni Ölçüm Ekle</Text>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Kilo (kg)</Text>
-          <TextInput
-            style={styles.input}
-            value={weightKg}
-            onChangeText={setWeightKg}
-            keyboardType="decimal-pad"
-            placeholder="Örn: 75.5"
-            placeholderTextColor={colors.textMuted}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Boy (cm)</Text>
-          <TextInput
-            style={styles.input}
-            value={heightCm}
-            onChangeText={setHeightCm}
-            keyboardType="number-pad"
-            placeholder="Örn: 175"
-            placeholderTextColor={colors.textMuted}
-          />
+        {/* Tab selector */}
+        <View style={[s.tabRow, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <TouchableOpacity
+            style={[s.tabBtn, tab === "quick" && { backgroundColor: theme.primary + "22" }]}
+            onPress={() => setTab("quick")}
+          >
+            <Text style={[s.tabBtnText, { color: tab === "quick" ? theme.primary : theme.textMuted }]}>
+              Hızlı giriş
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.tabBtn, tab === "clinical" && { backgroundColor: theme.primary + "22" }]}
+            onPress={() => setTab("clinical")}
+          >
+            <Text style={[s.tabBtnText, { color: tab === "clinical" ? theme.primary : theme.textMuted }]}>
+              Detaylı
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Kaydediliyor...' : 'Ölçümü Kaydet'}
-          </Text>
-        </TouchableOpacity>
+        {/* Form card */}
+        <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[s.cardTitle, { color: theme.text }]}>Yeni Ölçüm</Text>
 
-        <Text style={styles.hint}>
-          Günde bir kez ölçüm kaydedebilirsiniz
-        </Text>
-      </View>
-    </ScrollView>
+          {/* Quick tab: weight + waist only */}
+          <MeasurementField label="Kilo (kg)" value={weightKg} onChange={setWeightKg} placeholder="Örn: 72.5" theme={theme} />
+
+          {tab === "clinical" && (
+            <>
+              <MeasurementField label="Boy (cm)" value={heightCm} onChange={setHeightCm} placeholder="Örn: 170" theme={theme} />
+              <MeasurementField label="Yağ oranı (%)" value={bodyFat} onChange={setBodyFat} placeholder="Örn: 22.0" theme={theme} />
+              <MeasurementField label="Kas oranı (%) — opsiyonel" value={musclePercent} onChange={setMusclePercent} placeholder="Örn: 35.0" theme={theme} />
+              <MeasurementField label="Su oranı (%) — opsiyonel" value={waterPercent} onChange={setWaterPercent} placeholder="Örn: 55.0" theme={theme} />
+            </>
+          )}
+
+          <MeasurementField label="Bel (cm)" value={waistCm} onChange={setWaistCm} placeholder="Örn: 80" theme={theme} />
+
+          {tab === "clinical" && (
+            <>
+              <MeasurementField label="Kalça (cm)" value={hipCm} onChange={setHipCm} placeholder="Örn: 95" theme={theme} />
+              <MeasurementField label="Göğüs (cm)" value={chestCm} onChange={setChestCm} placeholder="Örn: 90" theme={theme} />
+
+              <Text style={[s.inputLabel, { color: theme.textMuted, marginTop: spacing.md }]}>Not (opsiyonel)</Text>
+              <TextInput
+                style={[s.input, s.inputMultiline, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, color: theme.text }]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Ölçüm koşulları, cihaz bilgisi..."
+                placeholderTextColor={theme.textMuted}
+                multiline
+                numberOfLines={2}
+              />
+            </>
+          )}
+
+          <TouchableOpacity
+            style={[s.submitBtn, { backgroundColor: theme.primary, shadowColor: theme.primary }, loading && s.submitBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={s.submitBtnText}>Takibi Güncelle</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* History list */}
+        {history.length > 1 && (
+          <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[s.cardTitle, { color: theme.text }]}>Geçmiş</Text>
+            {history.map((m, i) => {
+              const prev = history[i + 1] ?? null;
+              return (
+                <View
+                  key={m.id}
+                  style={[s.historyRow, i < history.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border + "60" }]}
+                >
+                  <View>
+                    <Text style={[s.historyDate, { color: theme.text }]}>{formatDate(m.recordedAtUtc)}</Text>
+                    <Text style={[s.historySource, { color: theme.textMuted }]}>{sourceBadge(m.sourceType)}</Text>
+                  </View>
+                  <View style={s.historyMetrics}>
+                    {m.weightKg != null && (
+                      <View style={s.historyMetricItem}>
+                        <Text style={[s.historyMetricVal, { color: theme.text }]}>{m.weightKg} kg</Text>
+                        {delta(m.weightKg, prev?.weightKg ?? null, "kg") && (
+                          <Text style={[s.historyDelta, { color: (m.weightKg - (prev?.weightKg ?? m.weightKg)) < 0 ? "#22c55e" : "#f87171" }]}>
+                            {delta(m.weightKg, prev?.weightKg ?? null, "kg")}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                    {m.waistCm != null && (
+                      <View style={s.historyMetricItem}>
+                        <Text style={[s.historyMetricVal, { color: theme.textSub }]}>{m.waistCm} cm bel</Text>
+                      </View>
+                    )}
+                    {m.bmi != null && (
+                      <View style={s.historyMetricItem}>
+                        <Text style={[s.historyMetricVal, { color: theme.textSub }]}>BMI {m.bmi}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function MetricBox({ value, unit, label, delta: d, color }: {
+  value: string; unit: string; label: string; delta?: string | null; color: string;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View style={s.metricBox}>
+      <Text style={[s.metricValue, { color }]}>
+        {value}<Text style={{ fontSize: 12 }}> {unit}</Text>
+      </Text>
+      <Text style={[s.metricLabel, { color: theme.textMuted }]}>{label}</Text>
+      {d && <Text style={[s.metricDelta, { color: d.startsWith("-") ? "#22c55e" : "#f87171" }]}>{d}</Text>}
+    </View>
+  );
+}
+
+function SecondaryMetric({ label, value, theme }: { label: string; value: string; theme: any }) {
+  return (
+    <View style={s.secMetric}>
+      <Text style={[s.secMetricLabel, { color: theme.textMuted }]}>{label}</Text>
+      <Text style={[s.secMetricValue, { color: theme.text }]}>{value}</Text>
+    </View>
+  );
+}
+
+function MeasurementField({ label, value, onChange, placeholder, theme }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder: string; theme: any;
+}) {
+  return (
+    <>
+      <Text style={[s.inputLabel, { color: theme.textMuted, marginTop: spacing.md }]}>{label}</Text>
+      <TextInput
+        style={[s.input, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, color: theme.text }]}
+        value={value}
+        onChangeText={onChange}
+        keyboardType="decimal-pad"
+        placeholder={placeholder}
+        placeholderTextColor={theme.textMuted}
+      />
+    </>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  centered: { justifyContent: "center", alignItems: "center" },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl + 16, paddingBottom: spacing.xl },
+
+  backRow: { marginBottom: spacing.md },
+  backText: { fontSize: 14, fontWeight: "900" },
+  title: { fontSize: 28, fontWeight: "900", letterSpacing: -0.3 },
+  sub: { marginTop: 6, fontSize: 13, fontWeight: "600", lineHeight: 18, marginBottom: spacing.lg },
+
+  card: {
+    borderRadius: radii.xl, borderWidth: 1,
+    padding: spacing.lg, marginBottom: spacing.lg,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
-  header: {
-    padding: spacing.lg,
-    paddingTop: spacing.xl + 20,
+  cardHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  cardTitle: { fontSize: 16, fontWeight: "900", marginBottom: spacing.sm },
+  dateText: { fontSize: 12, fontWeight: "700", marginBottom: spacing.md },
+
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  badgeText: { fontSize: 11, fontWeight: "800" },
+
+  metricsRow: { flexDirection: "row", justifyContent: "space-around", marginBottom: spacing.md },
+  metricBox: { alignItems: "center", flex: 1 },
+  metricValue: { fontSize: 22, fontWeight: "900" },
+  metricLabel: { fontSize: 11, fontWeight: "700", marginTop: 3, textAlign: "center" },
+  metricDelta: { fontSize: 11, fontWeight: "800", marginTop: 2 },
+
+  secondaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  secMetric: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: "rgba(128,128,128,0.08)", alignItems: "center" },
+  secMetricLabel: { fontSize: 10, fontWeight: "700" },
+  secMetricValue: { fontSize: 13, fontWeight: "800", marginTop: 1 },
+
+  emptyCard: { alignItems: "center", paddingVertical: spacing.xl },
+  emptyTitle: { fontSize: 16, fontWeight: "900", marginBottom: 6 },
+  emptyText: { fontSize: 13, fontWeight: "600", textAlign: "center", lineHeight: 18 },
+
+  tabRow: {
+    flexDirection: "row", borderRadius: radii.xl, borderWidth: 1,
+    overflow: "hidden", marginBottom: spacing.md,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-  },
-  latestCard: {
-    margin: spacing.lg,
-    marginTop: 0,
-    padding: spacing.lg,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary + '30',
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  metric: {
-    alignItems: 'center',
-  },
-  metricValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  metricLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  dateText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  form: {
-    margin: spacing.lg,
-    marginTop: 0,
-  },
-  formTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  inputGroup: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
+  tabBtn: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: radii.xl },
+  tabBtnText: { fontSize: 13, fontWeight: "800" },
+
+  inputLabel: { fontSize: 13, fontWeight: "800", marginBottom: 6 },
   input: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radii.lg, borderWidth: 1,
+    paddingHorizontal: spacing.md, paddingVertical: 14,
+    fontSize: 16, fontWeight: "700",
   },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    padding: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.md,
+  inputMultiline: { paddingTop: 12, minHeight: 72, textAlignVertical: "top" },
+
+  submitBtn: {
+    marginTop: spacing.lg, borderRadius: radii.xl, paddingVertical: 16,
+    alignItems: "center", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.30, shadowRadius: 10, elevation: 6,
   },
-  buttonDisabled: {
-    backgroundColor: colors.textMuted,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  hint: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.md,
-    fontStyle: 'italic',
-  },
+  submitBtnDisabled: { opacity: 0.5 },
+  submitBtnText: { color: "#FFF", fontSize: 15, fontWeight: "900", letterSpacing: 0.5 },
+
+  historyRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingVertical: spacing.md },
+  historyDate: { fontSize: 13, fontWeight: "800" },
+  historySource: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+  historyMetrics: { alignItems: "flex-end" },
+  historyMetricItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  historyMetricVal: { fontSize: 13, fontWeight: "800" },
+  historyDelta: { fontSize: 11, fontWeight: "800" },
 });

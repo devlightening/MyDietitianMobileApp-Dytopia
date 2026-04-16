@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, spacing } from '../theme';
+import { radii, spacing } from '../theme/tokens';
+import { useTheme } from '../context/ThemeContext';
 
 interface ComplianceButtonsProps {
   mealId: string;
@@ -9,111 +10,46 @@ interface ComplianceButtonsProps {
   disabled?: boolean;
 }
 
-export default function ComplianceButtons({
-  mealId,
-  onMark,
-  currentStatus,
-  disabled = false
-}: ComplianceButtonsProps) {
+export default function ComplianceButtons({ mealId, onMark, currentStatus, disabled = false }: ComplianceButtonsProps) {
+  const { theme } = useTheme();
+
+  const BTNS = [
+    { status: 'done'        as const, emoji: '✅', label: 'Yaptım',      bg: theme.success + '18',  active: theme.success },
+    { status: 'alternative' as const, emoji: '🔁', label: 'Alternatif',  bg: theme.warning + '18',  active: theme.warning },
+    { status: 'skipped'     as const, emoji: '⏭️', label: 'Yapamadım',   bg: theme.border,           active: theme.textMuted },
+  ];
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Bu öğünü tamamladın mı?</Text>
-
-      <View style={styles.buttonsRow}>
-        <TouchableOpacity
-          style={[
-            styles.button,
-            styles.doneButton,
-            currentStatus === 'done' && styles.activeButton,
-            disabled && styles.disabledButton
-          ]}
-          onPress={() => onMark('done')}
-          disabled={disabled}
-        >
-          <Text style={styles.buttonEmoji}>✅</Text>
-          <Text style={styles.buttonText}>Yaptım</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.button,
-            styles.alternativeButton,
-            currentStatus === 'alternative' && styles.activeButton,
-            disabled && styles.disabledButton
-          ]}
-          onPress={() => onMark('alternative')}
-          disabled={disabled}
-        >
-          <Text style={styles.buttonEmoji}>🔁</Text>
-          <Text style={styles.buttonText}>Alternatif</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.button,
-            styles.skippedButton,
-            currentStatus === 'skipped' && styles.activeButton,
-            disabled && styles.disabledButton
-          ]}
-          onPress={() => onMark('skipped')}
-          disabled={disabled}
-        >
-          <Text style={styles.buttonEmoji}>⏭️</Text>
-          <Text style={styles.buttonText}>Yapamadım</Text>
-        </TouchableOpacity>
+    <View style={[s.container, { borderTopColor: theme.borderLight }]}>
+      <Text style={[s.title, { color: theme.textSub }]}>Bu öğünü tamamladın mı?</Text>
+      <View style={s.buttonsRow}>
+        {BTNS.map(({ status, emoji, label, bg, active }) => (
+          <TouchableOpacity
+            key={status}
+            style={[
+              s.button,
+              { backgroundColor: bg },
+              currentStatus === status && { borderColor: active, borderWidth: 2 },
+              disabled && s.disabledButton,
+            ]}
+            onPress={() => onMark(status)}
+            disabled={disabled}
+          >
+            <Text style={s.buttonEmoji}>{emoji}</Text>
+            <Text style={[s.buttonText, { color: theme.text }]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  buttonsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  button: {
-    flex: 1,
-    padding: spacing.sm,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  doneButton: {
-    backgroundColor: '#f0fdf4',
-  },
-  alternativeButton: {
-    backgroundColor: '#fffbeb',
-  },
-  skippedButton: {
-    backgroundColor: '#f8fafc',
-  },
-  activeButton: {
-    borderWidth: 2,
-    borderColor: colors.sage,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  buttonEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  buttonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.text,
-  },
+const s = StyleSheet.create({
+  container: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1 },
+  title: { fontSize: 13, fontWeight: '600', marginBottom: spacing.sm },
+  buttonsRow: { flexDirection: 'row', gap: spacing.sm },
+  button: { flex: 1, padding: spacing.sm, borderRadius: radii.md, alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
+  disabledButton: { opacity: 0.5 },
+  buttonEmoji: { fontSize: 20, marginBottom: 4 },
+  buttonText: { fontSize: 12, fontWeight: '600' },
 });

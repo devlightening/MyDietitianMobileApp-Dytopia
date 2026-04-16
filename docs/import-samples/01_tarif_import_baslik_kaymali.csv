@@ -1,0 +1,18 @@
+MyDietitian import örneği,,,,,,,,,,
+Bu ilk iki satır açıklama amaçlıdır,,,,,,,,,,
+Tarif Adı,Açıklama,Malzeme,Miktar,Birim,Rol,Etiketler,Yapılış,Hazırlık Süresi,Pişirme Süresi,Porsiyon
+Fırın Sebzeli Omlet,Sebzeli hafif akşam öğünü,Yumurta,2,adet,zorunlu,"aksam, protein","Yumurtaları çırp
+Sebzeleri ekle
+Fırında pişir",10 dk,15 dk,2
+Fırın Sebzeli Omlet,Sebzeli hafif akşam öğünü,Kabak,1,adet,zorunlu,"aksam, protein","Yumurtaları çırp
+Sebzeleri ekle
+Fırında pişir",10 dk,15 dk,2
+Fırın Sebzeli Omlet,Sebzeli hafif akşam öğünü,Beyaz peynir,40,gr,opsiyonel,"aksam, protein","Yumurtaları çırp
+Sebzeleri ekle
+Fırında pişir",10 dk,15 dk,2
+Laktossuz Muzlu Smoothie,Hızlı kahvaltı alternatifi,Muz,1,adet,zorunlu,"kahvalti, smoothie","Tüm malzemeleri blenderdan geçir
+Soğuk servis et",5 dk,,1
+Laktossuz Muzlu Smoothie,Hızlı kahvaltı alternatifi,Laktozsuz süt,250,ml,zorunlu,"kahvalti, smoothie","Tüm malzemeleri blenderdan geçir
+Soğuk servis et",5 dk,,1
+Laktossuz Muzlu Smoothie,Hızlı kahvaltı alternatifi,Yulaf,2,tbsp,opsiyonel,"kahvalti, smoothie","Tüm malzemeleri blenderdan geçir
+Soğuk servis et",5 dk,,1

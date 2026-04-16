@@ -4,155 +4,169 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
+  Bell,
+  Calendar,
+  CalendarDays,
   ChefHat,
   Key,
+  LayoutDashboard,
   LogOut,
-  Users,
-  Plus,
-  Search,
+  Palette,
   Pin,
-  PinOff
+  PinOff,
+  Users,
 } from 'lucide-react';
 import { logout } from '@/lib/auth';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useBranding } from '@/contexts/BrandingContext';
+import { getCareHubSummary } from '@/lib/api/care-hub';
 
 const menuItems = [
   { key: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
-  { key: 'createRecipe', href: '/dashboard/recipes/create', icon: Plus },
-  { key: 'recipeMatch', href: '/dashboard/recipe-match', icon: Search, badge: 'NEW' },
   { key: 'clients', href: '/dashboard/clients', icon: Users },
+  { key: 'appointments', href: '/dashboard/appointments', icon: CalendarDays },
+  { key: 'plans', href: '/dashboard/plans', icon: Calendar },
+  { key: 'recipes', href: '/dashboard/recipes', icon: ChefHat },
+  { key: 'careHub', href: '/dashboard/care-hub', icon: Bell },
   { key: 'accessKeys', href: '/dashboard/access-keys', icon: Key },
+  { key: 'settings', href: '/dashboard/settings', icon: Palette },
 ];
 
 const COLLAPSED_WIDTH = 64;
-const EXPANDED_WIDTH = 240;
+const EXPANDED_WIDTH = 248;
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations('common');
-  const { isLocked, isHovered, isOpen, toggleLock, setHovered } = useSidebar();
+  const { isLocked, isOpen, toggleLock, setHovered } = useSidebar();
+  const { settings } = useBranding();
+
+  const { data: careSummary } = useQuery({
+    queryKey: ['care-hub-summary', 'sidebar'],
+    queryFn: () => getCareHubSummary(6),
+    refetchInterval: 15000,
+    staleTime: 10000,
+  });
+
+  const clinicName = settings?.clinicName || 'MyDietitian';
+  const logoUrl = settings?.logoUrl;
+  const initials = clinicName.substring(0, 2).toUpperCase();
+  const unreadCareCount = careSummary?.unreadMessagesCount ?? 0;
 
   const handleLogout = async () => {
-    queryClient.clear();
-    await logout();
-    router.replace('/auth/login');
-    router.refresh();
-  };
-
-  const handleMouseEnter = () => {
-    if (!isLocked) {
-      setHovered(true);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (!isLocked) {
-      setHovered(false);
+    const success = await logout(queryClient);
+    if (success) {
+      router.replace('/auth/login');
+      router.refresh();
     }
   };
 
   return (
     <aside
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className={cn(
-        'h-full bg-card border-r border-border/50 flex flex-col transition-all duration-200 ease-in-out',
-        'fixed left-0 top-0 z-40',
-        isOpen ? 'w-60' : 'w-16',
-        // Add shadow when hovering (unlocked state)
-        !isLocked && isHovered && 'shadow-xl'
-      )}
+      onMouseEnter={() => {
+        if (!isLocked) setHovered(true);
+      }}
+      onMouseLeave={() => {
+        if (!isLocked) setHovered(false);
+      }}
+      className="fixed left-0 top-0 z-40 flex h-full flex-col border-r border-border/80 backdrop-blur-xl transition-all duration-300 ease-out"
       style={{
-        width: isOpen ? `${EXPANDED_WIDTH}px` : `${COLLAPSED_WIDTH}px`
+        background: 'var(--surface-glass)',
+        width: isOpen ? `${EXPANDED_WIDTH}px` : `${COLLAPSED_WIDTH}px`,
+        boxShadow: '0 0 0 1px var(--border-subtle), 14px 0 34px rgba(0, 0, 0, 0.14)',
       }}
     >
-      {/* Logo Section */}
-      <div className={cn(
-        'h-16 flex items-center border-b border-border/50 transition-all duration-200',
-        isOpen ? 'justify-between px-4' : 'justify-center px-2'
-      )}>
-        {!isOpen ? (
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">MD</span>
+      <div className={cn('border-b border-border/80', isOpen ? 'px-4 py-4' : 'px-2 py-4')}>
+        {isOpen ? (
+          <div className="rounded-2xl border border-border/80 bg-[var(--surface-raised)] p-3 shadow-sm shadow-black/5 dark:shadow-black/30">
+            <div className="flex items-start justify-between gap-3">
+              <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/15 text-base font-bold text-primary">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{clinicName}</p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/80">
+                    Diyetisyen paneli
+                  </p>
+                </div>
+              </Link>
+
+              <button
+                onClick={toggleLock}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border/70 bg-[var(--surface-glass)] text-muted-foreground transition hover:border-primary/20 hover:text-primary"
+                aria-label={isLocked ? 'Kenar çubuğu sabitlemesini kapat' : 'Kenar çubuğunu sabitle'}
+                title={isLocked ? 'Kenar çubuğu sabitlemesini kapat' : 'Kenar çubuğunu sabitle'}
+              >
+                {isLocked ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         ) : (
-          <>
-            <Link href="/dashboard" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center group-hover:bg-primary/90 transition-colors">
-                <span className="text-primary-foreground font-bold text-sm">MD</span>
-              </div>
-              <span className="font-semibold text-lg text-foreground">MyDietitian</span>
-            </Link>
-
-            {/* Lock/Pin Button */}
-            <button
-              onClick={toggleLock}
-              className={cn(
-                'p-1.5 rounded-md transition-all duration-200',
-                'hover:bg-accent',
-                isLocked ? 'text-primary' : 'text-muted-foreground'
-              )}
-              aria-label={isLocked ? 'Unlock sidebar' : 'Lock sidebar'}
-              title={isLocked ? 'Unlock sidebar' : 'Lock sidebar'}
+          <div className="flex justify-center">
+            <Link
+              href="/dashboard"
+              className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-primary/15 text-sm font-bold text-primary"
             >
-              {isLocked ? (
-                <Pin className="w-4 h-4 transition-transform duration-200 hover:scale-110" />
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
               ) : (
-                <PinOff className="w-4 h-4 transition-transform duration-200 hover:scale-110" />
+                <span>{initials}</span>
               )}
-            </button>
-          </>
+            </Link>
+          </div>
         )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 flex flex-col gap-1 px-3 py-4 overflow-y-auto">
+      <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 py-4">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href ||
-            (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+          const isActive =
+            pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+          const careBadge = item.key === 'careHub' ? unreadCareCount : 0;
 
           return (
             <Link
               key={item.href}
               href={item.href}
               scroll={false}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all relative group',
-                'hover:bg-accent/50 text-muted-foreground hover:text-foreground',
-                isActive && 'bg-primary/10 text-primary font-medium',
-                !isOpen && 'justify-center px-0'
-              )}
+              className={cn('nav-item group relative', isOpen ? 'justify-start' : 'justify-center px-0')}
+              data-active={isActive}
             >
-              {isActive && isOpen && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
-              )}
-              <Icon className={cn(
-                'w-5 h-5 flex-shrink-0',
-                isActive && 'text-primary'
-              )} />
-              {isOpen && (
-                <div className="flex items-center gap-2 flex-1">
-                  <span className={cn(
-                    'text-sm',
-                    isActive && 'font-medium'
-                  )}>{t(item.key)}</span>
-                  {item.badge && (
-                    <span className="px-1.5 py-0.5 text-xs font-semibold bg-primary text-primary-foreground rounded">
-                      {item.badge}
+              <div className="relative flex-shrink-0">
+                <Icon className="h-[18px] w-[18px]" />
+                {!isOpen && careBadge > 0 ? (
+                  <span className="absolute -right-2 -top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                    {careBadge > 9 ? '9+' : careBadge}
+                  </span>
+                ) : null}
+              </div>
+
+              {isOpen ? (
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="truncate">{t(item.key)}</span>
+                  {careBadge > 0 ? (
+                    <span className="ml-auto inline-flex items-center rounded-full bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-500">
+                      {careBadge} yeni
                     </span>
-                  )}
+                  ) : null}
                 </div>
-              )}
-              {!isOpen && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-popover border border-border rounded-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-lg">
+              ) : (
+                <div className="pointer-events-none absolute left-full ml-3 rounded-xl border border-border/80 bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-foreground opacity-0 shadow-lg shadow-black/10 transition-opacity duration-150 group-hover:opacity-100">
                   {t(item.key)}
+                  {careBadge > 0 ? (
+                    <span className="ml-2 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-500">
+                      {careBadge}
+                    </span>
+                  ) : null}
                 </div>
               )}
             </Link>
@@ -160,26 +174,23 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Logout Button */}
-      <div className="p-3 border-t border-border/50">
+      <div className="border-t border-border/80 p-2.5">
         <button
           onClick={handleLogout}
           className={cn(
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all',
-            'hover:bg-destructive/10 text-muted-foreground hover:text-destructive',
-            'group',
+            'group relative flex w-full items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-sm font-semibold text-muted-foreground transition',
+            'hover:border-rose-500/20 hover:bg-rose-500/10 hover:text-rose-500',
             !isOpen && 'justify-center px-0'
           )}
         >
-          <LogOut className="w-5 h-5 flex-shrink-0 group-hover:text-destructive" />
-          {isOpen && (
-            <span className="text-sm font-medium">{t('logout')}</span>
-          )}
-          {!isOpen && (
-            <div className="absolute left-full ml-2 px-2 py-1 bg-popover border border-border rounded-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-lg">
+          <LogOut className="h-[18px] w-[18px] flex-shrink-0 transition group-hover:-translate-x-0.5" />
+          {isOpen ? <span>{t('logout')}</span> : null}
+
+          {!isOpen ? (
+            <div className="pointer-events-none absolute left-full ml-3 rounded-xl border border-border/80 bg-[var(--surface-raised)] px-3 py-2 text-xs font-medium text-foreground opacity-0 shadow-lg shadow-black/10 transition-opacity duration-150 group-hover:opacity-100">
               {t('logout')}
             </div>
-          )}
+          ) : null}
         </button>
       </div>
     </aside>

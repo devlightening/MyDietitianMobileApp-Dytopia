@@ -6,6 +6,7 @@ using MyDietitianMobileApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using MyDietitianMobileApp.Application.Services;
+using MyDietitianMobileApp.Infrastructure.Services;
 
 namespace MyDietitianMobileApp.Application.Handlers;
 
@@ -58,6 +59,17 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
             };
         }
 
+        var passwordValidation = PasswordPolicy.Validate(request.Password);
+        if (!passwordValidation.IsValid)
+        {
+            return new RegisterClientResult
+            {
+                Success = false,
+                ErrorCode = "WEAK_PASSWORD",
+                Message = passwordValidation.ErrorMessage ?? "Şifre gereksinimleri karşılanmadı."
+            };
+        }
+
         // Create Client entity first
         var clientId = Guid.NewGuid();
         var client = new Client(
@@ -81,6 +93,9 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
             "Client"
         );
         userAccount.LinkedClientId = clientId;
+        userAccount.EnsureSecurityStamp();
+        userAccount.PasswordChangedAtUtc = DateTime.UtcNow;
+        userAccount.LastLoginAtUtc = DateTime.UtcNow;
 
         // Generate unique PublicUserId
         string publicUserId;
@@ -98,7 +113,7 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
         await _appContext.SaveChangesAsync(cancellationToken);
 
         // Generate JWT with minimal identity claims
-        var token = GenerateJwtToken(userId, clientId, publicUserId);
+        var token = GenerateJwtToken(userId, clientId, publicUserId, userAccount.SecurityStamp);
 
         return new RegisterClientResult
         {
@@ -111,9 +126,9 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
         };
     }
 
-    private string GenerateJwtToken(Guid userId, Guid clientId, string publicUserId)
+    private string GenerateJwtToken(Guid userId, Guid clientId, string publicUserId, string securityStamp)
     {
-        var secret = _config["Jwt:SecretKey"];
+        var secret = _config["Jwt:SecretKey"] ?? _config["Jwt:Secret"];
         var issuer = _config["Jwt:Issuer"];
         var audience = _config["Jwt:Audience"];
 
@@ -125,31 +140,20 @@ public class RegisterClientCommandHandler : IRequestHandler<RegisterClientComman
         if (string.IsNullOrWhiteSpace(audience))
             throw new InvalidOperationException("JWT_AUDIENCE_IS_NULL - Check appsettings.json");
 
-        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-        var key = System.Text.Encoding.UTF8.GetBytes(secret);
-
         var claims = new List<System.Security.Claims.Claim>
         {
-            new("sub", userId.ToString()),
-            // Role claims (double-write for robustness)
-            new("role", "Client"),
-            new(System.Security.Claims.ClaimTypes.Role, "Client"),
             new("clientId", clientId.ToString()),
             new("publicUserId", publicUserId)
         };
 
-        var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
-        {
-            Subject = new System.Security.Claims.ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddDays(30),
-            Issuer = issuer,
-            Audience = audience,
-            SigningCredentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
-                new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),
-                Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256Signature)
-        };
-
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        return JwtTokenGenerator.GenerateToken(
+            userId.ToString(),
+            "Client",
+            secret,
+            issuer,
+            audience,
+            expiresMinutes: 60 * 24 * 30,
+            securityStamp: securityStamp,
+            additionalClaims: claims);
     }
 }

@@ -13,9 +13,10 @@ export function Badge({ children, variant = 'primary', className }: BadgeProps) 
   return (
     <span
       className={cn(
-        'inline-block px-3 py-1 rounded-full text-xs font-semibold bg-accent/10 text-accent',
-        variant === 'secondary' && 'bg-muted/20 text-muted-foreground',
-        variant === 'danger' && 'bg-danger/10 text-danger',
+        'badge-base',
+        variant === 'primary' && 'badge-premium',
+        variant === 'secondary' && 'badge-free',
+        variant === 'danger' && 'bg-danger/10 text-danger border border-danger/20',
         className
       )}
     >

@@ -1,0 +1,14 @@
+<!-- Placeholder for favicon.ico -->
+<!-- 
+This is a placeholder file. To add a proper favicon:
+
+1. Create a 16x16 or 32x32 pixel icon (can use online tools like favicon.io)
+2. Save it as favicon.ico
+3. Place it in web-panel/public/favicon.ico
+
+For now, you can use this SVG as a temporary favicon by renaming it to favicon.svg:
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="#10b981"/>
+  <text x="16" y="22" font-family="Arial" font-size="20" font-weight="bold" fill="white" text-anchor="middle">D</text>
+</svg>

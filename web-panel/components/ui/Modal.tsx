@@ -2,14 +2,14 @@ import { cn } from '@/lib/utils';
 import { ReactNode } from 'react';
 
 interface ModalProps {
-  open: boolean;
+  isOpen: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
-  if (!open) return null;
+export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+  if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className={cn('bg-card rounded-xl shadow-lg p-6 min-w-[320px] max-w-full')}

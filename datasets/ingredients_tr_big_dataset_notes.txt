@@ -1,0 +1,23 @@
+Total rows: 328
+Original unique rows kept/normalized: 114
+New rows added: 214
+Staple-like rows (last flag = t): 78
+Category distribution:
+- existing_user_dataset: 114
+- vegetable: 34
+- spice: 21
+- fruit: 21
+- protein: 18
+- condiment: 17
+- grain: 16
+- seafood: 14
+- dairy: 13
+- pantry: 10
+- dessert: 9
+- bakery: 8
+- sweetener: 8
+- herb: 7
+- nut: 7
+- seed: 5
+- legume: 3
+- beverage: 3

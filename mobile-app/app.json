@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile-app",
-    "slug": "mobile-app",
+    "name": "MyDietitian",
+    "slug": "mydietitian-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,7 +17,9 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSCameraUsageDescription": "Malzemeleri otomatik tanımlamak için kameraya erişim gerekiyor.",
+        "NSPhotoLibraryUsageDescription": "Fotoğraf galerinizden yiyecek görseli seçmek için erişim gerekiyor."
       }
     },
     "android": {
@@ -26,13 +28,35 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mydietitian.mobileapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Malzeme barkodu ve fotoğraf taraması için kameraya erişim gerekiyor.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Fotoğraf galerinizden yiyecek görseli seçmek için erişim gerekiyor.",
+          "cameraPermission": "Malzemeleri otomatik tanımlamak için kameraya erişim gerekiyor."
+        }
+      ]
     ]
   }
 }

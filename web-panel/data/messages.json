@@ -1,0 +1,22 @@
+[
+  {
+    "name": "qweqwe",
+    "email": "qwe@wqe.com",
+    "phone": "55522430409",
+    "subject": "Mobil Uygulama",
+    "message": "we",
+    "id": "6d43f6b1-f007-46d0-90b6-aa75e0d5b839",
+    "createdAt": "2026-04-10T16:13:31.460Z",
+    "read": true
+  },
+  {
+    "name": "aaa",
+    "email": "aaa@gmail.com",
+    "phone": "5522430409",
+    "subject": "Abonelik ve Fiyatlandırma",
+    "message": "qweqwe",
+    "id": "469cd6a4-a2b1-48f8-9361-d9618862c748",
+    "createdAt": "2026-04-10T16:11:26.126Z",
+    "read": true
+  }
+]

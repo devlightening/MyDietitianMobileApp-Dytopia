@@ -43,7 +43,7 @@ export default function ShowcasePage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Modal</h2>
         <Button onClick={() => setModalOpen(true)}>Open Modal</Button>
-        <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Confirm Action">
+        <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Confirm Action">
           <div>Are you sure you want to continue?</div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
