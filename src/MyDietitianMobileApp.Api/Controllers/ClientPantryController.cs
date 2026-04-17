@@ -36,6 +36,31 @@ public class ClientPantryController : ControllerBase
         return Ok(new { items });
     }
 
+    /// <summary>
+    /// Returns the most recently used ingredients from the client's pantry.
+    /// Ordered by UpdatedAtUtc descending — powers the "Son Kullandıklarım" quick-add row.
+    /// </summary>
+    [HttpGet("recent")]
+    public async Task<IActionResult> GetRecent([FromQuery] int limit = 8)
+    {
+        var identity = await _identityResolver.ResolveClientAsync(User);
+        if (!identity.HasValue)
+            return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Client hesabi bulunamadi."));
+
+        var safeLimit = Math.Clamp(limit, 1, 20);
+
+        var items = await _appDb.ClientPantryItems
+            .AsNoTracking()
+            .Where(x => x.ClientId == identity.Value.clientId)
+            .Include(x => x.Ingredient)
+            .OrderByDescending(x => x.UpdatedAtUtc)
+            .Take(safeLimit)
+            .Select(x => new { id = x.IngredientId, name = x.Ingredient.CanonicalName })
+            .ToListAsync();
+
+        return Ok(new { items });
+    }
+
     [HttpPut]
     [EnableRateLimiting("pantry")]
     public async Task<IActionResult> Replace([FromBody] ReplacePantryRequest request)

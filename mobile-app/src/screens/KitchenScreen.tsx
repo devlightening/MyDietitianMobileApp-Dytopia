@@ -49,7 +49,7 @@ import IngredientSearch from '../components/IngredientSearch';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import KitchenStreakRail from '../components/gamification/KitchenStreakRail';
 import { Routes } from '../navigation/routes';
-import { getIngredientPacks, type IngredientPack } from '../api/kitchen';
+import { getIngredientPacks, getRecentPantryIngredients, type IngredientPack } from '../api/kitchen';
 import type { Ingredient } from '../types/alternative';
 import { useTranslation } from '../context/I18nContext';
 import { useGamification } from '../queries/useGamification';
@@ -514,6 +514,7 @@ export default function KitchenScreen({
       };
 
   const [packs, setPacks] = useState<IngredientPack[]>([]);
+  const [recentIngredients, setRecentIngredients] = useState<Ingredient[]>([]);
   const [chipsExpanded, setChipsExpanded] = useState(false);
   const [merging, setMerging] = useState(false);
   const [mergePhase, setMergePhase] = useState(0);
@@ -573,6 +574,7 @@ export default function KitchenScreen({
 
   useEffect(() => {
     getIngredientPacks().then(setPacks);
+    getRecentPantryIngredients(8).then(setRecentIngredients);
   }, []);
 
   useEffect(() => {
@@ -1234,6 +1236,67 @@ export default function KitchenScreen({
           </View>
         </Animated.View>
 
+        {recentIngredients.length > 0 && (
+          <Animated.View style={packsStyle}>
+            <View style={s.packSectionHeader}>
+              <View style={s.packSectionLeft}>
+                <View style={[s.packSectionBar, { backgroundColor: theme.primary }]} />
+                <View>
+                  <Text style={[s.packSectionTitle, { color: theme.text }]}>
+                    {language === 'en' ? 'Recent' : 'Son Kullandıklarım'}
+                  </Text>
+                  <Text style={[s.packSectionSub, { color: theme.textMuted }]}>
+                    {language === 'en' ? 'Your last used ingredients' : 'Son kullandığın malzemeler'}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => appendIngredients(recentIngredients)}
+                style={[
+                  s.recentAddAllBtn,
+                  { backgroundColor: `${theme.primary}18`, borderColor: `${theme.primary}35` },
+                ]}
+              >
+                <Text style={[s.recentAddAllTxt, { color: theme.primary }]}>
+                  {language === 'en' ? '+ Add All' : '+ Tümünü Ekle'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.recentChipRow}
+            >
+              {recentIngredients.map(ingredient => {
+                const isSelected = selectedIngredients.some(sel => sel.id === ingredient.id);
+                return (
+                  <TouchableOpacity
+                    key={ingredient.id}
+                    onPress={() => isSelected ? removeIngredient(ingredient.id) : addIngredient(ingredient)}
+                    style={[
+                      s.recentChip,
+                      {
+                        backgroundColor: isSelected ? `${theme.primary}18` : theme.surface,
+                        borderColor: isSelected ? `${theme.primary}55` : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[s.recentChipTxt, { color: isSelected ? theme.primary : theme.text }]}>
+                      {ingredient.canonicalName}
+                    </Text>
+                    {isSelected
+                      ? <Ionicons name="checkmark-circle" size={13} color={theme.primary} />
+                      : <Ionicons name="add-circle-outline" size={13} color={theme.textMuted} />
+                    }
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        )}
+
         {packs.length > 0 && (
           <Animated.View style={packsStyle}>
             <View style={s.packSectionHeader}>
@@ -1241,7 +1304,7 @@ export default function KitchenScreen({
                 <View style={[s.packSectionBar, { backgroundColor: theme.warning }]} />
                 <View>
                   <Text style={[s.packSectionTitle, { color: theme.text }]}>{copy.quickStart}</Text>
-                  <Text style={[s.packSectionSub, { color: theme.textMuted }]}> 
+                  <Text style={[s.packSectionSub, { color: theme.textMuted }]}>
                     {copy.quickStartSub}
                   </Text>
                 </View>
@@ -2025,6 +2088,31 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   packSectionBadgeTxt: { fontSize: 11, fontWeight: '800' },
+  // ── Son Kullandıklarım ──────────────────────────────────────────────────────
+  recentAddAllBtn: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  recentAddAllTxt: { fontSize: 11, fontWeight: '800' },
+  recentChipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 4,
+    paddingRight: spacing.base,
+  },
+  recentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  recentChipTxt: { fontSize: 12.5, fontWeight: '700' },
+  // ───────────────────────────────────────────────────────────────────────────
   packRow: { gap: 10, paddingBottom: 4, paddingRight: spacing.base },
   packTile: {
     width: 154,

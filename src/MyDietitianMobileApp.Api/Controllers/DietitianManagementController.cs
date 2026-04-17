@@ -268,15 +268,15 @@ public class DietitianManagementController : ControllerBase
 
         var client = link.Client;
 
-        // Parallel queries for clinical snapshot
-        var latestMeasurementTask = _appDb.ClientMeasurements
+        // Sequential queries — EF Core scoped DbContext does not support concurrent operations.
+        var m = await _appDb.ClientMeasurements
             .AsNoTracking()
-            .Where(m => m.ClientId == clientId)
-            .OrderByDescending(m => m.RecordedAtUtc)
-            .Select(m => new { m.WeightKg, m.HeightCm, m.Bmi, m.Bmr, m.RecordedAtUtc })
+            .Where(cm => cm.ClientId == clientId)
+            .OrderByDescending(cm => cm.RecordedAtUtc)
+            .Select(cm => new { cm.WeightKg, cm.HeightCm, cm.Bmi, cm.Bmr, cm.RecordedAtUtc })
             .FirstOrDefaultAsync();
 
-        var activePlanTask = _appDb.ClientMealPlans
+        var plan = await _appDb.ClientMealPlans
             .AsNoTracking()
             .Where(p => p.ClientId == clientId && p.IsActive)
             .OrderByDescending(p => p.StartDate)
@@ -284,7 +284,7 @@ public class DietitianManagementController : ControllerBase
             .FirstOrDefaultAsync();
 
         var sevenDaysAgo = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7));
-        var complianceTask = _appDb.MealCompliances
+        var comp = await _appDb.MealCompliances
             .AsNoTracking()
             .Where(mc => mc.ClientId == clientId && mc.Date >= sevenDaysAgo)
             .GroupBy(mc => 1)
@@ -295,17 +295,12 @@ public class DietitianManagementController : ControllerBase
             })
             .FirstOrDefaultAsync();
 
-        var publicUserIdTask = _authDb.UserAccounts
+        // _authDb is a separate context — safe to query after _appDb queries are complete.
+        var publicUserId = await _authDb.UserAccounts
             .AsNoTracking()
             .Where(u => u.LinkedClientId == clientId)
             .Select(u => u.PublicUserId)
             .FirstOrDefaultAsync();
-
-        await Task.WhenAll(latestMeasurementTask, activePlanTask, complianceTask, publicUserIdTask);
-
-        var m = latestMeasurementTask.Result;
-        var plan = activePlanTask.Result;
-        var comp = complianceTask.Result;
 
         decimal compliancePct = (comp != null && comp.total > 0)
             ? Math.Round((decimal)comp.done / comp.total * 100, 1)
@@ -314,7 +309,7 @@ public class DietitianManagementController : ControllerBase
         return Ok(new
         {
             id              = client.Id,
-            publicUserId    = publicUserIdTask.Result ?? client.Id.ToString(),
+            publicUserId    = publicUserId ?? client.Id.ToString(),
             fullName        = client.FullName,
             email           = client.Email,
             gender          = (int)client.Gender,

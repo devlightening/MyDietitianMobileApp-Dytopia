@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import type { Ingredient } from '../types/alternative';
 
 // ─── Recipe Match ─────────────────────────────────────────────────────────────
 
@@ -126,6 +127,22 @@ export async function getIngredientPacks(): Promise<IngredientPack[]> {
   try {
     const res = await apiClient.get<{ packs: IngredientPack[] }>("/api/ingredients/packs");
     return res.data?.packs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Returns the most recently used ingredients from the client's pantry.
+ * Powers the "Son Kullandıklarım" quick-add row in KitchenScreen.
+ * Returns [] on any error (unauthenticated users silently get nothing).
+ */
+export async function getRecentPantryIngredients(limit = 8): Promise<Ingredient[]> {
+  try {
+    const res = await apiClient.get<{ items: { id: string; name: string }[] }>(
+      `/api/client/pantry/recent?limit=${limit}`,
+    );
+    return (res.data?.items ?? []).map(item => ({ id: item.id, canonicalName: item.name }));
   } catch {
     return [];
   }

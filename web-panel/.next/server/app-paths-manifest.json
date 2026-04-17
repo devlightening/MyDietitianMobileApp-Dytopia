@@ -1,4 +1,5 @@
 {
-  "/dashboard/access-keys/page": "app/dashboard/access-keys/page.js",
-  "/dashboard/plans/page": "app/dashboard/plans/page.js"
+  "/api/dietitian/dashboard/stats/route": "app/api/dietitian/dashboard/stats/route.js",
+  "/auth/login/page": "app/auth/login/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
 }

@@ -136,7 +136,8 @@
       "Bash(cat \"/c/Users/hy971/source/repos/MyDietitianMobileApp/tests/MyDietitianMobileApp.Api.Tests/\"*.csproj)",
       "Bash(powershell:*)",
       "Bash(netsh advfirewall:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(echo \"exit:$?\")"
     ]
   }
 }
