@@ -137,7 +137,8 @@
       "Bash(powershell:*)",
       "Bash(netsh advfirewall:*)",
       "Bash(npx next:*)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(git push:*)"
     ]
   }
 }
