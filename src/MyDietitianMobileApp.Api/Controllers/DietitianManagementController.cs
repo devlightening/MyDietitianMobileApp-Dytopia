@@ -167,36 +167,40 @@ public class DietitianManagementController : ControllerBase
 
         var dietitianId = user.LinkedDietitianId.Value;
 
-        // Count active client links
-        var clientsCount = await _appDb.DietitianClientLinks
-            .CountAsync(l => l.DietitianId == dietitianId && l.IsActive);
-
-        // Count clients with an active ClientMealPlan assigned by this dietitian
-        var today = AppTime.ToStoredPlanDate(AppTime.LocalToday);
-        var activePlans = await _appDb.ClientMealPlans
-            .Where(p => p.DietitianId == dietitianId &&
-                        p.IsActive &&
-                        (p.EndDate == null || p.EndDate.Value >= today))
-            .Select(p => p.ClientId)
-            .Distinct()
-            .CountAsync();
-
-        // Count recipes created by this dietitian
-        var recipesCount = await _appDb.Recipes
-            .CountAsync(r => r.DietitianId == dietitianId);
-
-        // Count pending access keys (active keys that haven't been used yet)
-        // Note: When a key is used, it's deactivated, so active keys are unused keys
-        var pendingInvites = await _appDb.AccessKeys
-            .CountAsync(k => k.DietitianId == dietitianId && k.IsActive);
-
-        return Ok(new
+        try
         {
-            totalClientsCount = clientsCount,
-            activeClientsCount = activePlans,
-            recipeCount = recipesCount,
-            accessKeyCount = pendingInvites
-        });
+            // Sequential queries — EF Core scoped DbContext does not support concurrent operations.
+            var clientsCount = await _appDb.DietitianClientLinks
+                .CountAsync(l => l.DietitianId == dietitianId && l.IsActive);
+
+            var today = AppTime.ToStoredPlanDate(AppTime.LocalToday);
+            var activePlans = await _appDb.ClientMealPlans
+                .Where(p => p.DietitianId == dietitianId &&
+                            p.IsActive &&
+                            (p.EndDate == null || p.EndDate.Value >= today))
+                .Select(p => p.ClientId)
+                .Distinct()
+                .CountAsync();
+
+            var recipesCount = await _appDb.Recipes
+                .CountAsync(r => r.DietitianId == dietitianId);
+
+            var pendingInvites = await _appDb.AccessKeys
+                .CountAsync(k => k.DietitianId == dietitianId && k.IsActive);
+
+            return Ok(new
+            {
+                totalClientsCount = clientsCount,
+                activeClientsCount = activePlans,
+                recipeCount = recipesCount,
+                accessKeyCount = pendingInvites
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GetDashboardStats failed for dietitian {DietitianId}", dietitianId);
+            return StatusCode(500, new { message = "Dashboard istatistikleri alınamadı." });
+        }
     }
 
     /// <summary>

@@ -9,6 +9,28 @@ const SILENT_NOT_FOUND_PATTERNS: RegExp[] = [
   /\/api\/dietitian\/clients\/[^/]+\/notes/,
 ];
 
+// Background-refresh endpoints — errors are handled by per-widget UI fallbacks,
+// not global toasts. Spamming a toast every 15-20 s would be disruptive.
+const SILENT_BACKGROUND_PATTERNS: RegExp[] = [
+  /\/api\/dietitian\/dashboard\/stats/,
+  /\/api\/dietitian\/dashboard\/activity/,
+  /\/api\/dietitian\/gamification/,
+  /\/api\/care-hub/,
+  /\/api\/dietitian\/appointments/,
+];
+
+// Deduplication: suppress identical toast messages within this window (ms).
+const TOAST_DEDUPE_MS = 12_000;
+const _recentToasts = new Map<string, number>();
+
+function shouldShowToast(message: string): boolean {
+  const now = Date.now();
+  const last = _recentToasts.get(message) ?? 0;
+  if (now - last < TOAST_DEDUPE_MS) return false;
+  _recentToasts.set(message, now);
+  return true;
+}
+
 // Use same-origin API calls via Next.js rewrites
 // Next.js rewrites /api/* to backend, making requests same-origin
 // This eliminates cookie policy issues (SameSite/Secure) in development
@@ -70,15 +92,21 @@ api.interceptors.response.use(
       type: errorType,
     };
 
-    // Show toast notification for errors (except 401 which triggers redirect)
-    // Suppress NOT_FOUND toast for expected empty-state endpoints (valid empties, not errors)
+    // Show toast notification for errors (except 401 which triggers redirect).
+    // Suppress:
+    //  - expected 404 empty-states (SILENT_NOT_FOUND_PATTERNS)
+    //  - background auto-refresh endpoints that have per-widget fallback UI
+    // Deduplicate identical messages within TOAST_DEDUPE_MS to prevent spam.
     if (errorType !== ApiErrorType.UNAUTHORIZED) {
       const reqUrl = error.config?.url ?? '';
       const isSilentNotFound =
         errorType === ApiErrorType.NOT_FOUND && SILENT_NOT_FOUND_PATTERNS.some(p => p.test(reqUrl));
-      if (!isSilentNotFound) {
+      const isSilentBackground = SILENT_BACKGROUND_PATTERNS.some(p => p.test(reqUrl));
+      if (!isSilentNotFound && !isSilentBackground) {
         const friendlyMessage = getFriendlyErrorMessage(apiError);
-        toast.error(friendlyMessage);
+        if (shouldShowToast(friendlyMessage)) {
+          toast.error(friendlyMessage);
+        }
       }
     }
 

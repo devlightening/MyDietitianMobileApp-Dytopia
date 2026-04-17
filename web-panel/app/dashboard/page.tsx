@@ -406,7 +406,8 @@ export default function DashboardPage() {
   const { data: stats, isLoading, isError } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: getDashboardStats,
-    retry: 1,
+    retry: 0,           // no retry — error is shown inline; prevents double-fire
+    staleTime: 30_000,  // 30 s cache so navigating back doesn't re-fetch immediately
   });
 
   const { data: careHub } = useQuery({

@@ -3,8 +3,6 @@ import { getInternalApiBaseUrl } from "@/lib/server-api";
 
 export const runtime = "nodejs";
 
-const BACKEND_URL = getInternalApiBaseUrl();
-
 // Hop-by-hop headers that should not be forwarded
 const DROP_HEADERS = new Set([
   "connection",
@@ -20,6 +18,9 @@ const DROP_HEADERS = new Set([
 ]);
 
 async function proxy(req: NextRequest) {
+  // Resolved per-request so env var changes (e.g. hot-reload in dev) are picked up.
+  const BACKEND_URL = getInternalApiBaseUrl();
+
   if (!BACKEND_URL) {
     return NextResponse.json({ message: "BACKEND_URL is not set" }, { status: 500 });
   }
