@@ -138,7 +138,15 @@
       "Bash(netsh advfirewall:*)",
       "Bash(npx next:*)",
       "Bash(echo \"exit:$?\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(vercel --version)",
+      "Bash(npm install:*)",
+      "Bash(vercel whoami:*)",
+      "Bash(vercel projects:*)",
+      "Bash(vercel link:*)",
+      "Bash(vercel env:*)",
+      "Bash(vercel redeploy:*)",
+      "Bash(vercel inspect:*)"
     ]
   }
 }
