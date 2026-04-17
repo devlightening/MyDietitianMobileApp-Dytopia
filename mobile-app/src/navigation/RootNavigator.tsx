@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, Animated } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
@@ -26,6 +27,7 @@ import PrivacyScreen from "../screens/PrivacyScreen";
 import RateAppScreen from "../screens/RateAppScreen";
 import IngredientScanScreen from "../screens/IngredientScanScreen";
 import BarcodeScanScreen from "../screens/BarcodeScanScreen";
+import OnboardingScreen, { ONBOARDING_DONE_KEY } from "../screens/OnboardingScreen";
 
 const Root = createNativeStackNavigator();
 
@@ -64,10 +66,27 @@ function AppNavigator() {
   const { isAuthenticated, isLoading, isStateLoaded, isPremium } = useAuth();
   const { isDark, theme } = useTheme();
   const ready = !isLoading && isStateLoaded;
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    SecureStore.getItemAsync(ONBOARDING_DONE_KEY).then(val => {
+      setOnboardingDone(val === 'true');
+    });
+  }, []);
 
   const navTheme = isDark
     ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: theme.bg } }
     : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: theme.bg } };
+
+  if (onboardingDone === null) return <Splash />;
+
+  if (!onboardingDone) {
+    return (
+      <NavigationContainer theme={navTheme}>
+        <OnboardingScreen onDone={() => setOnboardingDone(true)} />
+      </NavigationContainer>
+    );
+  }
 
   return (
     <NavigationContainer theme={navTheme}>

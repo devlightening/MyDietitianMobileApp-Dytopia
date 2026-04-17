@@ -267,6 +267,11 @@ export default function ProfileMeasurementsScreen() {
           </View>
         )}
 
+        {/* Weight chart */}
+        {history.filter(m => m.weightKg != null).length >= 2 && (
+          <WeightChart history={history} theme={theme} />
+        )}
+
         {/* Tab selector */}
         <View style={[s.tabRow, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
           <TouchableOpacity
@@ -384,6 +389,56 @@ export default function ProfileMeasurementsScreen() {
     </View>
   );
 }
+
+// ── WeightChart ───────────────────────────────────────────────────────────────
+
+function WeightChart({ history, theme }: { history: Measurement[]; theme: any }) {
+  const points = history.filter(m => m.weightKg != null).slice(0, 8).reverse();
+  if (points.length < 2) return null;
+  const weights = points.map(m => m.weightKg as number);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = max - min || 1;
+  const BAR_H = 64;
+
+  return (
+    <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <Text style={[s.cardTitle, { color: theme.text }]}>Kilo Grafiği</Text>
+      <View style={chartS.row}>
+        {points.map((m, i) => {
+          const h = Math.max(6, Math.round(((m.weightKg! - min) / range) * BAR_H));
+          const isLast = i === points.length - 1;
+          return (
+            <View key={m.id} style={chartS.col}>
+              <Text style={[chartS.val, { color: isLast ? theme.primary : theme.textMuted }]}>
+                {m.weightKg}
+              </Text>
+              <View style={[chartS.barBg, { height: BAR_H }]}>
+                <View style={[chartS.bar, { height: h, backgroundColor: isLast ? theme.primary : `${theme.primary}50` }]} />
+              </View>
+              <Text style={[chartS.date, { color: theme.textMuted }]}>
+                {new Date(m.recordedAtUtc).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={[chartS.range, { color: theme.textMuted }]}>
+        {min.toFixed(1)} – {max.toFixed(1)} kg arası {points.length} ölçüm
+      </Text>
+    </View>
+  );
+}
+
+const chartS = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-around", marginTop: spacing.sm },
+  col: { alignItems: "center", flex: 1, gap: 4 },
+  val: { fontSize: 10, fontWeight: "800" },
+  barBg: { width: 20, justifyContent: "flex-end", borderRadius: 4, overflow: "hidden", backgroundColor: "transparent" },
+  bar: { width: "100%", borderRadius: 4 },
+  date: { fontSize: 9, fontWeight: "700", textAlign: "center" },
+  range: { fontSize: 11, fontWeight: "600", marginTop: spacing.sm, textAlign: "center" },
+});
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 

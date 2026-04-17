@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -67,6 +68,7 @@ export default function ShoppingListScreen() {
         sourceKitchen: "Kitchen",
         sourceRecipe: "Recipe",
         sourceManual: "Manual",
+        share: "Share list",
       }
     : {
         back: "Geri",
@@ -87,6 +89,7 @@ export default function ShoppingListScreen() {
         sourceKitchen: "Mutfak",
         sourceRecipe: "Tarif",
         sourceManual: "Elle",
+        share: "Listeyi Paylaş",
       };
 
   const load = useCallback(async () => {
@@ -184,6 +187,25 @@ export default function ShoppingListScreen() {
     } catch {
       Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Temizleme işlemi başarısız." : "Could not clear checked items.");
     }
+  }
+
+  async function handleShare() {
+    if (items.length === 0) return;
+    const activeItems = items.filter(i => !i.isChecked);
+    const checkedItems = items.filter(i => i.isChecked);
+    const lines: string[] = [];
+    if (activeItems.length > 0) {
+      lines.push(language === "tr" ? "🛒 Alınacaklar:" : "🛒 To buy:");
+      activeItems.forEach(i => lines.push(`• ${i.title}`));
+    }
+    if (checkedItems.length > 0) {
+      lines.push("");
+      lines.push(language === "tr" ? "✅ Alınanlar:" : "✅ Got:");
+      checkedItems.forEach(i => lines.push(`• ${i.title}`));
+    }
+    try {
+      await Share.share({ message: lines.join("\n") });
+    } catch { /* user cancelled */ }
   }
 
   function sourceLabel(sourceType: string) {
@@ -292,6 +314,14 @@ export default function ShoppingListScreen() {
           >
             <Ionicons name="trash-outline" size={16} color={theme.textSub} />
             <Text style={[s.actionBtnTxt, { color: theme.text }]}>{copy.clearChecked}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.actionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            onPress={() => void handleShare()}
+            disabled={items.length === 0}
+          >
+            <Ionicons name="share-outline" size={16} color={theme.accentCyan} />
+            <Text style={[s.actionBtnTxt, { color: theme.text }]}>{copy.share}</Text>
           </TouchableOpacity>
         </View>
 

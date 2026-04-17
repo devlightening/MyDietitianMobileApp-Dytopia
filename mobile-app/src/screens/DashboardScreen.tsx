@@ -20,6 +20,7 @@ import { useGamification } from '../queries/useGamification';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFadeRise, useStaggerItem, useHeroEntrance, useHaloBreathe, useShimmerBand, useFloating } from '../hooks/useAuraMotion';
 import api from '../api/client';
+import { updateTodayTracking } from '../api/progress';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import {
   type DashboardMotivation,
@@ -210,7 +211,23 @@ export default function DashboardScreen({
   const summary           = data?.summary;
   const motivation        = mapGamificationToMotivation(gamification) ?? data?.motivation;
   const streakValue       = gamification?.currentStreak ?? summary?.streak ?? 0;
-  const waterValue        = gamification?.today?.waterGlasses ?? summary?.waterGlasses ?? 0;
+  const [localWater, setLocalWater] = useState<number | null>(null);
+  const waterValue = localWater ?? gamification?.today?.waterGlasses ?? summary?.waterGlasses ?? 0;
+
+  useEffect(() => {
+    const remote = gamification?.today?.waterGlasses ?? summary?.waterGlasses;
+    if (remote != null && localWater === null) setLocalWater(remote);
+  }, [gamification, summary]);
+
+  const handleAddWater = useCallback(async () => {
+    const next = waterValue + 1;
+    setLocalWater(next);
+    try {
+      await updateTodayTracking(next);
+    } catch {
+      setLocalWater(waterValue);
+    }
+  }, [waterValue]);
 
   const heroStyle    = useHeroEntrance();
   const actionsStyle = useFadeRise(160, 10);
@@ -306,6 +323,7 @@ export default function DashboardScreen({
                 onPressPlans={onPressPlans}
                 onPressMessages={onPressMessages}
                 onPressMeasurements={handleMeasurements}
+                onPressWater={handleAddWater}
                 language={language}
               />
             ) : (
@@ -530,7 +548,7 @@ function ActionChip({
 function PremiumGrid({
   theme, compliancePercent, streak, water, motivation, nextMeal, dietitianNote,
   activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressMeasurements,
-  language,
+  onPressWater, language,
 }: {
   theme: import('../theme/tokens').Theme;
   compliancePercent: number;
@@ -544,6 +562,7 @@ function PremiumGrid({
   onPressPlans?: () => void;
   onPressMessages?: () => void;
   onPressMeasurements: () => void;
+  onPressWater?: () => void;
   language: 'tr' | 'en';
 }) {
   let idx = 0;
@@ -556,6 +575,7 @@ function PremiumGrid({
         water={water}
         language={language}
         index={idx++}
+        onPressWater={onPressWater}
       />
 
       {/* Active Plan block — always shown for premium; shows plan if assigned, empty state otherwise */}
@@ -696,9 +716,10 @@ function ActivePlanBlock({
 }
 
 /* ── Stats Shelf ── */
-function StatsShelf({ theme, compliancePercent, streak, water, language, index }: {
+function StatsShelf({ theme, compliancePercent, streak, water, language, index, onPressWater }: {
   theme: import('../theme/tokens').Theme;
   compliancePercent: number; streak: number; water: number; language: 'tr' | 'en'; index: number;
+  onPressWater?: () => void;
 }) {
   const style = useStaggerItem(index, 300, 60);
   const { t } = useTranslation();
@@ -708,7 +729,14 @@ function StatsShelf({ theme, compliancePercent, streak, water, language, index }
       <View style={[s.statDivider, { backgroundColor: theme.borderLight }]} />
       <StatCell value={`${compliancePercent}`} unit="%"                   label={language === 'tr' ? 'Uyum' : 'Adherence'} color={theme.emerald}    iconName="checkmark-circle-outline" />
       <View style={[s.statDivider, { backgroundColor: theme.borderLight }]} />
-      <StatCell value={`${water}`}             unit={t.dashboard.glasses} label={t.dashboard.water}    color={theme.accentCyan} iconName="water-outline" />
+      <TouchableOpacity onPress={onPressWater} activeOpacity={onPressWater ? 0.7 : 1} style={s.waterCell}>
+        <StatCell value={`${water}`} unit={t.dashboard.glasses} label={t.dashboard.water} color={theme.accentCyan} iconName="water-outline" />
+        {onPressWater && (
+          <View style={[s.waterPlus, { backgroundColor: theme.accentCyan }]}>
+            <Ionicons name="add" size={10} color="#FFF" />
+          </View>
+        )}
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -1307,6 +1335,8 @@ const s = StyleSheet.create({
   },
   statCell:    { flex: 1, alignItems: 'center', paddingVertical: 2 },
   statDivider: { width: 1, marginVertical: 8 },
+  waterCell:   { flex: 1, alignItems: 'center', position: 'relative' },
+  waterPlus:   { position: 'absolute', top: -2, right: 8, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   statValue:   { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, lineHeight: 26 },
   statUnit:    { fontSize: 9,  fontWeight: '800', marginTop: 1 },
   statLabel:   { fontSize: 9.5, fontWeight: '600', marginTop: 4 },
