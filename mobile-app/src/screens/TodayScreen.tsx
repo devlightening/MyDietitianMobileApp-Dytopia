@@ -27,6 +27,8 @@ import {
 } from '../data/plansRepo';
 import { Routes } from '../navigation/routes';
 import { useAuth } from '../auth/AuthContext';
+import { refreshWidgetsFromApp } from '../widgets/services/widgetSyncService';
+import * as Haptics from 'expo-haptics';
 
 function mealTypeLabel(type: string, lang: 'tr' | 'en'): string {
   const map: Record<string, { tr: string; en: string }> = {
@@ -92,6 +94,11 @@ export default function TodayScreen() {
 
   async function handleComplete(meal: MealItem) {
     setBusyId(meal.id);
+    void Haptics.impactAsync(
+      meal.completionStatus === 'Done'
+        ? Haptics.ImpactFeedbackStyle.Light
+        : Haptics.ImpactFeedbackStyle.Medium,
+    );
     try {
       if (meal.completionStatus === 'Done') {
         await undoMealCompletion(meal.id);
@@ -99,6 +106,7 @@ export default function TodayScreen() {
         await completeMeal(meal.id);
       }
       await load(true);
+      void refreshWidgetsFromApp(true);
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? (lang === 'tr' ? 'İşlem başarısız.' : 'Action failed.');
       Alert.alert(lang === 'tr' ? 'Hata' : 'Error', msg);
@@ -107,9 +115,11 @@ export default function TodayScreen() {
 
   async function handleSkip(meal: MealItem) {
     setBusyId(meal.id);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await skipMeal(meal.id);
       await load(true);
+      void refreshWidgetsFromApp(true);
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? (lang === 'tr' ? 'Öğün atlanamadı.' : 'Could not skip meal.');
       Alert.alert(lang === 'tr' ? 'Hata' : 'Error', msg);
@@ -166,6 +176,18 @@ export default function TodayScreen() {
             <Text style={[s.dateLabel, { color: theme.textMuted }]}>{today}</Text>
             <Text style={[s.pageTitle, { color: theme.text }]}>{lang === 'tr' ? "Bugünün Planı" : "Today's Plan"}</Text>
           </View>
+          <TouchableOpacity
+            style={[s.iconBtn, { borderColor: theme.border, backgroundColor: theme.surface, marginRight: 8 }]}
+            onPress={() => (navigation as any).navigate(Routes.App.MealLog)}
+          >
+            <Ionicons name="journal-outline" size={18} color={theme.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.iconBtn, { borderColor: theme.border, backgroundColor: theme.surface, marginRight: 8 }]}
+            onPress={() => (navigation as any).navigate(Routes.App.WeeklySummary)}
+          >
+            <Ionicons name="bar-chart-outline" size={18} color={theme.textMuted} />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[s.iconBtn, { borderColor: theme.border, backgroundColor: theme.surface }]}
             onPress={() =>

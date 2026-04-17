@@ -47,11 +47,11 @@ public sealed class OpenAiIngredientLlmClient : IIngredientLlmClient
     {
         try
         {
-            var apiKey = Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
+            var apiKey = _options.ApiKey ?? Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                _logger.LogWarning("LLM ingredient match skipped: {EnvVar} is not set.", _options.ApiKeyEnvVar);
-                return LlmIngredientMatchResult.None($"API key environment variable '{_options.ApiKeyEnvVar}' is not set.");
+                _logger.LogWarning("LLM ingredient match skipped: OPENAI_API_KEY is not configured.");
+                return LlmIngredientMatchResult.None("OpenAI API key is not configured.");
             }
 
             var systemPrompt = BuildSystemPrompt(candidates);

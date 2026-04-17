@@ -525,9 +525,9 @@ public class IngredientNormalizationService : IIngredientNormalizationService
     }
 
     /// <summary>
-    /// Deterministic text normalization: trim, lowercase (InvariantCulture, preserves Turkish),
-    /// collapse whitespace, strip leading/trailing punctuation noise.
-    /// No typo correction or fuzzy behavior applied here.
+    /// Deterministic text normalization: trim, lowercase, collapse whitespace,
+    /// strip punctuation noise, and fold Turkish-specific characters (ı→i, ş→s, etc.)
+    /// so that ASCII and Turkish-diacritic variants compare equal.
     /// </summary>
     internal static string NormalizeText(string input)
     {
@@ -538,8 +538,20 @@ public class IngredientNormalizationService : IIngredientNormalizationService
         if (trimmed.Length == 0) return string.Empty;
 
         var collapsed = WhitespaceRegex.Replace(trimmed, " ");
-        return collapsed.ToLowerInvariant();
+        return FoldTurkish(collapsed.ToLowerInvariant());
     }
+
+    /// <summary>
+    /// Folds Turkish-specific characters to their ASCII equivalents.
+    /// Ensures "salatalik" == "salatalık", "domates" == "domates", etc.
+    /// </summary>
+    private static string FoldTurkish(string s)
+        => s.Replace('ı', 'i')   // dotless-i → i
+            .Replace('ş', 's')
+            .Replace('ç', 'c')
+            .Replace('ğ', 'g')
+            .Replace('ö', 'o')
+            .Replace('ü', 'u');
 
     private async Task LogAsync(
         IngredientNormalizationResult result,

@@ -22,6 +22,8 @@ import { useFadeRise, useStaggerItem, useHeroEntrance, useHaloBreathe, useShimme
 import api from '../api/client';
 import { updateTodayTracking } from '../api/progress';
 import ProduceBubble from '../components/decor/ProduceBubble';
+import { refreshWidgetsFromApp } from '../widgets/services/widgetSyncService';
+import * as Haptics from 'expo-haptics';
 import {
   type DashboardMotivation,
   buildMotivationSummary,
@@ -220,14 +222,16 @@ export default function DashboardScreen({
   }, [gamification, summary]);
 
   const handleAddWater = useCallback(async () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const next = waterValue + 1;
     setLocalWater(next);
     try {
       await updateTodayTracking(next);
+      void refreshWidgetsFromApp(user?.isPremium ?? false);
     } catch {
       setLocalWater(waterValue);
     }
-  }, [waterValue]);
+  }, [user?.isPremium, waterValue]);
 
   const heroStyle    = useHeroEntrance();
   const actionsStyle = useFadeRise(160, 10);

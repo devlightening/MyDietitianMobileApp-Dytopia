@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { registerClient as registerClientAPI, loginClient as loginClientAPI, activatePremium as activatePremiumAPI } from '../api/auth';
 import { getClientState } from '../api/client-state';
 import { Gender } from '../types/auth';
+import { syncWidgetSessionFromAuth } from '../widgets/services/widgetSyncService';
 
 interface User {
   publicUserId: string;
@@ -39,6 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadToken();
   }, []);
+
+  useEffect(() => {
+    void syncWidgetSessionFromAuth({
+      accessToken: token,
+      isAuthenticated: !!token,
+      isPremium: user?.isPremium ?? false,
+    });
+  }, [token, user?.isPremium]);
 
   /**
    * Bootstrap auth: Single source of truth for authentication state

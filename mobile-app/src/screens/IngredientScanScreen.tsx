@@ -467,7 +467,7 @@ export default function IngredientScanScreen() {
                     <View style={s.itemMain}>
                       <Text style={[s.itemTitle, { color: theme.text }]}>{name}</Text>
                       <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                        Faz 1 kapalı kümesinde bulunamadı. Elle ara.
+                        GPT tarafından algılandı, veritabanında eşleştirilemedi. Elle ara.
                       </Text>
                     </View>
                     <TouchableOpacity

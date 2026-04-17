@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, Animated } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, Animated, Linking } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { useAuth } from "../auth/AuthContext";
@@ -27,9 +32,18 @@ import PrivacyScreen from "../screens/PrivacyScreen";
 import RateAppScreen from "../screens/RateAppScreen";
 import IngredientScanScreen from "../screens/IngredientScanScreen";
 import BarcodeScanScreen from "../screens/BarcodeScanScreen";
+import TodayScreen from "../screens/TodayScreen";
+import HydrationScreen from "../screens/HydrationScreen";
+import WeeklySummaryScreen from "../screens/WeeklySummaryScreen";
+import MealLogScreen from "../screens/MealLogScreen";
 import OnboardingScreen, { ONBOARDING_DONE_KEY } from "../screens/OnboardingScreen";
+import {
+  parseWidgetDeepLink,
+  type WidgetDeepLinkTarget,
+} from "../widgets/deepLinks";
 
 const Root = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef<any>();
 
 function Splash() {
   const { theme } = useTheme();
@@ -67,6 +81,7 @@ function AppNavigator() {
   const { isDark, theme } = useTheme();
   const ready = !isLoading && isStateLoaded;
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const pendingWidgetTargetRef = useRef<WidgetDeepLinkTarget | null>(null);
 
   useEffect(() => {
     SecureStore.getItemAsync(ONBOARDING_DONE_KEY).then(val => {
@@ -74,9 +89,62 @@ function AppNavigator() {
     });
   }, []);
 
+  useEffect(() => {
+    const consumeUrl = (url: string | null | undefined) => {
+      if (!url) {
+        return;
+      }
+
+      const target = parseWidgetDeepLink(url);
+      if (!target) {
+        return;
+      }
+
+      pendingWidgetTargetRef.current = target;
+      flushPendingWidgetTarget();
+    };
+
+    void Linking.getInitialURL().then(consumeUrl);
+
+    const subscription = Linking.addEventListener("url", (event) => {
+      consumeUrl(event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [ready, isAuthenticated, isPremium, onboardingDone]);
+
   const navTheme = isDark
     ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: theme.bg } }
     : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: theme.bg } };
+
+  function flushPendingWidgetTarget() {
+    if (
+      onboardingDone !== true ||
+      !ready ||
+      !isAuthenticated ||
+      !isPremium ||
+      !navigationRef.isReady()
+    ) {
+      return;
+    }
+
+    const target = pendingWidgetTargetRef.current;
+    if (!target) {
+      return;
+    }
+
+    pendingWidgetTargetRef.current = null;
+
+    navigationRef.navigate("App", {
+      screen: target === "hydration" ? Routes.App.Hydration : Routes.App.Today,
+    });
+  }
+
+  useEffect(() => {
+    flushPendingWidgetTarget();
+  }, [ready, isAuthenticated, isPremium, onboardingDone]);
 
   if (onboardingDone === null) return <Splash />;
 
@@ -89,7 +157,11 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onReady={flushPendingWidgetTarget}
+    >
       <Root.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           /* ── Unauthenticated: Auth stack ─────────────────────────── */
@@ -126,6 +198,8 @@ function AppNavigator() {
               ready ? (
                 <Root.Navigator screenOptions={{ headerShown: false }}>
                   <Root.Screen name={Routes.App.Shell} component={AppShell} />
+                  <Root.Screen name={Routes.App.Today} component={TodayScreen} />
+                  <Root.Screen name={Routes.App.Hydration} component={HydrationScreen} />
                   <Root.Screen name={Routes.App.CheckIngredients} component={CheckIngredientsScreen} />
                   <Root.Screen name={Routes.App.AlternativeResult} component={AlternativeResultScreen} />
                   <Root.Screen name={Routes.App.KitchenResult} component={KitchenResultScreen} />
@@ -146,6 +220,8 @@ function AppNavigator() {
                     component={BarcodeScanScreen}
                     options={{ presentation: 'modal' }}
                   />
+                  <Root.Screen name={Routes.App.WeeklySummary} component={WeeklySummaryScreen} />
+                  <Root.Screen name={Routes.App.MealLog} component={MealLogScreen} />
                 </Root.Navigator>
               ) : (
                 <Splash />

@@ -75,23 +75,28 @@ public class AnalyzeIngredientImageCommandHandler
 
         _logger.LogInformation("Vision detected {Count} raw food names.", rawNames.Count);
 
-        // Step 2: Resolve each label through the detection resolver (VisionLabelMappings cache → normalization)
-        var semaphore = new SemaphoreSlim(5);
-        var tasks = rawNames.Select(async name =>
+        // Step 2: Resolve each label sequentially.
+        // AppDbContext is not thread-safe — concurrent Task.WhenAll calls on the same scoped context
+        // throw "A second operation was started on this context instance before a previous operation completed."
+        var results = new List<(string rawName, DetectionResolverResult resolveResult)>();
+        foreach (var name in rawNames)
         {
-            await semaphore.WaitAsync(cancellationToken);
-            try
-            {
-                var result = await _resolver.ResolveAsync(name, sessionId, cancellationToken);
-                return (rawName: name, resolveResult: result);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
+            _logger.LogInformation(
+                "Vision resolve: rawLabel='{Raw}' startedResolution=true", name);
 
-        var results = await Task.WhenAll(tasks);
+            var resolveResult = await _resolver.ResolveAsync(name, sessionId, cancellationToken);
+
+            _logger.LogInformation(
+                "Vision resolve: rawLabel='{Raw}' normalizedLabel='{Norm}' completedResolution=true matchType={MatchType} matched={Matched} confidence={Conf:F2} autoSelected={Auto}",
+                name,
+                resolveResult.NormalizedLabel,
+                resolveResult.MatchType,
+                resolveResult.MatchedIngredientId.HasValue,
+                resolveResult.Confidence,
+                resolveResult.IsAutoSelected);
+
+            results.Add((rawName: name, resolveResult));
+        }
 
         // Step 3: Split matched vs unmatched; apply closed-set filter
         var matched = new List<DetectedIngredientDto>();

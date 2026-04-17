@@ -23,8 +23,10 @@ export default ({ config }: ConfigContext) => {
     console.warn('[app.config.ts] EXPO_PUBLIC_API_BASE_URL not set — auto-detect or fallback will apply at runtime');
   }
 
-  const base: ExpoConfig = {
+  const base = {
     ...config,
+    name: config.name ?? "MyDietitian",
+    slug: config.slug ?? "mydietitian-mobile",
     extra: {
       ...(config.extra || {}),
       apiBaseUrl: apiBaseUrl ?? undefined,
@@ -34,7 +36,7 @@ export default ({ config }: ConfigContext) => {
         projectId: "b5768f53-107b-41a4-a8e5-741f7e94c51a"
       }
     },
-  };
+  } satisfies ExpoConfig;
 
   // Ensure android:usesCleartextTraffic="true" for HTTP API access
   return withAndroidManifest(base, (cfg) => {

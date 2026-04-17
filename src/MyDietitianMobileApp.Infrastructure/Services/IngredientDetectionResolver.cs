@@ -78,9 +78,9 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
                 var confidence = normResult.Confidence;   // 1.00 (canonical) or 0.95 (alias)
                 var isAutoSelected = confidence >= AutoSelectThreshold;
 
-                _logger.LogDebug(
-                    "DB exact hit: '{Label}' → '{Name}' (matchedBy={By}, confidence={Conf:F2})",
-                    normalizedLabel, normResult.MatchedCanonicalName, normResult.MatchedBy, confidence);
+                _logger.LogInformation(
+                    "Vision resolve: raw='{Raw}' normalized='{Label}' → '{Name}' matchedBy={By} confidence={Conf:F2} autoSelected={Auto}",
+                    rawLabel, normalizedLabel, normResult.MatchedCanonicalName, normResult.MatchedBy, confidence, isAutoSelected);
 
                 await LogDetectionAsync(
                     sessionId, rawLabel, normalizedLabel,
@@ -123,9 +123,9 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
                     var confidence = ComputeMappingConfidence(mapping);
                     var isAutoSelected = confidence >= AutoSelectThreshold;
 
-                    _logger.LogDebug(
-                        "VisionLabelMappings hit: '{Label}' → '{Name}' (approved={Approved}, confidence={Conf:F2})",
-                        normalizedLabel, ingredient.CanonicalName, mapping.IsApproved, confidence);
+                    _logger.LogInformation(
+                        "Vision resolve: raw='{Raw}' normalized='{Label}' → '{Name}' matchedBy=mapping_table approved={Approved} confidence={Conf:F2} autoSelected={Auto}",
+                        rawLabel, normalizedLabel, ingredient.CanonicalName, mapping.IsApproved, confidence, isAutoSelected);
 
                     await LogDetectionAsync(
                         sessionId, rawLabel, normalizedLabel,
@@ -159,9 +159,9 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
                 var confidence = normResult.Confidence;
                 var isAutoSelected = confidence >= AutoSelectThreshold;
 
-                _logger.LogDebug(
-                    "DB fuzzy/LLM hit: '{Label}' → '{Name}' (matchedBy={By}, confidence={Conf:F2})",
-                    normalizedLabel, normResult.MatchedCanonicalName, normResult.MatchedBy, confidence);
+                _logger.LogInformation(
+                    "Vision resolve: raw='{Raw}' normalized='{Label}' → '{Name}' matchedBy={By} confidence={Conf:F2} autoSelected={Auto}",
+                    rawLabel, normalizedLabel, normResult.MatchedCanonicalName, normResult.MatchedBy, confidence, isAutoSelected);
 
                 await LogDetectionAsync(
                     sessionId, rawLabel, normalizedLabel,
@@ -184,7 +184,9 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
             }
 
             // ── Layer 7: Unresolved ───────────────────────────────────────────
-            _logger.LogDebug("Unresolved: '{Label}' (normalized: '{NormalizedLabel}')", rawLabel, normalizedLabel);
+            _logger.LogWarning(
+                "Vision resolve: raw='{Raw}' normalized='{Label}' UNRESOLVED — detected by GPT but no DB match found",
+                rawLabel, normalizedLabel);
 
             await LogDetectionAsync(
                 sessionId, rawLabel, normalizedLabel,
@@ -205,11 +207,18 @@ public class IngredientDetectionResolver : IIngredientDetectionResolver
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Lowercase-trim the raw label. Keeps diacritics (ş, ğ, ı, etc.) intact for
-    /// correct Turkish-language lookup in VisionLabelMappings.
+    /// Normalize raw label: trim, lowercase, fold Turkish chars to ASCII equivalents.
+    /// Must stay consistent with IngredientNormalizationService.NormalizeText so that
+    /// "salatalik" and "salatalık" both resolve to "salatalik" before lookup.
     /// </summary>
     private static string NormalizeLabel(string raw)
-        => raw.Trim().ToLowerInvariant();
+        => raw.Trim().ToLowerInvariant()
+            .Replace('ı', 'i')
+            .Replace('ş', 's')
+            .Replace('ç', 'c')
+            .Replace('ğ', 'g')
+            .Replace('ö', 'o')
+            .Replace('ü', 'u');
 
     /// <summary>
     /// Compute the effective confidence for a VisionLabelMapping hit.

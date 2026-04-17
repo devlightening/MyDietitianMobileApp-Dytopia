@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator } from "react-native";
+import * as SecureStore from 'expo-secure-store';
+import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -41,6 +43,28 @@ export default function RecipeDetailScreen() {
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
   const insets = useSafeAreaInsets();
+
+  const FAVORITES_KEY = 'recipe_favorites_v1';
+  const recipeKey = result.recipeId ?? result.name ?? '';
+
+  const [isFavorite, setIsFavorite] = useState(false);
+  useEffect(() => {
+    if (!recipeKey) return;
+    SecureStore.getItemAsync(FAVORITES_KEY).then(raw => {
+      const ids: string[] = raw ? JSON.parse(raw) : [];
+      setIsFavorite(ids.includes(recipeKey));
+    }).catch(() => {});
+  }, [recipeKey]);
+
+  async function toggleFavorite() {
+    if (!recipeKey) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const raw = await SecureStore.getItemAsync(FAVORITES_KEY).catch(() => null);
+    const ids: string[] = raw ? JSON.parse(raw) : [];
+    const next = isFavorite ? ids.filter(id => id !== recipeKey) : [...ids, recipeKey];
+    await SecureStore.setItemAsync(FAVORITES_KEY, JSON.stringify(next)).catch(() => {});
+    setIsFavorite(!isFavorite);
+  }
 
   // Plan-mode hydration: when result only has recipeId (navigated from Plans screen),
   // fetch full recipe details via plan-context endpoint.
@@ -160,14 +184,23 @@ export default function RecipeDetailScreen() {
           { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 18) + 100 },
         ]}
       >
-        <TouchableOpacity
-          style={[s.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          activeOpacity={0.82}
-          onPress={() => (navigation as any).goBack()}
-        >
-          <Ionicons name="chevron-back" size={16} color={theme.textSub} />
-          <Text style={[s.backTxt, { color: theme.textSub }]}>{copy.back}</Text>
-        </TouchableOpacity>
+        <View style={s.navRow}>
+          <TouchableOpacity
+            style={[s.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            activeOpacity={0.82}
+            onPress={() => (navigation as any).goBack()}
+          >
+            <Ionicons name="chevron-back" size={16} color={theme.textSub} />
+            <Text style={[s.backTxt, { color: theme.textSub }]}>{copy.back}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.favBtn, { backgroundColor: theme.surface, borderColor: isFavorite ? '#FF4757' : theme.border }]}
+            activeOpacity={0.82}
+            onPress={() => void toggleFavorite()}
+          >
+            <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={18} color={isFavorite ? '#FF4757' : theme.textSub} />
+          </TouchableOpacity>
+        </View>
 
         <Animated.View entering={FadeIn.duration(dur.base)} style={[s.hero, { backgroundColor: theme.surface, borderColor: `${accent}28` }]}>
           <ProduceBubble
@@ -389,8 +422,13 @@ const s = StyleSheet.create({
     opacity: 0.42,
   },
   scroll: { paddingHorizontal: spacing.base },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
   backBtn: {
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -398,7 +436,14 @@ const s = StyleSheet.create({
     borderRadius: radii.full,
     paddingHorizontal: 13,
     paddingVertical: 7,
-    marginBottom: spacing.md,
+  },
+  favBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   backTxt: { fontSize: 13, fontWeight: "700" },
   hero: {

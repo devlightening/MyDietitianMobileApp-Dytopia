@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Production secrets - never commit
+appsettings.Production.json
+appsettings.*.Local.json
+src/MyDietitianMobileApp.Api/appsettings.Production.json
+appsettings.Local.json
+src/MyDietitianMobileApp.Api/appsettings.Local.json

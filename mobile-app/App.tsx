@@ -6,6 +6,8 @@ import { AuthProvider } from "./src/auth/AuthContext";
 import { I18nProvider } from "./src/context/I18nContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import RootNavigator from "./src/navigation/RootNavigator";
+import WidgetSyncBootstrap from "./src/widgets/WidgetSyncBootstrap";
+import OfflineBanner from "./src/components/OfflineBanner";
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 // Prevents the entire app from crashing to a white screen on JS errors.
@@ -81,7 +83,9 @@ export default function App() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <NotificationProvider>
+              <WidgetSyncBootstrap />
               <RootNavigator />
+              <OfflineBanner />
             </NotificationProvider>
           </AuthProvider>
         </QueryClientProvider>

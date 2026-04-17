@@ -40,7 +40,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
 
     public VisionFeatureStatus GetStatus()
     {
-        var key = Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
+        var key = _options.ApiKey ?? Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
         return string.IsNullOrWhiteSpace(key)
             ? VisionFeatureStatus.ApiKeyMissing
             : VisionFeatureStatus.Active;
@@ -53,10 +53,10 @@ public sealed class VisionIngredientService : IVisionIngredientService
     {
         try
         {
-            var apiKey = Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
+            var apiKey = _options.ApiKey ?? Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                _logger.LogWarning("Vision ingredient detection skipped: {EnvVar} is not set.", _options.ApiKeyEnvVar);
+                _logger.LogWarning("Vision ingredient detection skipped: OPENAI_API_KEY is not configured.");
                 return VisionDetectionResult.Empty;
             }
 
@@ -75,7 +75,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
             var requestBody = new
             {
                 model = _options.ModelName,
-                max_tokens = 512,
+                max_tokens = 100,
                 temperature = 0.0,
                 response_format = new { type = "json_object" },
                 messages = new object[]
@@ -83,13 +83,10 @@ public sealed class VisionIngredientService : IVisionIngredientService
                     new
                     {
                         role = "system",
-                        content = "Sen kontrollü ingredient detection uzmanısın. " +
-                                  $"Sadece şu kapalı sınıftan seçim yap: {string.Join(", ", _options.ClosedSetCanonicalNames)}. " +
-                                  "Görselde yalnızca bu listedeki ambalajsız malzemeler varsa döndür. " +
-                                  "Listedeki sınıflardan emin değilsen hiçbir şey uydurma ve boş liste döndür. " +
-                                  "Türkçe, tekil ve küçük harf olarak yaz. " +
-                                  "Sadece JSON formatında yanıt ver: {\"items\":[\"yumurta\",\"domates\"]}. " +
-                                  "Başka açıklama yazma. Maksimum 10 öğe."
+                        content = $"Görseldeki yiyecekleri tanı. Yalnızca bu listeden seç: {string.Join(", ", _options.ClosedSetCanonicalNames)}. " +
+                                  "Ambalajlı veya konserve ürünler de dahil, içeriğini listele. " +
+                                  "Gördüklerini yaz, görmediğini yazma. " +
+                                  "Türkçe, küçük harf, tekil. JSON: {\"items\":[\"domates\",\"marul\"]}."
                     },
                     new
                     {

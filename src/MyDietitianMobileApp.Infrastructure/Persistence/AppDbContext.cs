@@ -77,6 +77,9 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ProductBarcodeMapping> ProductBarcodeMappings { get; set; } = null!;
         public DbSet<IngredientAcquisitionLog> IngredientAcquisitionLogs { get; set; } = null!;
 
+        // Client meal journal
+        public DbSet<ClientMealLog> ClientMealLogs { get; set; } = null!;
+
         // Contact form messages (landing page → owner panel)
         public DbSet<ContactMessage> ContactMessages { get; set; } = null!;
 
@@ -1867,6 +1870,20 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 // Cost tracking: filter by OpenAI usage
                 entity.HasIndex(e => e.UsedOpenAiFallback)
                     .HasDatabaseName("IX_IngredientImageDetectionLogs_UsedOpenAiFallback");
+            });
+
+            modelBuilder.Entity<ClientMealLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.MealType).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Notes).HasMaxLength(1000);
+                entity.Property(e => e.PhotoUrl).HasMaxLength(500);
+                entity.HasIndex(e => new { e.ClientId, e.Date })
+                    .HasDatabaseName("IX_ClientMealLogs_ClientId_Date");
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
 

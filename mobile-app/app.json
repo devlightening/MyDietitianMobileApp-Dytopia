@@ -2,6 +2,7 @@
   "expo": {
     "name": "MyDietitian",
     "slug": "mydietitian-mobile",
+    "scheme": "mydietitian",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

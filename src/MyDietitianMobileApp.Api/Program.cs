@@ -28,6 +28,9 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     WebRootPath = "wwwroot"
 });
 
+// Load appsettings.Local.json if present — gitignored, safe for local secrets (API keys, etc.)
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+
 // Use explicit providers to avoid Windows EventLog permission failures in local/dev runs.
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -144,18 +147,43 @@ builder.Services.AddScoped<IIngredientNormalizationService, IngredientNormalizat
 builder.Services.AddScoped<IIngredientTaxonomyService, IngredientTaxonomyService>();
 builder.Services.AddScoped<IIngredientDetectionResolver, IngredientDetectionResolver>();
 
+// ── OpenAI API key resolution (config > env var, never logged) ─────────────
+// Priority: appsettings.Local.json → user-secrets → appsettings.*.json → OPENAI_API_KEY env var
+static string? ResolveOpenAiKey(IConfiguration cfg, string envVarName)
+{
+    var fromConfig = cfg["OpenAI:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(fromConfig)) return fromConfig;
+    return Environment.GetEnvironmentVariable(envVarName);
+}
+
+// ── Safe BaseAddress builder — handles null/empty/"null" strings from config ──
+static Uri SafeOpenAiBaseAddress(string? configuredUrl, string fallback = "https://api.openai.com/")
+{
+    if (string.IsNullOrWhiteSpace(configuredUrl))
+        return new Uri(fallback);
+
+    var raw = configuredUrl.Trim().TrimEnd('/') + "/";
+    if (Uri.TryCreate(raw, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == "https" || uri.Scheme == "http"))
+        return uri;
+
+    return new Uri(fallback);
+}
+
 // ── LLM Normalization Layer (opt-in, disabled by default) ──────────────────
 var llmOptions = builder.Configuration.GetSection("IngredientLlm").Get<LlmNormalizationOptions>()
                  ?? new LlmNormalizationOptions();
+llmOptions.ApiKey = ResolveOpenAiKey(builder.Configuration, llmOptions.ApiKeyEnvVar);
 var llmProvider = llmOptions.ResolveProvider();
 builder.Services.AddSingleton(llmOptions);
 builder.Services.AddScoped<IngredientLlmCandidateBuilder>();
 if (llmProvider == IngredientLlmProvider.OpenAi)
 {
+    // Timeout: 35s covers both LLM (15s) and Vision (gpt-4o up to 30s + buffer)
     builder.Services.AddHttpClient("openai", c =>
     {
-        c.BaseAddress = new Uri((llmOptions.BaseUrl?.TrimEnd('/') ?? "https://api.openai.com") + "/");
-        c.Timeout = TimeSpan.FromSeconds(15);
+        c.BaseAddress = SafeOpenAiBaseAddress(llmOptions.BaseUrl);
+        c.Timeout = TimeSpan.FromSeconds(35);
     });
     builder.Services.AddScoped<IIngredientLlmClient, OpenAiIngredientLlmClient>();
 }
@@ -163,7 +191,7 @@ else if (llmProvider == IngredientLlmProvider.Ollama)
 {
     builder.Services.AddHttpClient("ollama", c =>
     {
-        c.BaseAddress = new Uri((llmOptions.BaseUrl?.TrimEnd('/') ?? "http://localhost:11434") + "/");
+        c.BaseAddress = SafeOpenAiBaseAddress(llmOptions.BaseUrl, "http://localhost:11434/");
         c.Timeout = TimeSpan.FromSeconds(15);
     });
     builder.Services.AddScoped<IIngredientLlmClient, OllamaIngredientLlmClient>();
@@ -176,6 +204,7 @@ else
 // ── Vision Ingredient Detection (opt-in, disabled by default) ──────────────
 var visionOptions = builder.Configuration.GetSection("VisionIngredient").Get<VisionIngredientOptions>()
                     ?? new VisionIngredientOptions();
+visionOptions.ApiKey = ResolveOpenAiKey(builder.Configuration, visionOptions.ApiKeyEnvVar);
 builder.Services.AddSingleton(visionOptions);
 if (visionOptions.Enabled)
 {
@@ -184,7 +213,7 @@ if (visionOptions.Enabled)
     {
         builder.Services.AddHttpClient("openai", c =>
         {
-            c.BaseAddress = new Uri("https://api.openai.com/");
+            c.BaseAddress = SafeOpenAiBaseAddress(null); // always https://api.openai.com/
             c.Timeout = TimeSpan.FromSeconds(visionOptions.TimeoutSeconds + 5);
         });
     }
@@ -961,6 +990,36 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 app.MapControllers();
 app.MapHub<SyncHub>("/hubs/sync").RequireCors("Frontend");
 
+// ── OpenAI startup status log ──────────────────────────────────────────────
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+var hasVisionKey = !string.IsNullOrWhiteSpace(visionOptions.ApiKey);
+var resolvedBaseUrl = SafeOpenAiBaseAddress(llmOptions.BaseUrl).ToString();
+
+if (visionOptions.Enabled && hasVisionKey)
+{
+    startupLogger.LogInformation(
+        "✓ OpenAI Vision ENABLED | model={Model} | baseUrl={BaseUrl} | apiKey=configured",
+        visionOptions.ModelName, resolvedBaseUrl);
+}
+else if (visionOptions.Enabled && !hasVisionKey)
+{
+    startupLogger.LogWarning(
+        "✗ OpenAI Vision ENABLED but API key MISSING | model={Model} | baseUrl={BaseUrl} | " +
+        "Fix: add OpenAI:ApiKey to appsettings.Local.json",
+        visionOptions.ModelName, resolvedBaseUrl);
+}
+else
+{
+    startupLogger.LogInformation(
+        "○ OpenAI Vision DISABLED (VisionIngredient:Enabled=false) | model={Model}",
+        visionOptions.ModelName);
+}
+
+startupLogger.LogInformation(
+    "○ IngredientLlm: enabled={Enabled} | provider={Provider} | model={Model} | apiKey={HasKey}",
+    llmOptions.Enabled, llmOptions.Provider, llmOptions.ModelName,
+    !string.IsNullOrWhiteSpace(llmOptions.ApiKey) ? "configured" : "MISSING");
+
 // ====================
 // HEALTH CHECK (all environments)
 // Unauthenticated, no rate limit — safe for monitoring and mobile dev diagnostics.
@@ -973,6 +1032,52 @@ app.MapGet("/health", () => Results.Ok(new
     environment = app.Environment.EnvironmentName,
     version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "dev"
 }))
+.AllowAnonymous()
+.DisableRateLimiting()
+.WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });
+
+// ====================
+// OPENAI PING — key ve config kontrolü (key değerini asla döndürmez)
+// GET /api/openai/ping  |  GET /api/openai/vision/ping
+// ====================
+app.MapGet("/api/openai/ping", (VisionIngredientOptions vopts, LlmNormalizationOptions llmopts) =>
+{
+    var key     = vopts.ApiKey ?? llmopts.ApiKey ?? Environment.GetEnvironmentVariable(vopts.ApiKeyEnvVar);
+    var keySet  = !string.IsNullOrWhiteSpace(key);
+    var baseUrl = SafeOpenAiBaseAddress(llmopts.BaseUrl).ToString();
+    return Results.Ok(new
+    {
+        visionEnabled    = vopts.Enabled,
+        llmEnabled       = llmopts.Enabled,
+        apiKeyConfigured = keySet,
+        model            = vopts.ModelName,
+        baseUrl,
+        timestamp        = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+    });
+})
+.AllowAnonymous()
+.DisableRateLimiting()
+.WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });
+
+// /api/openai/vision/ping — detaylı vision diagnostik (doc requirement)
+app.MapGet("/api/openai/vision/ping", (VisionIngredientOptions vopts, LlmNormalizationOptions llmopts) =>
+{
+    var key     = vopts.ApiKey ?? llmopts.ApiKey ?? Environment.GetEnvironmentVariable(vopts.ApiKeyEnvVar);
+    var keySet  = !string.IsNullOrWhiteSpace(key);
+    var baseUrl = SafeOpenAiBaseAddress(llmopts.BaseUrl).ToString();
+
+    if (!vopts.Enabled)
+        return Results.Ok(new { enabled = false, apiKeyConfigured = keySet, model = vopts.ModelName, baseUrl,
+            status = "VisionIngredient:Enabled is false — enable it in appsettings.Local.json" });
+
+    if (!keySet)
+        return Results.Ok(new { enabled = true, apiKeyConfigured = false, model = vopts.ModelName, baseUrl,
+            status = "API key missing — add OpenAI:ApiKey to appsettings.Local.json" });
+
+    return Results.Ok(new { enabled = true, apiKeyConfigured = true, model = vopts.ModelName, baseUrl,
+        closedSetCount = vopts.ClosedSetCanonicalNames.Count,
+        status = "ready" });
+})
 .AllowAnonymous()
 .DisableRateLimiting()
 .WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });

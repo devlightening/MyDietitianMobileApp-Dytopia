@@ -19,6 +19,8 @@ export const Routes = {
   },
   App: {
     Shell: 'Shell',
+    Today: 'Today',
+    Hydration: 'Hydration',
     CheckIngredients: 'CheckIngredients',
     AlternativeResult: 'AlternativeResult',
     KitchenResult: 'KitchenResult',
@@ -31,6 +33,8 @@ export const Routes = {
     RateApp: 'RateApp',
     IngredientScan: 'IngredientScan',
     BarcodeScan: 'BarcodeScan',
+    WeeklySummary: 'WeeklySummary',
+    MealLog: 'MealLog',
   },
   Modal: {
     ActivatePremium: 'ModalActivatePremium',

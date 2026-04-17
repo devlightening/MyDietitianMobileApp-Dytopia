@@ -118,6 +118,13 @@ public class LlmNormalizationOptions
     /// <summary>Name of the environment variable holding the OpenAI API key. Never stored in config files.</summary>
     public string ApiKeyEnvVar { get; set; } = "OPENAI_API_KEY";
 
+    /// <summary>
+    /// Resolved API key — set by Program.cs from config (user secrets / appsettings.Local.json),
+    /// falling back to the environment variable named by ApiKeyEnvVar.
+    /// Never placed directly in tracked config files.
+    /// </summary>
+    public string? ApiKey { get; set; }
+
     /// <summary>Maximum number of candidates in the shortlist sent to the LLM.</summary>
     public int MaxCandidates { get; set; } = 12;
 

@@ -44,6 +44,13 @@ public class VisionIngredientOptions
     /// <summary>Shares the same env var as IngredientLlm — one API key, two services.</summary>
     public string ApiKeyEnvVar { get; set; } = "OPENAI_API_KEY";
 
+    /// <summary>
+    /// Resolved API key — set by Program.cs from config (user secrets / appsettings.Local.json),
+    /// falling back to the environment variable named by ApiKeyEnvVar.
+    /// Never placed directly in tracked config files.
+    /// </summary>
+    public string? ApiKey { get; set; }
+
     /// <summary>Hard cap on items the vision call may return (prevents runaway normalization).</summary>
     public int MaxDetectedItems { get; set; } = 20;
 
