@@ -16,7 +16,6 @@ export async function GET(req: Request) {
       headers: {
         cookie,
       },
-      credentials: 'include',
       cache: 'no-store',
     });
 

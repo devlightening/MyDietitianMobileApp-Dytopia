@@ -1,6 +1,4 @@
 {
-  "/api/dietitian/dashboard/stats/route": "app/api/dietitian/dashboard/stats/route.js",
-  "/auth/login/page": "app/auth/login/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/dashboard/clients/page": "app/dashboard/clients/page.js"
 }

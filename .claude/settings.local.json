@@ -146,7 +146,8 @@
       "Bash(vercel link:*)",
       "Bash(vercel env:*)",
       "Bash(vercel redeploy:*)",
-      "Bash(vercel inspect:*)"
+      "Bash(vercel inspect:*)",
+      "Bash(curl *)"
     ]
   }
 }
