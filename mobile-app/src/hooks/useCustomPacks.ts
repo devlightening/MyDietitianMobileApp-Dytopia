@@ -14,8 +14,9 @@ export interface CustomPack {
 }
 
 const MAX_PACKS = 10;
-const LIST_KEY = '@customPacks:list';
-const packKey = (id: string) => `@customPacks:pack_${id}`;
+// SecureStore keys: only alphanumeric, '.', '-', '_' allowed — no '@' or ':'
+const LIST_KEY = 'customPacks_list';
+const packKey = (id: string) => `customPacks_pack_${id}`;
 
 async function loadList(): Promise<string[]> {
   try {

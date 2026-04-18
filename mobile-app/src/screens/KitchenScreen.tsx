@@ -702,16 +702,30 @@ export default function KitchenScreen({
     setEditingPack(null);
   }
 
-  function handleDeletePack(pack: CustomPack) {
-    const msg = language === 'en'
-      ? `Delete "${pack.name}"?`
-      : `"${pack.name}" silinsin mi?`;
+  function handlePackLongPress(pack: CustomPack) {
     Alert.alert(
-      language === 'en' ? 'Delete Pack' : 'Paketi Sil',
-      msg,
+      pack.name,
+      undefined,
       [
+        {
+          text: language === 'en' ? 'Edit Pack' : 'Düzenle',
+          onPress: () => openEditSheet(pack),
+        },
+        {
+          text: language === 'en' ? 'Delete' : 'Sil',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              language === 'en' ? 'Delete Pack' : 'Paketi Sil',
+              language === 'en' ? `Delete "${pack.name}"?` : `"${pack.name}" silinsin mi?`,
+              [
+                { text: language === 'en' ? 'Cancel' : 'İptal', style: 'cancel' },
+                { text: language === 'en' ? 'Delete' : 'Sil', style: 'destructive', onPress: () => void removePack(pack.id) },
+              ],
+            );
+          },
+        },
         { text: language === 'en' ? 'Cancel' : 'İptal', style: 'cancel' },
-        { text: language === 'en' ? 'Delete' : 'Sil', style: 'destructive', onPress: () => void removePack(pack.id) },
       ],
     );
   }
@@ -1403,8 +1417,7 @@ export default function KitchenScreen({
                   theme={theme}
                   addLabel={copy.add}
                   onPress={() => addPack(pack)}
-                  onLongPress={() => openEditSheet(pack)}
-                  onDelete={() => handleDeletePack(pack)}
+                  onLongPress={() => handlePackLongPress(pack)}
                 />
               ))}
               {!maxReached && (
@@ -1501,7 +1514,6 @@ function PackTile({
   addLabel,
   onPress,
   onLongPress,
-  onDelete,
 }: {
   pack: CustomPack;
   index: number;
@@ -1509,7 +1521,6 @@ function PackTile({
   addLabel: string;
   onPress: () => void;
   onLongPress?: () => void;
-  onDelete?: () => void;
 }) {
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -1558,15 +1569,6 @@ function PackTile({
           <View style={[s.packCountPill, { backgroundColor: accent }]}>
             <Text style={s.packCountTxt}>{pack.items.length}</Text>
           </View>
-          {onDelete && (
-            <TouchableOpacity
-              onPress={onDelete}
-              hitSlop={8}
-              style={[s.packDeleteBtn, { backgroundColor: `${theme.error}22` }]}
-            >
-              <Ionicons name="trash-outline" size={11} color={theme.error} />
-            </TouchableOpacity>
-          )}
         </View>
 
         <View style={s.packContent}>
