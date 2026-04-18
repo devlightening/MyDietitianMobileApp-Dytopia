@@ -367,3 +367,16 @@ appsettings.*.Local.json
 src/MyDietitianMobileApp.Api/appsettings.Production.json
 appsettings.Local.json
 src/MyDietitianMobileApp.Api/appsettings.Local.json
+
+# Next.js / Web panel build output
+.next/
+out/
+
+# Expo / Mobile
+.expo/
+.expo-shared/
+
+# Android generated build folders
+android/.gradle/
+android/build/
+android/app/build/

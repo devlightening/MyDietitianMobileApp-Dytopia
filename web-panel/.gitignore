@@ -1,1 +1,12 @@
 .vercel
+
+# dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# production build
+dist/
+build/
