@@ -9,6 +9,7 @@ import {
   Platform,
   StatusBar,
   Keyboard,
+  Alert,
 } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -49,10 +50,12 @@ import IngredientSearch from '../components/IngredientSearch';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import KitchenStreakRail from '../components/gamification/KitchenStreakRail';
 import { Routes } from '../navigation/routes';
-import { getIngredientPacks, getRecentPantryIngredients, type IngredientPack } from '../api/kitchen';
+import { getRecentPantryIngredients } from '../api/kitchen';
 import type { Ingredient } from '../types/alternative';
 import { useTranslation } from '../context/I18nContext';
 import { useGamification } from '../queries/useGamification';
+import { useCustomPacks, type CustomPack } from '../hooks/useCustomPacks';
+import CreatePackSheet from '../components/CreatePackSheet';
 
 const CHIP_COLLAPSE_AT = 8;
 const BOTTOM_NAV_CLEARANCE = Platform.OS === 'ios' ? 112 : 96;
@@ -482,10 +485,13 @@ export default function KitchenScreen({
         reactorModeIdle: 'Idle',
         reactorLocked: `${selectedIngredients.length} items ready`,
         reactorWaitingLabel: 'Waiting for ingredients',
-        quickStart: 'Quick Start',
-        quickStartSub: 'Add to your kitchen in one tap',
+        quickStart: 'My Packs',
+        quickStartSub: 'Your custom ingredient bundles',
         packs: 'packs',
         add: 'Add',
+        newPack: 'New Pack',
+        emptyPackTitle: 'No packs yet',
+        emptyPackSub: 'Create a pack to quickly add your favourite ingredients',
       }
     : {
         active: 'aktif',
@@ -507,13 +513,18 @@ export default function KitchenScreen({
         reactorModeIdle: 'Beklemede',
         reactorLocked: `${selectedIngredients.length} malzeme hazır`,
         reactorWaitingLabel: 'Malzeme bekleniyor',
-        quickStart: 'Hızlı Başlangıç',
-        quickStartSub: 'Bir dokunuşla mutfağa ekle',
+        quickStart: 'Paketlerim',
+        quickStartSub: 'Özel malzeme paketlerin',
         packs: 'paket',
         add: 'Ekle',
+        newPack: 'Yeni Paket',
+        emptyPackTitle: 'Henüz paket yok',
+        emptyPackSub: 'Favori malzemelerini hızlıca eklemek için paket oluştur',
       };
 
-  const [packs, setPacks] = useState<IngredientPack[]>([]);
+  const { packs, createPack, updatePack, removePack, maxReached } = useCustomPacks();
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [editingPack, setEditingPack] = useState<CustomPack | null>(null);
   const [recentIngredients, setRecentIngredients] = useState<Ingredient[]>([]);
   const [chipsExpanded, setChipsExpanded] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -573,7 +584,6 @@ export default function KitchenScreen({
   }, []);
 
   useEffect(() => {
-    getIngredientPacks().then(setPacks);
     getRecentPantryIngredients(8).then(setRecentIngredients);
   }, []);
 
@@ -662,7 +672,7 @@ export default function KitchenScreen({
     onChangeSelected(selectedIngredients.filter(item => item.id !== id));
   }
 
-  function addPack(pack: IngredientPack) {
+  function addPack(pack: CustomPack) {
     const toAdd = pack.items
       .filter(item => !selectedIngredients.some(selected => selected.id === item.id))
       .map<Ingredient>(item => ({ id: item.id, canonicalName: item.name }));
@@ -670,6 +680,40 @@ export default function KitchenScreen({
     if (toAdd.length > 0) {
       onChangeSelected([...selectedIngredients, ...toAdd]);
     }
+  }
+
+  function openCreateSheet() {
+    setEditingPack(null);
+    setSheetVisible(true);
+  }
+
+  function openEditSheet(pack: CustomPack) {
+    setEditingPack(pack);
+    setSheetVisible(true);
+  }
+
+  async function handleSheetSave(name: string, items: import('../hooks/useCustomPacks').CustomPackItem[]) {
+    if (editingPack) {
+      await updatePack(editingPack.id, name, items);
+    } else {
+      await createPack(name, items);
+    }
+    setSheetVisible(false);
+    setEditingPack(null);
+  }
+
+  function handleDeletePack(pack: CustomPack) {
+    const msg = language === 'en'
+      ? `Delete "${pack.name}"?`
+      : `"${pack.name}" silinsin mi?`;
+    Alert.alert(
+      language === 'en' ? 'Delete Pack' : 'Paketi Sil',
+      msg,
+      [
+        { text: language === 'en' ? 'Cancel' : 'İptal', style: 'cancel' },
+        { text: language === 'en' ? 'Delete' : 'Sil', style: 'destructive', onPress: () => void removePack(pack.id) },
+      ],
+    );
   }
 
   function appendIngredients(ingredients: Ingredient[]) {
@@ -1297,34 +1341,52 @@ export default function KitchenScreen({
           </Animated.View>
         )}
 
-        {packs.length > 0 && (
-          <Animated.View style={packsStyle}>
-            <View style={s.packSectionHeader}>
-              <View style={s.packSectionLeft}>
-                <View style={[s.packSectionBar, { backgroundColor: theme.warning }]} />
-                <View>
-                  <Text style={[s.packSectionTitle, { color: theme.text }]}>{copy.quickStart}</Text>
-                  <Text style={[s.packSectionSub, { color: theme.textMuted }]}>
-                    {copy.quickStartSub}
-                  </Text>
-                </View>
+        <Animated.View style={packsStyle}>
+          <View style={s.packSectionHeader}>
+            <View style={s.packSectionLeft}>
+              <View style={[s.packSectionBar, { backgroundColor: theme.warning }]} />
+              <View>
+                <Text style={[s.packSectionTitle, { color: theme.text }]}>{copy.quickStart}</Text>
+                <Text style={[s.packSectionSub, { color: theme.textMuted }]}>
+                  {copy.quickStartSub}
+                </Text>
               </View>
+            </View>
 
-              <View
+            {!maxReached && (
+              <TouchableOpacity
+                onPress={openCreateSheet}
                 style={[
                   s.packSectionBadge,
                   {
                     backgroundColor: `${theme.warning}18`,
                     borderColor: `${theme.warning}35`,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
                   },
                 ]}
               >
+                <Ionicons name="add" size={13} color={theme.warning} />
                 <Text style={[s.packSectionBadgeTxt, { color: theme.warning }]}>
-                  {packs.length} {copy.packs}
+                  {copy.newPack}
                 </Text>
-              </View>
-            </View>
+              </TouchableOpacity>
+            )}
+          </View>
 
+          {packs.length === 0 ? (
+            <TouchableOpacity
+              onPress={openCreateSheet}
+              style={[s.packEmpty, { borderColor: `${theme.warning}35`, backgroundColor: `${theme.warning}08` }]}
+            >
+              <View style={[s.packEmptyIcon, { backgroundColor: `${theme.warning}18` }]}>
+                <Ionicons name="albums-outline" size={26} color={theme.warning} />
+              </View>
+              <Text style={[s.packEmptyTitle, { color: theme.text }]}>{copy.emptyPackTitle}</Text>
+              <Text style={[s.packEmptySub, { color: theme.textMuted }]}>{copy.emptyPackSub}</Text>
+            </TouchableOpacity>
+          ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1341,11 +1403,30 @@ export default function KitchenScreen({
                   theme={theme}
                   addLabel={copy.add}
                   onPress={() => addPack(pack)}
+                  onLongPress={() => openEditSheet(pack)}
+                  onDelete={() => handleDeletePack(pack)}
                 />
               ))}
+              {!maxReached && (
+                <TouchableOpacity
+                  onPress={openCreateSheet}
+                  style={[s.packAddTile, { borderColor: `${theme.warning}35`, backgroundColor: `${theme.warning}08` }]}
+                >
+                  <Ionicons name="add-circle-outline" size={28} color={theme.warning} />
+                  <Text style={[s.packAddTxt, { color: theme.warning }]}>{copy.newPack}</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
-          </Animated.View>
-        )}
+          )}
+        </Animated.View>
+
+        <CreatePackSheet
+          visible={sheetVisible}
+          editPack={editingPack}
+          onSave={(name, items) => void handleSheetSave(name, items)}
+          onClose={() => { setSheetVisible(false); setEditingPack(null); }}
+          language={language as 'tr' | 'en'}
+        />
 
         <View style={s.scrollBottomPad} />
       </ScrollView>
@@ -1419,12 +1500,16 @@ function PackTile({
   theme,
   addLabel,
   onPress,
+  onLongPress,
+  onDelete,
 }: {
-  pack: IngredientPack;
+  pack: CustomPack;
   index: number;
   theme: Theme;
   addLabel: string;
   onPress: () => void;
+  onLongPress?: () => void;
+  onDelete?: () => void;
 }) {
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -1448,6 +1533,7 @@ function PackTile({
     <Animated.View style={animatedStyle} entering={FadeInRight.delay(70 + index * 50).duration(dur.base)}>
       <TouchableOpacity
         onPress={onPress}
+        onLongPress={onLongPress}
         onPressIn={() => {
           scale.value = withSpring(0.96, spring.snappy);
         }}
@@ -1472,6 +1558,15 @@ function PackTile({
           <View style={[s.packCountPill, { backgroundColor: accent }]}>
             <Text style={s.packCountTxt}>{pack.items.length}</Text>
           </View>
+          {onDelete && (
+            <TouchableOpacity
+              onPress={onDelete}
+              hitSlop={8}
+              style={[s.packDeleteBtn, { backgroundColor: `${theme.error}22` }]}
+            >
+              <Ionicons name="trash-outline" size={11} color={theme.error} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={s.packContent}>
@@ -2194,6 +2289,47 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   packCtaTxt: { fontSize: 11.5, fontWeight: '800' },
+  packDeleteBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  packEmpty: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: radii.xl,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  packEmptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  packEmptyTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.3 },
+  packEmptySub: { fontSize: 12, fontWeight: '500', textAlign: 'center', maxWidth: 220, lineHeight: 17 },
+  packAddTile: {
+    width: 100,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: radii.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+  },
+  packAddTxt: { fontSize: 11, fontWeight: '800', textAlign: 'center' },
 });
 
 const po = StyleSheet.create({
