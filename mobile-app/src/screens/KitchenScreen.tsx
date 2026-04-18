@@ -525,6 +525,7 @@ export default function KitchenScreen({
   const { packs, createPack, updatePack, removePack, maxReached } = useCustomPacks();
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingPack, setEditingPack] = useState<CustomPack | null>(null);
+  const [activePack, setActivePack] = useState<string | null>(null);
   const [recentIngredients, setRecentIngredients] = useState<Ingredient[]>([]);
   const [chipsExpanded, setChipsExpanded] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -703,29 +704,32 @@ export default function KitchenScreen({
   }
 
   function handlePackLongPress(pack: CustomPack) {
+    setActivePack(prev => (prev === pack.id ? null : pack.id));
+  }
+
+  function dismissActivePack() {
+    setActivePack(null);
+  }
+
+  function handleActionEdit() {
+    const pack = packs.find(p => p.id === activePack);
+    if (pack) { openEditSheet(pack); }
+    setActivePack(null);
+  }
+
+  function handleActionDelete() {
+    const pack = packs.find(p => p.id === activePack);
+    if (!pack) return;
     Alert.alert(
-      pack.name,
-      undefined,
+      language === 'en' ? 'Delete Pack' : 'Paketi Sil',
+      language === 'en' ? `Delete "${pack.name}"?` : `"${pack.name}" silinsin mi?`,
       [
-        {
-          text: language === 'en' ? 'Edit Pack' : 'Düzenle',
-          onPress: () => openEditSheet(pack),
-        },
+        { text: language === 'en' ? 'Cancel' : 'İptal', style: 'cancel' },
         {
           text: language === 'en' ? 'Delete' : 'Sil',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              language === 'en' ? 'Delete Pack' : 'Paketi Sil',
-              language === 'en' ? `Delete "${pack.name}"?` : `"${pack.name}" silinsin mi?`,
-              [
-                { text: language === 'en' ? 'Cancel' : 'İptal', style: 'cancel' },
-                { text: language === 'en' ? 'Delete' : 'Sil', style: 'destructive', onPress: () => void removePack(pack.id) },
-              ],
-            );
-          },
+          onPress: () => { void removePack(pack.id); setActivePack(null); },
         },
-        { text: language === 'en' ? 'Cancel' : 'İptal', style: 'cancel' },
       ],
     );
   }
@@ -1401,35 +1405,50 @@ export default function KitchenScreen({
               <Text style={[s.packEmptySub, { color: theme.textMuted }]}>{copy.emptyPackSub}</Text>
             </TouchableOpacity>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={s.packRow}
-              decelerationRate="fast"
-              snapToInterval={164}
-              snapToAlignment="start"
-            >
-              {packs.map((pack, index) => (
-                <PackTile
-                  key={pack.id}
-                  pack={pack}
-                  index={index}
+            <>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.packRow}
+                decelerationRate="fast"
+                snapToInterval={148}
+                snapToAlignment="start"
+                onScrollBeginDrag={dismissActivePack}
+              >
+                {packs.map((pack, index) => (
+                  <PackTile
+                    key={pack.id}
+                    pack={pack}
+                    index={index}
+                    theme={theme}
+                    addLabel={copy.add}
+                    isActive={activePack === pack.id}
+                    onPress={() => { dismissActivePack(); addPack(pack); }}
+                    onLongPress={() => handlePackLongPress(pack)}
+                  />
+                ))}
+                {!maxReached && (
+                  <TouchableOpacity
+                    onPress={() => { dismissActivePack(); openCreateSheet(); }}
+                    style={[s.packAddTile, { borderColor: `${theme.warning}35`, backgroundColor: `${theme.warning}08` }]}
+                  >
+                    <Ionicons name="add-circle-outline" size={28} color={theme.warning} />
+                    <Text style={[s.packAddTxt, { color: theme.warning }]}>{copy.newPack}</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+              {activePack !== null && (
+                <PackActionBar
+                  packName={packs.find(p => p.id === activePack)?.name ?? ''}
                   theme={theme}
-                  addLabel={copy.add}
-                  onPress={() => addPack(pack)}
-                  onLongPress={() => handlePackLongPress(pack)}
+                  editLabel={language === 'en' ? 'Edit' : 'Düzenle'}
+                  deleteLabel={language === 'en' ? 'Delete' : 'Sil'}
+                  onEdit={handleActionEdit}
+                  onDelete={handleActionDelete}
+                  onDismiss={dismissActivePack}
                 />
-              ))}
-              {!maxReached && (
-                <TouchableOpacity
-                  onPress={openCreateSheet}
-                  style={[s.packAddTile, { borderColor: `${theme.warning}35`, backgroundColor: `${theme.warning}08` }]}
-                >
-                  <Ionicons name="add-circle-outline" size={28} color={theme.warning} />
-                  <Text style={[s.packAddTxt, { color: theme.warning }]}>{copy.newPack}</Text>
-                </TouchableOpacity>
               )}
-            </ScrollView>
+            </>
           )}
         </Animated.View>
 
@@ -1505,13 +1524,34 @@ function IngredientCapsule({
   );
 }
 
-const PACK_EMOJIS = ['??', '??', '??', '??', '??', '??', '??', '??', '??', '??', '??', '??'];
+const PACK_ACCENT_COLORS = (theme: Theme) => [
+  theme.primary,
+  theme.emerald,
+  theme.accentGold,
+  theme.accentCoral,
+  theme.accentCyan,
+  theme.warning,
+];
+
+const PACK_ICONS: React.ComponentProps<typeof Ionicons>['name'][] = [
+  'nutrition-outline',
+  'leaf-outline',
+  'fast-food-outline',
+  'restaurant-outline',
+  'pizza-outline',
+  'cafe-outline',
+  'fish-outline',
+  'flame-outline',
+  'basket-outline',
+  'heart-outline',
+];
 
 function PackTile({
   pack,
   index,
   theme,
   addLabel,
+  isActive,
   onPress,
   onLongPress,
 }: {
@@ -1519,82 +1559,173 @@ function PackTile({
   index: number;
   theme: Theme;
   addLabel: string;
+  isActive: boolean;
   onPress: () => void;
-  onLongPress?: () => void;
+  onLongPress: () => void;
 }) {
   const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const shimmerStyle = useShimmerBand(true);
+  const shakeX = useSharedValue(0);
+  const glowOpacity = useSharedValue(0);
 
-  const colors = [
-    theme.primary,
-    theme.emerald,
-    theme.accentGold,
-    theme.accentCoral,
-    theme.accentCyan,
-    theme.warning,
-  ];
-  const accent = colors[index % colors.length];
-  const emoji = PACK_EMOJIS[index % PACK_EMOJIS.length];
-  const preview = pack.items.slice(0, 3).map(item => item.name).join(', ');
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { translateX: shakeX.value }],
+  }));
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
+  }));
+
+  useEffect(() => {
+    glowOpacity.value = withTiming(isActive ? 1 : 0, { duration: 200 });
+  }, [isActive, glowOpacity]);
+
+  const accent = PACK_ACCENT_COLORS(theme)[index % PACK_ACCENT_COLORS(theme).length];
+  const icon = PACK_ICONS[index % PACK_ICONS.length];
+  const preview = pack.items.slice(0, 4).map(item => item.name).join(' · ');
+
+  function triggerShakeAndLongPress() {
+    shakeX.value = withSequence(
+      withTiming(-7, { duration: 40 }),
+      withTiming(7, { duration: 40 }),
+      withTiming(-5, { duration: 40 }),
+      withTiming(5, { duration: 40 }),
+      withTiming(-3, { duration: 40 }),
+      withTiming(0, { duration: 40 }),
+    );
+    onLongPress();
+  }
 
   return (
-    <Animated.View style={animatedStyle} entering={FadeInRight.delay(70 + index * 50).duration(dur.base)}>
+    <Animated.View style={[animatedStyle, { position: 'relative' }]} entering={FadeInRight.delay(60 + index * 45).duration(dur.base)}>
+      {/* active glow ring */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          s.packActiveRing,
+          { borderColor: accent },
+          glowStyle,
+        ]}
+      />
       <TouchableOpacity
         onPress={onPress}
-        onLongPress={onLongPress}
-        onPressIn={() => {
-          scale.value = withSpring(0.96, spring.snappy);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, spring.snappy);
-        }}
+        onLongPress={triggerShakeAndLongPress}
+        delayLongPress={380}
+        onPressIn={() => { scale.value = withSpring(0.96, spring.snappy); }}
+        onPressOut={() => { scale.value = withSpring(1, spring.snappy); }}
         activeOpacity={1}
         style={[
           s.packTile,
           {
-            backgroundColor: theme.surface,
-            borderColor: `${accent}30`,
+            backgroundColor: isActive ? `${accent}10` : theme.surface,
+            borderColor: isActive ? `${accent}55` : `${accent}22`,
           },
         ]}
       >
-        <View style={[s.packHero, { backgroundColor: `${accent}12` }]}>
-          <View style={[s.packAccentLine, { backgroundColor: accent }]} />
-          <View style={[s.packCircleLg, { backgroundColor: `${accent}18` }]} />
-          <View style={[s.packCircleSm, { backgroundColor: `${accent}10` }]} />
-          <Animated.View style={[s.packShimmer, shimmerStyle]} pointerEvents="none" />
-          <Text style={s.packEmoji}>{emoji}</Text>
-          <View style={[s.packCountPill, { backgroundColor: accent }]}>
-            <Text style={s.packCountTxt}>{pack.items.length}</Text>
-          </View>
-        </View>
+        {/* left accent rail */}
+        <View style={[s.packRail, { backgroundColor: accent }]} />
 
-        <View style={s.packContent}>
+        <View style={s.packBody}>
+          {/* top row: icon + count */}
+          <View style={s.packTopRow}>
+            <View style={[s.packIconWrap, { backgroundColor: `${accent}16` }]}>
+              <Ionicons name={icon} size={15} color={accent} />
+            </View>
+            <View style={[s.packCountPill, { backgroundColor: `${accent}18`, borderColor: `${accent}30` }]}>
+              <Text style={[s.packCountTxt, { color: accent }]}>{pack.items.length}</Text>
+            </View>
+          </View>
+
+          {/* name */}
           <Text style={[s.packName, { color: theme.text }]} numberOfLines={2}>
             {pack.name}
           </Text>
+
+          {/* preview */}
           {!!preview && (
             <Text style={[s.packPreview, { color: theme.textMuted }]} numberOfLines={2}>
-              {preview}
-              {pack.items.length > 3 ? '...' : ''}
+              {preview}{pack.items.length > 4 ? '...' : ''}
             </Text>
           )}
-          <View
-            style={[
-              s.packCta,
-              {
-                backgroundColor: `${accent}12`,
-                borderColor: `${accent}28`,
-              },
-            ]}
-          >
+
+          {/* add button */}
+          <View style={[s.packCta, { backgroundColor: `${accent}12`, borderColor: `${accent}28` }]}>
             <Text style={[s.packCtaTxt, { color: accent }]}>{addLabel}</Text>
             <Ionicons name="add-circle" size={13} color={accent} />
           </View>
         </View>
       </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+function PackActionBar({
+  packName,
+  theme,
+  editLabel,
+  deleteLabel,
+  onEdit,
+  onDelete,
+  onDismiss,
+}: {
+  packName: string;
+  theme: Theme;
+  editLabel: string;
+  deleteLabel: string;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDismiss: () => void;
+}) {
+  const translateY = useSharedValue(18);
+  const opacity = useSharedValue(0);
+  const editScale = useSharedValue(1);
+  const deleteScale = useSharedValue(1);
+
+  const barStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+  }));
+  const editBtnStyle = useAnimatedStyle(() => ({ transform: [{ scale: editScale.value }] }));
+  const deleteBtnStyle = useAnimatedStyle(() => ({ transform: [{ scale: deleteScale.value }] }));
+
+  useEffect(() => {
+    translateY.value = withSpring(0, { damping: 18, stiffness: 260 });
+    opacity.value = withTiming(1, { duration: 180 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <Animated.View style={[s.actionBar, { backgroundColor: theme.surface, borderColor: theme.border }, barStyle]}>
+      <TouchableOpacity onPress={onDismiss} style={s.actionDismiss} hitSlop={10}>
+        <Ionicons name="close" size={15} color={theme.textMuted} />
+      </TouchableOpacity>
+      <Text style={[s.actionBarName, { color: theme.textMuted }]} numberOfLines={1}>
+        {packName}
+      </Text>
+      <View style={s.actionBtns}>
+        <Animated.View style={editBtnStyle}>
+          <TouchableOpacity
+            onPress={onEdit}
+            onPressIn={() => { editScale.value = withSpring(0.93, spring.snappy); }}
+            onPressOut={() => { editScale.value = withSpring(1, spring.snappy); }}
+            activeOpacity={1}
+            style={[s.actionBtn, { backgroundColor: `${theme.primary}14`, borderColor: `${theme.primary}35` }]}
+          >
+            <Ionicons name="pencil" size={14} color={theme.primary} />
+            <Text style={[s.actionBtnTxt, { color: theme.primary }]}>{editLabel}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+        <Animated.View style={deleteBtnStyle}>
+          <TouchableOpacity
+            onPress={onDelete}
+            onPressIn={() => { deleteScale.value = withSpring(0.93, spring.snappy); }}
+            onPressOut={() => { deleteScale.value = withSpring(1, spring.snappy); }}
+            activeOpacity={1}
+            style={[s.actionBtn, { backgroundColor: `${theme.error}14`, borderColor: `${theme.error}35` }]}
+          >
+            <Ionicons name="trash" size={14} color={theme.error} />
+            <Text style={[s.actionBtnTxt, { color: theme.error }]}>{deleteLabel}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     </Animated.View>
   );
 }
@@ -2210,97 +2341,123 @@ const s = StyleSheet.create({
   },
   recentChipTxt: { fontSize: 12.5, fontWeight: '700' },
   // ───────────────────────────────────────────────────────────────────────────
-  packRow: { gap: 10, paddingBottom: 4, paddingRight: spacing.base },
+  packRow: { gap: 10, paddingBottom: 8, paddingRight: spacing.base },
+  // ── Pack Tile (new flat design) ─────────────────────────────────────────────
   packTile: {
-    width: 154,
+    width: 148,
     borderWidth: 1.2,
     borderRadius: radii.xl,
     overflow: 'hidden',
+    flexDirection: 'row',
   },
-  packHero: {
-    height: 100,
+  packActiveRing: {
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderRadius: radii.xl + 3,
+    borderWidth: 2,
+    zIndex: 10,
+  },
+  packRail: {
+    width: 4,
+    borderTopLeftRadius: radii.xl,
+    borderBottomLeftRadius: radii.xl,
+  },
+  packBody: {
+    flex: 1,
+    padding: 11,
+    paddingLeft: 10,
+    gap: 5,
+  },
+  packTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  packIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
-  packAccentLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-  },
-  packCircleLg: {
-    position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    top: -28,
-    right: -24,
-  },
-  packCircleSm: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    bottom: -16,
-    left: -16,
-  },
-  packShimmer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.32)',
-    transform: [{ skewX: '-15deg' }],
-  },
-  packEmoji: { fontSize: 38, lineHeight: 46 },
   packCountPill: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    minWidth: 24,
+    paddingHorizontal: 7,
     height: 20,
     borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
   },
-  packCountTxt: { fontSize: 10, fontWeight: '900', color: '#fff' },
-  packContent: { padding: 10, paddingTop: 9 },
+  packCountTxt: { fontSize: 10, fontWeight: '900' },
   packName: {
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 17,
-    marginBottom: 4,
+    letterSpacing: -0.2,
   },
   packPreview: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '500',
-    lineHeight: 14.5,
-    marginBottom: 9,
+    lineHeight: 14,
+    flexShrink: 1,
   },
   packCta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: radii.sm,
     borderWidth: 1,
+    marginTop: 2,
   },
-  packCtaTxt: { fontSize: 11.5, fontWeight: '800' },
-  packDeleteBtn: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  packCtaTxt: { fontSize: 11, fontWeight: '800' },
+  // ── Pack Action Bar ──────────────────────────────────────────────────────────
+  actionBar: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  actionDismiss: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionBarName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  actionBtns: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  actionBtnTxt: { fontSize: 12.5, fontWeight: '800' },
   packEmpty: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
