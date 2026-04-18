@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withSequence,
+  FadeIn,
+  FadeInDown,
+} from 'react-native-reanimated';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +34,12 @@ import {
   type MealItem,
   type MealCompletionStatus,
 } from '../data/plansRepo';
+import {
+  getTodayTracking,
+  updateTodayTracking,
+  type TodayTracking,
+} from '../api/progress';
+import { DEFAULT_HYDRATION_GOAL_GLASSES } from '../widgets/types';
 import { Routes } from '../navigation/routes';
 import { useAuth } from '../auth/AuthContext';
 import { refreshWidgetsFromApp } from '../widgets/services/widgetSyncService';
@@ -65,13 +80,16 @@ export default function TodayScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId]     = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<TodayTracking | null>(null);
+  const [waterBusy, setWaterBusy] = useState(false);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setLoadError(null);
     try {
-      const data = await getTodayPlan();
+      const [data, track] = await Promise.all([getTodayPlan(), getTodayTracking().catch(() => null)]);
       setPlan(data);
+      if (track) setTracking(track);
     } catch (e: any) {
       const status = e?.response?.status ?? e?.status;
       const code   = e?.response?.data?.code ?? e?.code;
@@ -125,6 +143,22 @@ export default function TodayScreen() {
       Alert.alert(lang === 'tr' ? 'Hata' : 'Error', msg);
     } finally { setBusyId(null); }
   }
+
+  const handleWater = useCallback(async (delta: number) => {
+    if (!tracking || waterBusy) return;
+    const next = Math.max(0, tracking.waterGlasses + delta);
+    setWaterBusy(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const updated = await updateTodayTracking(next, tracking.steps, tracking.notes);
+      setTracking(updated);
+      void refreshWidgetsFromApp(true);
+    } catch {
+      // silent — user can retry from HydrationScreen
+    } finally {
+      setWaterBusy(false);
+    }
+  }, [tracking, waterBusy]);
 
   const today = new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -232,6 +266,18 @@ export default function TodayScreen() {
                 {lang === 'tr' ? `${doneCount} / ${totalCount} öğün tamamlandı` : `${doneCount} / ${totalCount} meals done`}
               </Text>
             </View>
+
+            {/* Water widget */}
+            <WaterWidget
+              glasses={tracking?.waterGlasses ?? 0}
+              goal={DEFAULT_HYDRATION_GOAL_GLASSES}
+              busy={waterBusy}
+              lang={lang}
+              theme={theme}
+              onAdd={() => void handleWater(1)}
+              onRemove={() => void handleWater(-1)}
+              onNavigate={() => (navigation as any).navigate(Routes.App.Hydration)}
+            />
 
             {/* Meal cards */}
             {plan.items.map(meal => (
@@ -381,6 +427,135 @@ function MealCard({
   );
 }
 
+// ─── Water Widget ─────────────────────────────────────────────────────────────
+
+function WaterWidget({
+  glasses, goal, busy, lang, theme, onAdd, onRemove, onNavigate,
+}: {
+  glasses: number;
+  goal: number;
+  busy: boolean;
+  lang: 'tr' | 'en';
+  theme: any;
+  onAdd: () => void;
+  onRemove: () => void;
+  onNavigate: () => void;
+}) {
+  const pct = Math.min(1, glasses / goal);
+  const barWidth = useSharedValue(0);
+  const plusScale = useSharedValue(1);
+  const dropY = useSharedValue(0);
+  const dropOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    barWidth.value = withSpring(pct, { damping: 18, stiffness: 120 });
+  }, [pct, barWidth]);
+
+  const barStyle = useAnimatedStyle(() => ({ flex: barWidth.value }));
+  const plusStyle = useAnimatedStyle(() => ({ transform: [{ scale: plusScale.value }] }));
+  const dropStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: dropY.value }],
+    opacity: dropOpacity.value,
+  }));
+
+  function handleAdd() {
+    // bounce the button
+    plusScale.value = withSequence(
+      withSpring(0.82, { damping: 10, stiffness: 400 }),
+      withSpring(1,    { damping: 14, stiffness: 300 }),
+    );
+    // drop animation
+    dropY.value = 0;
+    dropOpacity.value = 1;
+    dropY.value = withTiming(22, { duration: 480 });
+    dropOpacity.value = withTiming(0, { duration: 480 });
+    onAdd();
+  }
+
+  const color = theme.accentCyan;
+  const done  = glasses >= goal;
+
+  // render up to 10 drop icons
+  const displayGoal = Math.min(goal, 10);
+  const filled      = Math.min(glasses, displayGoal);
+
+  return (
+    <Animated.View entering={FadeInDown.delay(80).duration(320)} style={[w.card, { backgroundColor: theme.surface, borderColor: done ? `${color}45` : theme.border }]}>
+      {/* Header row */}
+      <TouchableOpacity onPress={onNavigate} activeOpacity={0.75} style={w.headerRow}>
+        <View style={[w.iconBox, { backgroundColor: `${color}16` }]}>
+          <Ionicons name="water" size={16} color={color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[w.title, { color: theme.text }]}>
+            {lang === 'tr' ? 'Su Takibi' : 'Hydration'}
+          </Text>
+          <Text style={[w.sub, { color: theme.textMuted }]}>
+            {done
+              ? (lang === 'tr' ? 'Günlük hedefe ulaştın!' : 'Daily goal reached!')
+              : (lang === 'tr' ? `${goal - glasses} bardak kaldı` : `${goal - glasses} glasses left`)}
+          </Text>
+        </View>
+        <Text style={[w.counter, { color: done ? color : theme.text }]}>
+          {glasses}<Text style={[w.counterGoal, { color: theme.textMuted }]}>/{goal}</Text>
+        </Text>
+        <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
+      </TouchableOpacity>
+
+      {/* Drop icons row */}
+      <View style={w.dropsRow}>
+        {Array.from({ length: displayGoal }).map((_, i) => (
+          <Ionicons
+            key={i}
+            name={i < filled ? 'water' : 'water-outline'}
+            size={18}
+            color={i < filled ? color : `${color}35`}
+          />
+        ))}
+      </View>
+
+      {/* Animated progress bar */}
+      <View style={[w.track, { backgroundColor: `${color}14` }]}>
+        <Animated.View style={[w.fill, { backgroundColor: color }, barStyle]} />
+      </View>
+
+      {/* Action row */}
+      <View style={w.actionRow}>
+        <TouchableOpacity
+          onPress={onRemove}
+          disabled={busy || glasses === 0}
+          style={[w.minusBtn, { borderColor: theme.border, backgroundColor: theme.surfaceElevated, opacity: glasses === 0 ? 0.4 : 1 }]}
+        >
+          <Ionicons name="remove" size={18} color={theme.textMuted} />
+        </TouchableOpacity>
+
+        {/* Drop floating anim */}
+        <View style={w.plusWrap}>
+          <Animated.View pointerEvents="none" style={[w.floatDrop, dropStyle]}>
+            <Ionicons name="water" size={18} color={color} />
+          </Animated.View>
+          <Animated.View style={plusStyle}>
+            <TouchableOpacity
+              onPress={handleAdd}
+              disabled={busy || done}
+              activeOpacity={1}
+              style={[w.plusBtn, { backgroundColor: done ? `${color}22` : color, opacity: done ? 0.7 : 1 }]}
+            >
+              {busy
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <>
+                    <Ionicons name="add" size={18} color="#fff" />
+                    <Text style={w.plusTxt}>{lang === 'tr' ? '+1 Bardak' : '+1 Glass'}</Text>
+                  </>
+              }
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 function MacroBadge({ label, value, color, theme }: { label: string; value: string; color: string; theme: any }) {
   return (
     <View style={[s.macroBadge, { backgroundColor: `${color}12`, borderColor: `${color}22` }]}>
@@ -443,4 +618,82 @@ const s = StyleSheet.create({
   errorSub:   { fontSize: 14, textAlign: 'center', lineHeight: 20, paddingHorizontal: spacing.xl },
   retryBtn:   { marginTop: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: 14, borderRadius: radii.xl },
   retryTxt:   { color: '#FFF', fontSize: 14, fontWeight: '900' },
+});
+
+const w = StyleSheet.create({
+  card: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: 10,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title:       { fontSize: 14, fontWeight: '800', letterSpacing: -0.2 },
+  sub:         { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  counter:     { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  counterGoal: { fontSize: 14, fontWeight: '600' },
+  dropsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  track: {
+    height: 5,
+    borderRadius: 3,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+  minusBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusWrap: {
+    flex: 1,
+    position: 'relative',
+    alignItems: 'center',
+  },
+  floatDrop: {
+    position: 'absolute',
+    top: -8,
+    zIndex: 10,
+  },
+  plusBtn: {
+    width: '100%',
+    height: 40,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  plusTxt: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
 });
