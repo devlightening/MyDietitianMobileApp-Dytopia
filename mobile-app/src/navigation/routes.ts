@@ -35,6 +35,8 @@ export const Routes = {
     BarcodeScan: 'BarcodeScan',
     WeeklySummary: 'WeeklySummary',
     MealLog: 'MealLog',
+    BadgeVault: 'BadgeVault',
+    ChangePassword: 'ChangePassword',
   },
   Modal: {
     ActivatePremium: 'ModalActivatePremium',

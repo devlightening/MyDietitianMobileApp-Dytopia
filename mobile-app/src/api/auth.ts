@@ -15,3 +15,21 @@ export async function activatePremium(data: ActivatePremiumRequest): Promise<Act
   const response = await apiClient.post<ActivatePremiumResponse>('/api/client/activate-premium', data);
   return response.data;
 }
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  signOutOtherSessions?: boolean;
+}
+
+export interface ChangePasswordResponse {
+  ok: boolean;
+  token: string;
+  expiresAtUtc: string;
+  message: string;
+}
+
+export async function changePassword(data: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+  const response = await apiClient.post<ChangePasswordResponse>('/api/auth/change-password', data);
+  return response.data;
+}

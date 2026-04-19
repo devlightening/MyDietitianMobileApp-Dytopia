@@ -1305,6 +1305,14 @@ export default function ProfileScreen() {
             />
             <GlassTile
               theme={theme}
+              icon="lock-closed-outline"
+              iconColor={theme.accentCoral}
+              label={language === "tr" ? "Şifre Değiştir" : "Change Password"}
+              sub={language === "tr" ? "Hesap şifrenizi güncelleyin" : "Update your account password"}
+              onPress={() => (navigation as any).navigate(Routes.App.ChangePassword)}
+            />
+            <GlassTile
+              theme={theme}
               icon="shield-checkmark-outline"
               iconColor={theme.textMuted}
               label={language === "tr" ? "Gizlilik" : "Privacy"}

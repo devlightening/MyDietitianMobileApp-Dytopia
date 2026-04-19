@@ -2,15 +2,16 @@
  * AURA CLINICAL OS — Plans Screen
  * Guided daily ritual: sectioned flow, focus refresh, macro chips, next-meal hero
  */
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl, StatusBar, Alert, Modal,
+  Animated as RNAnimated,
 } from "react-native";
 import Animated from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../auth/AuthContext";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { Routes } from "../navigation/routes";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
@@ -25,6 +26,9 @@ import {
 } from "../data/plansRepo";
 import AppEmptyState from "../components/ui/AppEmptyState";
 import ProduceBubble from "../components/decor/ProduceBubble";
+import AlternativePickerSheet from "../components/AlternativePickerSheet";
+import AlternativeCompareSheet from "../components/AlternativeCompareSheet";
+import RecipeNutritionPanel from "../components/recipes/RecipeNutritionPanel";
 
 /* ── helpers ── */
 function getTodayFormatted(): string {
@@ -132,7 +136,13 @@ function PlansHeroBand({
 /* ═══════════════════════════════════════════════════════
    MAIN SCREEN
 ═══════════════════════════════════════════════════════ */
-export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () => void } = {}) {
+export default function PlansScreen({
+  onPressKitchen,
+  isActive = true,
+}: {
+  onPressKitchen?: () => void;
+  isActive?: boolean;
+} = {}) {
   const { user } = useAuth();
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
@@ -146,14 +156,21 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
   const [todayPlan, setTodayPlan]   = useState<TodayPlan | null>(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [actingOn, setActingOn]     = useState<string | null>(null);
+  const [actingOn, setActingOn]         = useState<string | null>(null);
+  const [flipResetKey, setFlipResetKey] = useState(0);
   const [selectedMeal, setSelectedMeal] = useState<MealItem | null>(null);
+  const [altPickerMeal, setAltPickerMeal]   = useState<MealItem | null>(null);
+  const [altCompareMeal, setAltCompareMeal] = useState<MealItem | null>(null);
+  const [planToast, setPlanToast] = useState<{ title: string; body: string } | null>(null);
 
   const isFirstLoad  = useRef(true);
   const headerStyle  = useFadeRise(0, 16);
+  const toastTranslateY = useRef(new RNAnimated.Value(-140)).current;
+  const toastOpacity = useRef(new RNAnimated.Value(0)).current;
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── data ── */
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const [plansResult, todayResult] = await Promise.allSettled([
         getPlansData(),
@@ -178,21 +195,68 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  }, []);
 
-  // Initial load + silent reload every time the tab regains focus
-  useFocusEffect(
-    useCallback(() => {
-      if (!isPremium) { setLoading(false); return; }
-      if (isFirstLoad.current) {
-        isFirstLoad.current = false;
-        load();
-      } else {
-        setRefreshing(true);
-        load();
+  // Initial load + silent reload when the Plans tab becomes active again.
+  useEffect(() => {
+    if (!isPremium) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (!isActive) return;
+
+    setFlipResetKey(k => k + 1);
+
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      void load();
+      return;
+    }
+
+    setRefreshing(true);
+    void load();
+  }, [isActive, isPremium, load]);
+
+  const hidePlanToast = useCallback(() => {
+    RNAnimated.parallel([
+      RNAnimated.timing(toastOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+      RNAnimated.timing(toastTranslateY, { toValue: -140, duration: 220, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        setPlanToast(null);
       }
-    }, [isPremium])
-  );
+    });
+  }, [toastOpacity, toastTranslateY]);
+
+  const showPlanToast = useCallback((title: string, body: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+
+    setPlanToast({ title, body });
+    toastTranslateY.setValue(-140);
+    toastOpacity.setValue(0);
+
+    RNAnimated.parallel([
+      RNAnimated.timing(toastOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+      RNAnimated.spring(toastTranslateY, { toValue: 0, damping: 20, stiffness: 220, useNativeDriver: true }),
+    ]).start(() => {
+      toastTimerRef.current = setTimeout(() => {
+        toastTimerRef.current = null;
+        hidePlanToast();
+      }, 2400);
+    });
+  }, [hidePlanToast, toastOpacity, toastTranslateY]);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  }, []);
 
   /* ── actions (preserve existing logic exactly) ── */
   const handleComplete = useCallback(async (item: MealItem) => {
@@ -247,13 +311,8 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
       Alert.alert(language === "tr" ? "Henüz açılamadı" : "Not available yet", lockMessage);
       return;
     }
-    (navigation as any).navigate(Routes.App.CheckIngredients, {
-      mealId:          item.id,
-      plannedRecipeId: item.recipeId,
-      mealType:        MEAL_TYPE_INDEX[item.mealType],
-      recipeName:      item.recipeName ?? item.title,
-    });
-  }, [language, navigation]);
+    setAltPickerMeal(item);
+  }, [language]);
 
   const handleViewRecipe = useCallback((item: MealItem) => {
     if (!item.recipeId) return;
@@ -282,9 +341,61 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
     });
   }, [navigation]);
 
+  const handleViewAlternativeRecipeForMeal = useCallback((item: MealItem) => {
+    if (!item.alternativeRecipeId) return;
+    (navigation as any).navigate(Routes.App.RecipeDetail, {
+      result: {
+        recipeId: item.alternativeRecipeId,
+        name: item.alternativeRecipeName ?? "Alternatif Tarif",
+        description: "",
+        score: 0,
+        matchStatus: "FULL_MATCH" as const,
+        matchCategory: "FULL_MATCH" as const,
+        sourceType: "LINKED_CLINIC_PRIVATE",
+        mandatoryCount: 0,
+        matchedMandatoryCount: 0,
+        usedSubstitutes: false,
+        missing: [],
+        steps: [],
+        hasSteps: false,
+        isPublic: false,
+        isDietitianRecipe: true,
+        motivationText: "",
+        isOwnedByActiveDietitian: true,
+      },
+    });
+  }, [navigation]);
+
   const handleOpenMealDetail = useCallback((item: MealItem) => {
-    setSelectedMeal(item);
+    if (item.completionStatus === "Alternative") {
+      setAltCompareMeal(item);
+    } else {
+      setSelectedMeal(item);
+    }
   }, []);
+
+  const handlePickerConfirmed = useCallback((payload?: { type: "alternative" | "original"; recipeName?: string }) => {
+    void load();
+    void syncSchedules();
+    if (payload?.type === "alternative") {
+      showPlanToast(
+        "Alternatif kaydedildi",
+        `${payload.recipeName ?? "Seçilen tarif"} bugünkü öğün için alternatif olarak kaydedildi. Plan akışı korunur.`,
+      );
+    }
+  }, [load, showPlanToast, syncSchedules]);
+
+  const handleViewAlternativeRecipe = useCallback(() => {
+    if (!altCompareMeal) return;
+    handleViewAlternativeRecipeForMeal(altCompareMeal);
+  }, [altCompareMeal, handleViewAlternativeRecipeForMeal]);
+
+  const handleChooseAnotherAlternative = useCallback(() => {
+    if (!altCompareMeal) return;
+    const item = altCompareMeal;
+    setAltCompareMeal(null);
+    setAltPickerMeal(item);
+  }, [altCompareMeal]);
 
   const handleCloseMealDetail = useCallback(() => {
     setSelectedMeal(null);
@@ -308,8 +419,8 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
     if (!selectedMeal) return;
     const item = selectedMeal;
     setSelectedMeal(null);
-    handleAlternative(item);
-  }, [handleAlternative, selectedMeal]);
+    setAltPickerMeal(item);
+  }, [selectedMeal]);
 
   const handleViewRecipeFromSheet = useCallback(() => {
     if (!selectedMeal) return;
@@ -337,6 +448,7 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
   const doneCount    = doneItems.length;
   const totalCount   = todayItems.length;
   const nextMeal     = pendingItems[0] ?? null;
+  const toastTop     = (StatusBar.currentHeight ?? 0) + spacing.sm;
 
   /* ── render ── */
   return (
@@ -354,6 +466,38 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
         iconColor={`${theme.emerald}42`}
         style={[s.screenGlowB, { backgroundColor: theme.emeraldGlow }]}
       />
+      {planToast && (
+        <RNAnimated.View
+          pointerEvents="none"
+          style={[
+            s.planToastWrap,
+            {
+              top: toastTop,
+              opacity: toastOpacity,
+              transform: [{ translateY: toastTranslateY }],
+            },
+          ]}
+        >
+          <View
+            style={[
+              s.planToastCard,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.borderEmerald,
+                shadowColor: theme.primaryDark,
+              },
+            ]}
+          >
+            <View style={[s.planToastIcon, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+              <Ionicons name="checkmark-circle" size={18} color={theme.primary} />
+            </View>
+            <View style={s.planToastContent}>
+              <Text style={[s.planToastTitle, { color: theme.text }]}>{planToast.title}</Text>
+              <Text style={[s.planToastBody, { color: theme.textSub }]}>{planToast.body}</Text>
+            </View>
+          </View>
+        </RNAnimated.View>
+      )}
 
       <ScrollView
         contentContainerStyle={s.scroll}
@@ -362,7 +506,7 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
           isPremium
             ? <RefreshControl
                 refreshing={refreshing}
-                onRefresh={() => { setRefreshing(true); load(); }}
+                onRefresh={() => { setRefreshing(true); void load(); }}
                 tintColor={theme.primary}
               />
             : undefined
@@ -442,7 +586,7 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
             ) : (
               <>
                 {/* Daily macro summary */}
-                <MacroSummaryBar items={todayItems} theme={theme} />
+              <MacroSummaryBar items={todayItems} theme={theme} language={language} />
 
                 {/* Progress + next meal hero */}
                 <DayProgressCard
@@ -496,7 +640,10 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
                         index={i}
                         theme={theme}
                         isActing={actingOn === item.id}
+                        flipResetKey={flipResetKey}
                         onOpenDetail={() => handleOpenMealDetail(item)}
+                        onViewRecipe={() => handleViewRecipe(item)}
+                        onViewAlternativeRecipe={() => handleViewAlternativeRecipeForMeal(item)}
                         onUndo={() => handleComplete(item)}
                       />
                     ))}
@@ -553,6 +700,20 @@ export default function PlansScreen({ onPressKitchen }: { onPressKitchen?: () =>
         onUndo={handleCompleteFromSheet}
         onAlternative={handleAlternativeFromSheet}
         onViewRecipe={handleViewRecipeFromSheet}
+      />
+
+      <AlternativePickerSheet
+        meal={altPickerMeal}
+        onClose={() => setAltPickerMeal(null)}
+        onConfirmed={handlePickerConfirmed}
+      />
+
+      <AlternativeCompareSheet
+        meal={altCompareMeal}
+        onClose={() => setAltCompareMeal(null)}
+        onUndo={() => { if (altCompareMeal) void handleComplete(altCompareMeal); }}
+        onChooseAnotherAlternative={altCompareMeal?.recipeId ? handleChooseAnotherAlternative : undefined}
+        onViewAlternativeRecipe={altCompareMeal?.alternativeRecipeId ? handleViewAlternativeRecipe : undefined}
       />
     </View>
   );
@@ -685,9 +846,9 @@ function SectionHeader({
 }) {
   return (
     <View style={s.sectionHeaderRow}>
-      <View style={[s.sectionHeaderDot, { backgroundColor: accentColor }]} />
+      <View style={[s.sectionHeaderLine, { backgroundColor: accentColor }]} />
       <Text style={[s.sectionHeaderLabel, { color: theme.textMuted }]}>{label}</Text>
-      <View style={[s.sectionHeaderPill, { backgroundColor: `${accentColor}18` }]}>
+      <View style={[s.sectionHeaderPill, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}30`, borderWidth: 1 }]}>
         <Text style={[s.sectionHeaderCount, { color: accentColor }]}>{count}</Text>
       </View>
     </View>
@@ -711,9 +872,11 @@ function MacroChip({ value, color }: { value: string; color: string }) {
 function MacroSummaryBar({
   items,
   theme,
+  language,
 }: {
   items: MealItem[];
   theme: import("../theme/tokens").Theme;
+  language: "tr" | "en";
 }) {
   const totals = items.reduce(
     (acc, item) => ({
@@ -730,33 +893,18 @@ function MacroSummaryBar({
 
   return (
     <View style={[s.macroSummaryBar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Text style={[s.macroSummaryLabel, { color: theme.textMuted }]}>Günlük Toplam</Text>
-      <View style={s.macroSummaryRow}>
-        {totals.calories > 0 && (
-          <View style={[s.macroSummaryChip, { backgroundColor: `${theme.macroCalorie}12` }]}>
-            <Text style={[s.macroSummaryValue, { color: theme.macroCalorie }]}>{Math.round(totals.calories)}</Text>
-            <Text style={[s.macroSummaryUnit, { color: theme.macroCalorie + "99" }]}>kcal</Text>
-          </View>
-        )}
-        {totals.protein > 0 && (
-          <View style={[s.macroSummaryChip, { backgroundColor: `${theme.macroProtein}12` }]}>
-            <Text style={[s.macroSummaryValue, { color: theme.macroProtein }]}>P {Math.round(totals.protein)}</Text>
-            <Text style={[s.macroSummaryUnit, { color: theme.macroProtein + "99" }]}>g</Text>
-          </View>
-        )}
-        {totals.carbs > 0 && (
-          <View style={[s.macroSummaryChip, { backgroundColor: `${theme.macroCarb}12` }]}>
-            <Text style={[s.macroSummaryValue, { color: theme.macroCarb }]}>K {Math.round(totals.carbs)}</Text>
-            <Text style={[s.macroSummaryUnit, { color: theme.macroCarb + "99" }]}>g</Text>
-          </View>
-        )}
-        {totals.fat > 0 && (
-          <View style={[s.macroSummaryChip, { backgroundColor: `${theme.macroFat}12` }]}>
-            <Text style={[s.macroSummaryValue, { color: theme.macroFat }]}>Y {Math.round(totals.fat)}</Text>
-            <Text style={[s.macroSummaryUnit, { color: theme.macroFat + "99" }]}>g</Text>
-          </View>
-        )}
-      </View>
+      <Text style={[s.macroSummaryLabel, { color: theme.textMuted }]}>
+        {language === "en" ? "Daily Total" : "Günlük Toplam"}
+      </Text>
+      <RecipeNutritionPanel
+        caloriesKcal={Math.round(totals.calories)}
+        proteinGrams={Math.round(totals.protein)}
+        carbsGrams={Math.round(totals.carbs)}
+        fatGrams={Math.round(totals.fat)}
+        accent={theme.primary}
+        theme={theme}
+        title=""
+      />
     </View>
   );
 }
@@ -1080,77 +1228,272 @@ function PendingCard({
 }
 
 /* ═══════════════════════════════════════════════════════
-   DONE CARD — compact, success-styled
+   DONE CARD — polished success card with alt flip
 ═══════════════════════════════════════════════════════ */
 function DoneCard({
-  item, index, theme, isActing, onOpenDetail, onUndo,
+  item, index, theme, isActing, onOpenDetail, onViewRecipe, onViewAlternativeRecipe, onUndo, flipResetKey,
 }: {
   item: MealItem;
   index: number;
   theme: import("../theme/tokens").Theme;
   isActing: boolean;
   onOpenDetail: () => void;
+  onViewRecipe: () => void;
+  onViewAlternativeRecipe: () => void;
   onUndo: () => void;
+  flipResetKey: number;
 }) {
-  const style = useStaggerItem(index, 180, 50);
-  const meta  = MEAL_TYPE_META[item.mealType] ?? MEAL_TYPE_META.Snack;
+  const style  = useStaggerItem(index, 180, 50);
+  const meta   = MEAL_TYPE_META[item.mealType] ?? MEAL_TYPE_META.Snack;
+  const isAlt  = item.completionStatus === "Alternative";
+  const hasMacros    = item.calories || item.macros?.proteinGrams || item.macros?.carbsGrams || item.macros?.fatGrams;
+  const hasAltMacros = item.alternativeCalories || item.alternativeMacros?.proteinGrams || item.alternativeMacros?.carbsGrams || item.alternativeMacros?.fatGrams;
+  const accentColor = isAlt ? theme.accentGold : theme.emerald;
+  const statusBorder = `${accentColor}2C`;
+  const statusSurface = `${accentColor}12`;
+  const lastTapRef = useRef(0);
+  const isFlippingRef = useRef(false);
+  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [showBack, setShowBack]   = useState(false);
+  const flipScaleX                = useRef(new RNAnimated.Value(1)).current;
+  const prevResetKey              = useRef(flipResetKey);
+  const contextualTitle = showBack && isAlt
+    ? (item.alternativeRecipeName ?? "Alternatif tarif")
+    : (item.recipeName ?? item.title);
+  const contextualRecipeHandler = showBack && isAlt ? onViewAlternativeRecipe : onViewRecipe;
+  const contextualRecipeAvailable = showBack && isAlt ? !!item.alternativeRecipeId : !!item.recipeId;
+  const contextualMeta = isAlt
+    ? `${item.time} • ${showBack ? "Alternatif tarif" : "Planlanan tarif"}`
+    : item.time;
+  const flipGuideText = showBack
+    ? "Planlanan öğün için 2 kere dokun."
+    : "Alternatif için 2 kere dokun.";
+
+  const triggerFlip = useCallback((nextSide?: boolean) => {
+    if (!isAlt || isFlippingRef.current) return;
+    isFlippingRef.current = true;
+
+    RNAnimated.timing(flipScaleX, { toValue: 0, duration: 190, useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) {
+        isFlippingRef.current = false;
+        return;
+      }
+
+      setShowBack(prev => (typeof nextSide === "boolean" ? nextSide : !prev));
+
+      RNAnimated.timing(flipScaleX, { toValue: 1, duration: 220, useNativeDriver: true }).start(() => {
+        isFlippingRef.current = false;
+      });
+    });
+  }, [flipScaleX, isAlt]);
+
+  useEffect(() => {
+    if (flipResetKey !== prevResetKey.current && showBack) {
+      triggerFlip(false);
+    }
+    if (singleTapTimeoutRef.current) {
+      clearTimeout(singleTapTimeoutRef.current);
+      singleTapTimeoutRef.current = null;
+    }
+    lastTapRef.current = 0;
+    prevResetKey.current = flipResetKey;
+  }, [flipResetKey, showBack, triggerFlip]);
+
+  const handleCardTap = useCallback(() => {
+    if (!isAlt) {
+      onOpenDetail();
+      return;
+    }
+    if (isFlippingRef.current) return;
+
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
+      lastTapRef.current = 0;
+      triggerFlip();
+      return;
+    }
+
+    lastTapRef.current = now;
+    if (singleTapTimeoutRef.current) {
+      clearTimeout(singleTapTimeoutRef.current);
+    }
+    singleTapTimeoutRef.current = setTimeout(() => {
+      lastTapRef.current = 0;
+      singleTapTimeoutRef.current = null;
+      onOpenDetail();
+    }, 285);
+  }, [isAlt, onOpenDetail, triggerFlip]);
+
+  useEffect(() => () => {
+    if (singleTapTimeoutRef.current) {
+      clearTimeout(singleTapTimeoutRef.current);
+    }
+    lastTapRef.current = 0;
+  }, []);
 
   return (
     <Animated.View style={style}>
-      <View style={[s.doneCard, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
-        <View style={[s.cardStrip, { backgroundColor: theme.emerald }]} />
+      <RNAnimated.View style={[
+        s.doneCard,
+        {
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+          shadowColor: theme.primaryGlow,
+          transform: [{ scaleX: flipScaleX }],
+        },
+      ]}>
+        <View style={[s.doneAccentBar, { backgroundColor: theme.emerald }]} pointerEvents="none" />
 
         <View style={s.doneBody}>
-          <View style={s.cardTopRow}>
-            <Text style={[s.cardTime, { color: theme.emerald + "BB" }]}>{item.time}</Text>
-            <View style={[s.mealIconWrap, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
-              <Ionicons name={meta.icon} size={16} color={theme.emerald} />
+          <View style={s.doneTopRow}>
+            <View style={s.doneTopMeta}>
+              <View style={[s.doneTypePill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+                <Ionicons name={meta.icon} size={12} color={theme.emerald} />
+                <Text style={[s.doneTypePillTxt, { color: theme.emerald }]}>{meta.label}</Text>
+              </View>
+
+              {isAlt && (
+                <View style={[s.doneFaceSwitch, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                  <View
+                    style={[
+                      s.doneFaceOption,
+                      !showBack && { backgroundColor: `${theme.emerald}14` },
+                    ]}
+                  >
+                    <View style={[s.doneFaceDot, { backgroundColor: !showBack ? theme.emerald : `${theme.textMuted}66` }]} />
+                    <Text style={[s.doneFaceOptionText, { color: !showBack ? theme.emerald : theme.textMuted }]}>
+                      Planlanan
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      s.doneFaceOption,
+                      showBack && { backgroundColor: `${theme.accentGold}14` },
+                    ]}
+                  >
+                    <View style={[s.doneFaceDot, { backgroundColor: showBack ? theme.accentGold : `${theme.textMuted}66` }]} />
+                    <Text style={[s.doneFaceOptionText, { color: showBack ? theme.accentGold : theme.textMuted }]}>
+                      Alternatif
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
-            <View style={s.cardTitleBlock}>
-              <Text style={[s.cardTypeLabel, { color: theme.emerald + "88" }]}>{meta.label}</Text>
-              <Text style={[s.doneCardTitle, { color: theme.textSub }]} numberOfLines={1}>
-                {item.title}
+
+            <View style={[s.doneStatusBadge, { backgroundColor: statusSurface, borderColor: statusBorder }]}>
+              <Ionicons name="checkmark-circle" size={11} color={accentColor} />
+              <Text style={[s.doneStatusTxt, { color: accentColor }]}>
+                {isAlt ? "Seçim yapıldı" : "Tamamlandı"}
               </Text>
-            </View>
-            <View style={[s.doneCheckBadge, { backgroundColor: theme.emerald + "22", borderColor: theme.emerald + "55" }]}>
-              <Ionicons name="checkmark-circle" size={12} color={theme.emerald} />
-              <Text style={[s.doneCheckTxt, { color: theme.emerald }]}>Yapıldı</Text>
             </View>
           </View>
 
-          {/* Undo — secondary, right-aligned */}
           <TouchableOpacity
-            style={s.detailRow}
-            onPress={onOpenDetail}
-            activeOpacity={0.7}
+            style={[
+              s.doneBodyTouch,
+              isAlt && [s.doneBodyTouchAlt, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }],
+            ]}
+            onPress={handleCardTap}
+            activeOpacity={0.96}
           >
-            <Ionicons name="eye-outline" size={12} color={theme.textMuted} />
-            <Text style={[s.detailRowText, { color: theme.textMuted }]}>Detay</Text>
-          </TouchableOpacity>
+            <View style={s.doneTitleBlock}>
+              <Text style={[s.doneTimeLabel, { color: theme.textMuted }]}>{contextualMeta}</Text>
+              <Text style={[s.doneTitleTxt, { color: theme.text }]} numberOfLines={2}>
+                {contextualTitle}
+              </Text>
+            </View>
 
-          <TouchableOpacity
-            style={s.undoRow}
-            onPress={onUndo}
-            disabled={isActing}
-            activeOpacity={0.7}
-          >
-            {isActing ? (
-              <ActivityIndicator size="small" color={theme.primary} />
-            ) : (
-              <>
-                <Ionicons name="arrow-undo-outline" size={12} color={theme.primary + "99"} />
-                <Text style={[s.undoTxt, { color: theme.primary + "99" }]}>Geri Al</Text>
-              </>
+            {!!(showBack && isAlt ? hasAltMacros : hasMacros) && (
+              <View style={s.doneMacroRow}>
+                {!!(showBack && isAlt ? item.alternativeCalories : item.calories) && (
+                  <MacroChip
+                    value={`${showBack && isAlt ? item.alternativeCalories : item.calories} kcal`}
+                    color={theme.macroCalorie}
+                  />
+                )}
+                {!!(showBack && isAlt ? item.alternativeMacros?.proteinGrams : item.macros?.proteinGrams) && (
+                  <MacroChip
+                    value={`P ${showBack && isAlt ? item.alternativeMacros?.proteinGrams : item.macros?.proteinGrams}g`}
+                    color={theme.macroProtein}
+                  />
+                )}
+                {!!(showBack && isAlt ? item.alternativeMacros?.carbsGrams : item.macros?.carbsGrams) && (
+                  <MacroChip
+                    value={`K ${showBack && isAlt ? item.alternativeMacros?.carbsGrams : item.macros?.carbsGrams}g`}
+                    color={theme.macroCarb}
+                  />
+                )}
+                {!!(showBack && isAlt ? item.alternativeMacros?.fatGrams : item.macros?.fatGrams) && (
+                  <MacroChip
+                    value={`Y ${showBack && isAlt ? item.alternativeMacros?.fatGrams : item.macros?.fatGrams}g`}
+                    color={theme.macroFat}
+                  />
+                )}
+              </View>
+            )}
+
+            {isAlt && (
+              <View style={s.doneGuideRow}>
+                <Ionicons name="sync-outline" size={13} color={theme.textMuted} />
+                <Text style={[s.doneGuideText, { color: theme.textMuted }]}>{flipGuideText}</Text>
+              </View>
             )}
           </TouchableOpacity>
+
+          <View style={[s.doneDivider, { backgroundColor: theme.border }]} />
+          <View style={s.doneActionRow}>
+            <TouchableOpacity
+              style={[
+                s.doneDetailBtn,
+                {
+                  backgroundColor: contextualRecipeAvailable ? statusSurface : theme.surfaceElevated,
+                  borderColor: contextualRecipeAvailable ? statusBorder : theme.border,
+                },
+              ]}
+              onPress={contextualRecipeHandler}
+              disabled={!contextualRecipeAvailable}
+              activeOpacity={0.72}
+            >
+              <Ionicons
+                name="book-outline"
+                size={14}
+                color={contextualRecipeAvailable ? accentColor : theme.textMuted}
+              />
+              <Text style={[s.doneDetailBtnTxt, { color: contextualRecipeAvailable ? accentColor : theme.textMuted }]}>
+                Tarifi Gör
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.doneUndoBtn, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
+              onPress={onUndo}
+              disabled={isActing}
+              activeOpacity={0.72}
+            >
+              {isActing ? (
+                <ActivityIndicator size="small" color={theme.textMuted} />
+              ) : (
+                <>
+                  <Ionicons name="arrow-undo-outline" size={14} color={theme.textSub} />
+                  <Text style={[s.doneUndoBtnTxt, { color: theme.textSub }]}>Geri Al</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </RNAnimated.View>
     </Animated.View>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   SKIPPED CARD — most compact, muted
+   SKIPPED CARD — compact, muted
 ═══════════════════════════════════════════════════════ */
 function SkippedCard({
   item, index, theme, onOpenDetail,
@@ -1165,29 +1508,38 @@ function SkippedCard({
 
   return (
     <Animated.View style={style}>
-      <TouchableOpacity
-        activeOpacity={0.84}
-        onPress={onOpenDetail}
-        style={[s.skippedCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
-      >
+      <View style={[s.skippedCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
         <View style={[s.cardStrip, { backgroundColor: theme.textMuted + "35" }]} />
 
-        <View style={s.skippedBody}>
-          <Text style={[s.cardTime, { color: theme.textMuted }]}>{item.time}</Text>
-          <View style={[s.mealIconWrap, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Ionicons name={meta.icon} size={15} color={theme.textMuted} />
+        <View style={s.skippedInner}>
+          {/* Info row */}
+          <View style={s.skippedBody}>
+            <Text style={[s.cardTime, { color: theme.textMuted }]}>{item.time}</Text>
+            <View style={[s.mealIconWrap, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Ionicons name={meta.icon} size={15} color={theme.textMuted} />
+            </View>
+            <View style={s.cardTitleBlock}>
+              <Text style={[s.cardTypeLabel, { color: theme.textMuted + "99" }]}>{meta.label}</Text>
+              <Text style={[s.skippedTitle, { color: theme.textMuted }]} numberOfLines={1}>
+                {item.title}
+              </Text>
+            </View>
+            <View style={[s.skippedBadge, { backgroundColor: theme.textMuted + "14", borderColor: theme.border }]}>
+              <Text style={[s.skippedBadgeTxt, { color: theme.textMuted }]}>Atlandı</Text>
+            </View>
           </View>
-          <View style={s.cardTitleBlock}>
-            <Text style={[s.cardTypeLabel, { color: theme.textMuted + "99" }]}>{meta.label}</Text>
-            <Text style={[s.skippedTitle, { color: theme.textMuted }]} numberOfLines={1}>
-              {item.title}
-            </Text>
-          </View>
-          <View style={[s.skippedBadge, { backgroundColor: theme.textMuted + "14" }]}>
-            <Text style={[s.skippedBadgeTxt, { color: theme.textMuted }]}>Atlandı</Text>
-          </View>
+
+          {/* Detay button */}
+          <TouchableOpacity
+            style={[s.skippedDetailBtn, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            onPress={onOpenDetail}
+            activeOpacity={0.72}
+          >
+            <Ionicons name="eye-outline" size={12} color={theme.textSub} />
+            <Text style={[s.skippedDetailBtnTxt, { color: theme.textSub }]}>Detay</Text>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 }
@@ -1301,6 +1653,37 @@ const s = StyleSheet.create({
   root:    { flex: 1 },
   centered:{ justifyContent: "center", alignItems: "center" },
   scroll:  { paddingHorizontal: spacing.lg, paddingTop: spacing.xl + 18 },
+  planToastWrap: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    zIndex: 30,
+  },
+  planToastCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  planToastIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  planToastContent: { flex: 1, gap: 3 },
+  planToastTitle: { fontSize: 13, fontWeight: "900" },
+  planToastBody: { fontSize: 12, fontWeight: "600", lineHeight: 18 },
   bottomPad: { height: 132 },
   screenGlowA: {
     position: "absolute",
@@ -1496,13 +1879,13 @@ const s = StyleSheet.create({
 
   /* ── Section Header ── */
   sectionHeaderRow: {
-    flexDirection: "row", alignItems: "center", gap: 7,
-    marginTop: spacing.md, marginBottom: spacing.sm,
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginTop: spacing.lg, marginBottom: spacing.sm,
   },
-  sectionHeaderDot:   { width: 5, height: 5, borderRadius: 3 },
-  sectionHeaderLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.7, flex: 1 },
-  sectionHeaderPill:  { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
-  sectionHeaderCount: { fontSize: 10, fontWeight: "800" },
+  sectionHeaderLine: { width: 3, height: 14, borderRadius: 2 },
+  sectionHeaderLabel: { fontSize: 10.5, fontWeight: "800", letterSpacing: 1.1, flex: 1 },
+  sectionHeaderPill:  { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radii.full },
+  sectionHeaderCount: { fontSize: 11, fontWeight: "900" },
 
   /* ── Shared card pieces ── */
   cardStrip: { width: 3, alignSelf: "stretch", marginVertical: 10, marginLeft: 6, borderRadius: 2 },
@@ -1700,14 +2083,6 @@ const s = StyleSheet.create({
     gap: 6,
   },
   detailGhostBtnText: { fontSize: 13, fontWeight: "800" },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    alignSelf: "flex-end",
-    marginTop: 8,
-    paddingVertical: 3,
-  },
   detailRowText: { fontSize: 11, fontWeight: "700" },
 
   /* ── Pending card ── */
@@ -1735,32 +2110,91 @@ const s = StyleSheet.create({
   /* ── Done card ── */
   doneCard: {
     borderRadius: radii.xl, borderWidth: 1, marginBottom: spacing.sm,
-    flexDirection: "row", overflow: "hidden",
+    overflow: "hidden",
+    shadowColor: "#22c55e",
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 14, elevation: 4,
   },
-  doneBody: { flex: 1, paddingVertical: 10, paddingRight: spacing.md, paddingLeft: spacing.sm },
-  doneCardTitle: { fontSize: 13, fontWeight: "600" },
-  doneCheckBadge: {
-    flexDirection: "row", alignItems: "center", gap: 3,
+  doneAccentBar: { height: 3, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl },
+  doneBody: { padding: spacing.md, gap: 10 },
+  doneTopRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  doneTopMeta: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  doneBodyTouch: { gap: 10 },
+  doneBodyTouchAlt: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    padding: spacing.sm,
+  },
+  doneTypePill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: radii.full, borderWidth: 1,
-    paddingHorizontal: 7, paddingVertical: 3, flexShrink: 0,
   },
-  doneCheckTxt: { fontSize: 9.5, fontWeight: "800" },
-  undoRow: {
+  doneTypePillTxt: { fontSize: 11, fontWeight: "800" },
+  doneFaceSwitch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    padding: 3,
+  },
+  doneFaceOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: radii.full,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  doneFaceDot: { width: 6, height: 6, borderRadius: 3 },
+  doneFaceOptionText: { fontSize: 10.5, fontWeight: "800" },
+  doneStatusBadge: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    alignSelf: "flex-end", marginTop: 6, paddingVertical: 3,
+    borderRadius: radii.full, borderWidth: 1,
+    paddingHorizontal: 9, paddingVertical: 4,
   },
-  undoTxt: { fontSize: 11, fontWeight: "700" },
+  doneStatusTxt: { fontSize: 10, fontWeight: "900", letterSpacing: 0.2 },
+  doneTitleBlock: { gap: 3 },
+  doneTimeLabel: { fontSize: 11, fontWeight: "700" },
+  doneTitleTxt: { fontSize: 16, fontWeight: "800", lineHeight: 22, letterSpacing: -0.3 },
+  doneMacroRow: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  doneGuideRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  doneGuideText: { fontSize: 11.5, fontWeight: "600", lineHeight: 16 },
+  doneDivider: { height: 1, marginHorizontal: -spacing.md, opacity: 0.5 },
+  doneActionRow: { flexDirection: "row", gap: 8 },
+  doneDetailBtn: {
+    flex: 1,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
+  },
+  doneDetailBtnTxt: { fontSize: 13, fontWeight: "800" },
+  doneUndoBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingHorizontal: 18, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
+  },
+  doneUndoBtnTxt: { fontSize: 13, fontWeight: "700" },
 
   /* ── Skipped card ── */
   skippedCard: {
     borderRadius: radii.lg, borderWidth: 1, marginBottom: spacing.xs,
     flexDirection: "row", overflow: "hidden",
   },
-  skippedBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingRight: spacing.md, paddingLeft: spacing.sm },
+  skippedInner: { flex: 1, paddingVertical: 10, paddingRight: spacing.md, paddingLeft: spacing.sm, gap: 8 },
+  skippedBody: { flexDirection: "row", alignItems: "center", gap: 8 },
   skippedEmoji: { fontSize: 16, opacity: 0.55 },
   skippedTitle: { fontSize: 12, fontWeight: "600" },
-  skippedBadge: { borderRadius: radii.full, paddingHorizontal: 7, paddingVertical: 3, flexShrink: 0 },
+  skippedBadge: { borderRadius: radii.full, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3, flexShrink: 0 },
   skippedBadgeTxt: { fontSize: 9.5, fontWeight: "700" },
+  skippedDetailBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5,
+    paddingVertical: 8, borderRadius: radii.md, borderWidth: 1,
+  },
+  skippedDetailBtnTxt: { fontSize: 12, fontWeight: "700" },
 
   /* ── Plan card ── */
   planCard: {

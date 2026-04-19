@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, Animated, Linking } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, Animated, Linking, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import {
   NavigationContainer,
@@ -36,6 +36,8 @@ import TodayScreen from "../screens/TodayScreen";
 import HydrationScreen from "../screens/HydrationScreen";
 import WeeklySummaryScreen from "../screens/WeeklySummaryScreen";
 import MealLogScreen from "../screens/MealLogScreen";
+import BadgeVaultScreen from "../screens/BadgeVaultScreen";
+import ChangePasswordScreen from "../screens/ChangePasswordScreen";
 import OnboardingScreen, { ONBOARDING_DONE_KEY } from "../screens/OnboardingScreen";
 import {
   parseWidgetDeepLink,
@@ -118,6 +120,9 @@ function AppNavigator() {
   const navTheme = isDark
     ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: theme.bg } }
     : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: theme.bg } };
+  const stackAnimation = Platform.OS === "ios" ? "simple_push" : "fade_from_bottom";
+  const stackDuration = Platform.OS === "ios" ? 300 : 240;
+  const modalDuration = Platform.OS === "ios" ? 320 : 280;
 
   function flushPendingWidgetTarget() {
     if (
@@ -162,13 +167,19 @@ function AppNavigator() {
       theme={navTheme}
       onReady={flushPendingWidgetTarget}
     >
-      <Root.Navigator screenOptions={{ headerShown: false }}>
+      <Root.Navigator screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}>
         {!isAuthenticated ? (
           /* ── Unauthenticated: Auth stack ─────────────────────────── */
           <Root.Screen name="Auth">
             {() =>
               ready ? (
-                <Root.Navigator screenOptions={{ headerShown: false }}>
+                <Root.Navigator screenOptions={{
+                  headerShown: false,
+                  animation: stackAnimation,
+                  animationDuration: stackDuration,
+                  gestureEnabled: true,
+                  fullScreenGestureEnabled: true,
+                }}>
                   <Root.Screen name={Routes.Auth.Welcome} component={WelcomeScreen} />
                   <Root.Screen name={Routes.Auth.Login} component={LoginScreen} />
                   <Root.Screen name={Routes.Auth.Register} component={RegisterScreen} />
@@ -183,7 +194,12 @@ function AppNavigator() {
           <Root.Screen name="Free">
             {() =>
               ready ? (
-                <Root.Navigator screenOptions={{ headerShown: false }}>
+                <Root.Navigator screenOptions={{
+                  headerShown: false,
+                  animation: stackAnimation,
+                  animationDuration: stackDuration,
+                  gestureEnabled: true,
+                }}>
                   <Root.Screen name={Routes.Free.Home} component={FreeHomeScreen} />
                 </Root.Navigator>
               ) : (
@@ -196,13 +212,23 @@ function AppNavigator() {
           <Root.Screen name="App">
             {() =>
               ready ? (
-                <Root.Navigator screenOptions={{ headerShown: false }}>
-                  <Root.Screen name={Routes.App.Shell} component={AppShell} />
+                <Root.Navigator screenOptions={{
+                  headerShown: false,
+                  animation: stackAnimation,
+                  animationDuration: stackDuration,
+                  gestureEnabled: true,
+                  fullScreenGestureEnabled: true,
+                }}>
+                  <Root.Screen name={Routes.App.Shell} component={AppShell} options={{ animation: 'none' }} />
                   <Root.Screen name={Routes.App.Today} component={TodayScreen} />
                   <Root.Screen name={Routes.App.Hydration} component={HydrationScreen} />
                   <Root.Screen name={Routes.App.CheckIngredients} component={CheckIngredientsScreen} />
                   <Root.Screen name={Routes.App.AlternativeResult} component={AlternativeResultScreen} />
-                  <Root.Screen name={Routes.App.KitchenResult} component={KitchenResultScreen} />
+                  <Root.Screen
+                    name={Routes.App.KitchenResult}
+                    component={KitchenResultScreen}
+                    options={{ animation: 'fade', animationDuration: 320 }}
+                  />
                   <Root.Screen name={Routes.App.RecipeDetail} component={RecipeDetailScreen} />
                   <Root.Screen name={Routes.App.ProfileMeasurements} component={ProfileMeasurementsScreen} />
                   <Root.Screen name={Routes.App.ProfileNotifications} component={ProfileNotificationsScreen} />
@@ -213,15 +239,17 @@ function AppNavigator() {
                   <Root.Screen
                     name={Routes.App.IngredientScan}
                     component={IngredientScanScreen}
-                    options={{ presentation: 'modal' }}
+                    options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: modalDuration }}
                   />
                   <Root.Screen
                     name={Routes.App.BarcodeScan}
                     component={BarcodeScanScreen}
-                    options={{ presentation: 'modal' }}
+                    options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: modalDuration }}
                   />
-                  <Root.Screen name={Routes.App.WeeklySummary} component={WeeklySummaryScreen} />
-                  <Root.Screen name={Routes.App.MealLog} component={MealLogScreen} />
+                  <Root.Screen name={Routes.App.WeeklySummary} component={WeeklySummaryScreen} options={{ animation: 'fade_from_bottom', animationDuration: modalDuration }} />
+                  <Root.Screen name={Routes.App.MealLog} component={MealLogScreen} options={{ animation: 'fade_from_bottom', animationDuration: modalDuration }} />
+                  <Root.Screen name={Routes.App.BadgeVault} component={BadgeVaultScreen} />
+                  <Root.Screen name={Routes.App.ChangePassword} component={ChangePasswordScreen} />
                 </Root.Navigator>
               ) : (
                 <Splash />
@@ -230,7 +258,7 @@ function AppNavigator() {
           </Root.Screen>
         )}
         {/* Modal: accessible from both Free and App stacks via navigation.getParent() */}
-        <Root.Group screenOptions={{ presentation: "modal", headerShown: false }}>
+        <Root.Group screenOptions={{ presentation: "modal", headerShown: false, animation: 'slide_from_bottom', animationDuration: modalDuration }}>
           <Root.Screen name={Routes.Modal.ActivatePremium} component={PremiumActivationScreen} />
         </Root.Group>
       </Root.Navigator>
