@@ -40,6 +40,11 @@ import {
   PlusCircle,
   Reply,
   Trash2,
+  ChefHat,
+  Droplets,
+  MinusCircle,
+  Ruler,
+  Shuffle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -59,7 +64,7 @@ export default function ClientDetailPage() {
   const [appointmentLocation, setAppointmentLocation] = useState('');
 
   // Clinical measurement form state
-  const [activityFilter, setActivityFilter] = useState<'all' | 'plan' | 'meals' | 'measurements' | 'badges'>('all');
+  const [activityFilter, setActivityFilter] = useState<'all' | 'plan' | 'meals' | 'kitchen' | 'water' | 'measurements' | 'badges'>('all');
 
   const [mWeightKg, setMWeightKg] = useState('');
   const [mHeightCm, setMHeightCm] = useState('');
@@ -221,42 +226,57 @@ export default function ClientDetailPage() {
 
   function getActivityIcon(type: string) {
     switch (type) {
-      case 'meal_logged':      return <Utensils className="w-4 h-4" />;
-      case 'weight_update':   return <Weight className="w-4 h-4" />;
-      case 'login':           return <LogIn className="w-4 h-4" />;
-      case 'plan_assigned':   return <Calendar className="w-4 h-4" />;
-      case 'badge_unlocked':  return <CheckCircle2 className="w-4 h-4" />;
-      case 'streak_milestone':return <Activity className="w-4 h-4" />;
-      case 'streak_at_risk':  return <Clock3 className="w-4 h-4" />;
-      case 'compliance':      return <CheckCircle2 className="w-4 h-4" />;
-      default:                return <Activity className="w-4 h-4" />;
+      case 'meal_logged':        return <Utensils className="w-4 h-4" />;
+      case 'meal_alternative':   return <Shuffle className="w-4 h-4" />;
+      case 'meal_skipped':       return <MinusCircle className="w-4 h-4" />;
+      case 'kitchen_used':       return <ChefHat className="w-4 h-4" />;
+      case 'water_goal_hit':     return <Droplets className="w-4 h-4" />;
+      case 'measurement_logged': return <Ruler className="w-4 h-4" />;
+      case 'weight_update':      return <Weight className="w-4 h-4" />;
+      case 'login':              return <LogIn className="w-4 h-4" />;
+      case 'plan_assigned':      return <Calendar className="w-4 h-4" />;
+      case 'badge_unlocked':     return <CheckCircle2 className="w-4 h-4" />;
+      case 'streak_milestone':   return <Activity className="w-4 h-4" />;
+      case 'streak_at_risk':     return <Clock3 className="w-4 h-4" />;
+      case 'compliance':         return <CheckCircle2 className="w-4 h-4" />;
+      default:                   return <Activity className="w-4 h-4" />;
     }
   }
 
   function getActivityColorClass(type: string): string {
     switch (type) {
-      case 'meal_logged':      return 'bg-emerald-500/10 text-emerald-600';
-      case 'weight_update':   return 'bg-primary/10 text-primary';
-      case 'badge_unlocked':  return 'bg-amber-500/10 text-amber-600';
-      case 'streak_milestone':return 'bg-orange-500/10 text-orange-600';
-      case 'streak_at_risk':  return 'bg-destructive/10 text-destructive';
-      case 'plan_assigned':   return 'bg-primary/10 text-primary';
-      case 'compliance':      return 'bg-emerald-500/10 text-emerald-600';
-      default:                return 'bg-muted text-muted-foreground';
+      case 'meal_logged':        return 'bg-emerald-500/10 text-emerald-600';
+      case 'meal_alternative':   return 'bg-amber-500/10 text-amber-600';
+      case 'meal_skipped':       return 'bg-destructive/10 text-destructive';
+      case 'kitchen_used':       return 'bg-cyan-500/10 text-cyan-600';
+      case 'water_goal_hit':     return 'bg-cyan-500/10 text-cyan-600';
+      case 'measurement_logged': return 'bg-amber-500/10 text-amber-600';
+      case 'weight_update':      return 'bg-primary/10 text-primary';
+      case 'badge_unlocked':     return 'bg-amber-500/10 text-amber-600';
+      case 'streak_milestone':   return 'bg-orange-500/10 text-orange-600';
+      case 'streak_at_risk':     return 'bg-destructive/10 text-destructive';
+      case 'plan_assigned':      return 'bg-primary/10 text-primary';
+      case 'compliance':         return 'bg-emerald-500/10 text-emerald-600';
+      default:                   return 'bg-muted text-muted-foreground';
     }
   }
 
   function getActivityTitle(type: string): string {
     switch (type) {
-      case 'meal_logged':      return 'Öğün tamamlandı';
-      case 'weight_update':   return 'Ölçüm kaydedildi';
-      case 'login':           return 'Uygulamaya giriş';
-      case 'plan_assigned':   return 'Plan atandı';
-      case 'badge_unlocked':  return 'Rozet kazanıldı';
-      case 'streak_milestone':return 'Seri başarısı';
-      case 'streak_at_risk':  return 'Seri risk altında';
-      case 'compliance':      return 'Günlük uyum';
-      default:                return 'Aktivite';
+      case 'meal_logged':        return 'Öğün tamamlandı';
+      case 'meal_alternative':   return 'Alternatif öğün seçildi';
+      case 'meal_skipped':       return 'Öğün atlandı';
+      case 'kitchen_used':       return 'Mutfak kullanıldı';
+      case 'water_goal_hit':     return 'Su hedefi ulaşıldı';
+      case 'measurement_logged': return 'Ölçüm kaydedildi';
+      case 'weight_update':      return 'Kilo güncellendi';
+      case 'login':              return 'Uygulamaya giriş';
+      case 'plan_assigned':      return 'Plan atandı';
+      case 'badge_unlocked':     return 'Rozet kazanıldı';
+      case 'streak_milestone':   return 'Seri başarısı';
+      case 'streak_at_risk':     return 'Seri risk altında';
+      case 'compliance':         return 'Günlük uyum';
+      default:                   return 'Aktivite';
     }
   }
 
@@ -267,6 +287,20 @@ export default function ClientDetailPage() {
     switch (activity.type) {
       case 'meal_logged':
         return meta?.mealName ? `${meta.mealName}` : 'Öğün kaydedildi';
+      case 'meal_alternative':
+        return meta?.alternativeRecipeName
+          ? `${meta.alternativeRecipeName}`
+          : meta?.mealName
+          ? `${meta.mealName} yerine alternatif seçildi`
+          : 'Alternatif öğün seçildi';
+      case 'meal_skipped':
+        return meta?.mealName ? `${meta.mealName} atlandı` : 'Öğün atlandı';
+      case 'kitchen_used':
+        return meta?.recipeName ? `${meta.recipeName}` : 'Tarif oluşturuldu';
+      case 'water_goal_hit':
+        return meta?.glasses ? `${meta.glasses} bardak su içildi 💧` : 'Günlük su hedefine ulaşıldı';
+      case 'measurement_logged':
+        return meta?.weight != null ? `${meta.weight} kg` : 'Vücut ölçümü kaydedildi';
       case 'weight_update':
         return meta?.weight != null
           ? `${meta.weight} kg${meta.bmi ? ` · BMI ${meta.bmi}` : ''}`
@@ -428,6 +462,8 @@ export default function ClientDetailPage() {
                     { id: 'all',          label: 'Tümü' },
                     { id: 'plan',         label: 'Plan' },
                     { id: 'meals',        label: 'Öğünler' },
+                    { id: 'kitchen',      label: 'Mutfak' },
+                    { id: 'water',        label: 'Su' },
                     { id: 'measurements', label: 'Ölçümler' },
                     { id: 'badges',       label: 'Rozetler' },
                   ] as const
@@ -452,8 +488,10 @@ export default function ClientDetailPage() {
               const filtered = activities.filter(a => {
                 if (activityFilter === 'all') return true;
                 if (activityFilter === 'plan') return ['plan_assigned', 'plan_updated'].includes(a.type);
-                if (activityFilter === 'meals') return a.type === 'meal_logged';
-                if (activityFilter === 'measurements') return a.type === 'weight_update';
+                if (activityFilter === 'meals') return ['meal_logged', 'meal_alternative', 'meal_skipped'].includes(a.type);
+                if (activityFilter === 'kitchen') return a.type === 'kitchen_used';
+                if (activityFilter === 'water') return a.type === 'water_goal_hit';
+                if (activityFilter === 'measurements') return ['weight_update', 'measurement_logged'].includes(a.type);
                 if (activityFilter === 'badges') return ['badge_unlocked', 'streak_milestone', 'streak_at_risk'].includes(a.type);
                 return true;
               });

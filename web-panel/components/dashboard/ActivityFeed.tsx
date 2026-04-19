@@ -15,7 +15,9 @@ import {
   Flame,
   Gift,
   LucideIcon,
+  MinusCircle,
   Rabbit,
+  Ruler,
   Shuffle,
   Siren,
   Sparkles,
@@ -26,27 +28,37 @@ import {
 } from 'lucide-react';
 
 const ICON_MAP: Record<ActivityFeedItem['type'], LucideIcon> = {
-  client_linked: User,
-  login: User,
-  meal_logged: Utensils,
-  weight_update: Weight,
-  plan_assigned: Calendar,
-  compliance: CheckCircle2,
-  badge_unlocked: Trophy,
-  streak_milestone: Flame,
-  streak_at_risk: Siren,
+  client_linked:      User,
+  login:              User,
+  meal_logged:        Utensils,
+  meal_alternative:   Shuffle,
+  meal_skipped:       MinusCircle,
+  kitchen_used:       ChefHat,
+  water_goal_hit:     Droplets,
+  measurement_logged: Ruler,
+  weight_update:      Weight,
+  plan_assigned:      Calendar,
+  compliance:         CheckCircle2,
+  badge_unlocked:     Trophy,
+  streak_milestone:   Flame,
+  streak_at_risk:     Siren,
 };
 
 const COLOR_MAP: Record<ActivityFeedItem['type'], { bg: string; color: string }> = {
-  client_linked: { bg: 'rgba(71, 185, 114, 0.12)', color: 'var(--brand-emerald)' },
-  login: { bg: 'rgba(71, 185, 114, 0.12)', color: 'var(--brand-emerald)' },
-  meal_logged: { bg: 'rgba(87, 184, 199, 0.12)', color: 'var(--brand-accent)' },
-  weight_update: { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426' },
-  plan_assigned: { bg: 'rgba(122, 141, 214, 0.12)', color: '#6f82d8' },
-  compliance: { bg: 'rgba(71, 185, 114, 0.12)', color: 'var(--brand-emerald)' },
-  badge_unlocked: { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426' },
-  streak_milestone: { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)' },
-  streak_at_risk: { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)' },
+  client_linked:      { bg: 'rgba(71, 185, 114, 0.12)',  color: 'var(--brand-emerald)' },
+  login:              { bg: 'rgba(71, 185, 114, 0.12)',  color: 'var(--brand-emerald)' },
+  meal_logged:        { bg: 'rgba(87, 184, 199, 0.12)',  color: 'var(--brand-accent)'  },
+  meal_alternative:   { bg: 'rgba(227, 196, 93, 0.12)', color: '#b99426'               },
+  meal_skipped:       { bg: 'rgba(229, 126, 107, 0.10)', color: 'var(--brand-coral)'   },
+  kitchen_used:       { bg: 'rgba(87, 184, 199, 0.12)',  color: 'var(--brand-accent)'  },
+  water_goal_hit:     { bg: 'rgba(87, 184, 199, 0.16)',  color: 'var(--brand-accent)'  },
+  measurement_logged: { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426'               },
+  weight_update:      { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426'               },
+  plan_assigned:      { bg: 'rgba(122, 141, 214, 0.12)', color: '#6f82d8'              },
+  compliance:         { bg: 'rgba(71, 185, 114, 0.12)',  color: 'var(--brand-emerald)' },
+  badge_unlocked:     { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426'               },
+  streak_milestone:   { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)'  },
+  streak_at_risk:     { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)'  },
 };
 
 type BadgeVisual = {
@@ -159,7 +171,31 @@ function getDescription(activity: ActivityFeedItem): string {
     case 'login':
       return 'uygulamaya giriş yaptı';
     case 'meal_logged':
-      return `öğün kaydetti: ${activity.metadata?.mealName || ''}`;
+      return activity.metadata?.mealName
+        ? `öğünü tamamladı: ${activity.metadata.mealName}`
+        : 'öğünü tamamladı';
+    case 'meal_alternative':
+      return activity.metadata?.alternativeRecipeName
+        ? `alternatif öğün seçti: ${activity.metadata.alternativeRecipeName}`
+        : activity.metadata?.mealName
+        ? `alternatif öğün seçti (${activity.metadata.mealName})`
+        : 'alternatif öğün seçti';
+    case 'meal_skipped':
+      return activity.metadata?.mealName
+        ? `bir öğünü atladı (${activity.metadata.mealName})`
+        : 'bir öğünü atladı';
+    case 'kitchen_used':
+      return activity.metadata?.recipeName
+        ? `mutfak kullandı: ${activity.metadata.recipeName}`
+        : 'mutfak kullandı';
+    case 'water_goal_hit':
+      return activity.metadata?.glasses
+        ? `${activity.metadata.glasses} bardak su içti 💧`
+        : 'su hedefine ulaştı 💧';
+    case 'measurement_logged':
+      return activity.metadata?.weight
+        ? `ölçüm kaydetti: ${activity.metadata.weight} kg`
+        : 'ölçüm kaydetti';
     case 'weight_update':
       return `kilo güncelledi: ${activity.metadata?.weight || 0} kg`;
     case 'plan_assigned':

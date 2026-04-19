@@ -97,6 +97,11 @@ export interface ClientActivity {
   id: string;
   type:
     | 'meal_logged'
+    | 'meal_alternative'
+    | 'meal_skipped'
+    | 'kitchen_used'
+    | 'water_goal_hit'
+    | 'measurement_logged'
     | 'weight_update'
     | 'login'
     | 'plan_assigned'
@@ -112,6 +117,9 @@ export interface ClientActivity {
     isCompliant?: boolean;
     badgeId?: string;
     currentStreak?: number;
+    glasses?: number;
+    recipeName?: string;
+    alternativeRecipeName?: string;
   };
 }
 

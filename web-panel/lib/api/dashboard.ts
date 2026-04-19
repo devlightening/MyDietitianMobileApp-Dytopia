@@ -13,6 +13,11 @@ export interface ActivityFeedItem {
     | 'client_linked'
     | 'login'
     | 'meal_logged'
+    | 'meal_alternative'
+    | 'meal_skipped'
+    | 'kitchen_used'
+    | 'water_goal_hit'
+    | 'measurement_logged'
     | 'weight_update'
     | 'plan_assigned'
     | 'compliance'
@@ -30,6 +35,9 @@ export interface ActivityFeedItem {
     complianceRate?: number;
     badgeId?: string;
     currentStreak?: number;
+    glasses?: number;
+    recipeName?: string;
+    alternativeRecipeName?: string;
   };
 }
 

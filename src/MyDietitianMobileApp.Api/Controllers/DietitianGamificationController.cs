@@ -87,6 +87,7 @@ public class DietitianGamificationController : ControllerBase
                 timestamp = x.AtUtc,
                 metadata = ParseMetadata(x.MetaJson)
             })
+            .Where(x => x.type != null)
             .Cast<object>()
             .ToList();
 
@@ -130,20 +131,19 @@ public class DietitianGamificationController : ControllerBase
         return Ok(summary);
     }
 
-    private static string NormalizeActivityType(string type)
+    private static string? NormalizeActivityType(string type) => type switch
     {
-        return type switch
-        {
-            "badge_unlocked" => "badge_unlocked",
-            "streak_milestone" => "streak_milestone",
-            "streak_at_risk" => "streak_at_risk",
-            "KITCHEN_MERGE_DONE" => "meal_logged",
-            "meal_done" => "meal_logged",
-            "meal_alternative" => "meal_logged",
-            "meal_skipped" => "compliance",
-            _ => type
-        };
-    }
+        "app_open"                 => "login",
+        "meal_done"                => "meal_logged",
+        "meal_alternative"         => "meal_alternative",
+        "meal_skipped"             => "meal_skipped",
+        "kitchen_recipe_generated" => "kitchen_used",
+        "KITCHEN_MERGE_DONE"       => "kitchen_used",
+        "water_goal_hit"           => "water_goal_hit",
+        "measurement_logged"       => "measurement_logged",
+        "care_message_sent"        => null,
+        _                          => type
+    };
 
     private static object? ParseMetadata(string? metaJson)
     {
