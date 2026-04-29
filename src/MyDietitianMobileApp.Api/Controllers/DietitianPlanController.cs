@@ -80,7 +80,7 @@ public class DietitianPlanController : ControllerBase
         var recipeIds = request.Meals.Select(m => m.RecipeId).Distinct().ToList();
         var existingRecipes = await _appDb.Recipes
             .Where(r => recipeIds.Contains(r.Id) &&
-                       (r.DietitianId == dietitianId || r.IsPublic) &&
+                       r.DietitianId == dietitianId &&
                        !r.IsArchived &&
                        !r.IsDemo &&
                        !r.IsDraft &&

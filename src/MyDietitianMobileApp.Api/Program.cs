@@ -524,6 +524,25 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    // Progress/tracking write operations: per-client throttling (water, steps, notes)
+    options.AddPolicy("progress-write", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"progress-write:{userId}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, token) =>
     {
@@ -812,6 +831,12 @@ using (var scope = app.Services.CreateScope())
 
             CREATE INDEX IF NOT EXISTS "IX_ClientCareMessages_DietitianId_CreatedAtUtc"
                 ON "ClientCareMessages" ("DietitianId", "CreatedAtUtc");
+
+            ALTER TABLE "ClientCareMessages"
+                ADD COLUMN IF NOT EXISTS "ReplyToId" uuid NULL;
+
+            ALTER TABLE "ClientCareMessages"
+                ADD COLUMN IF NOT EXISTS "ReplyToSnippet" character varying(140) NULL;
 
             CREATE TABLE IF NOT EXISTS "ClientAppointmentSummaries" (
                 "Id" uuid NOT NULL PRIMARY KEY,

@@ -19,38 +19,45 @@ export function SettingsCard({
   className,
   variant = 'default',
 }: SettingsCardProps) {
+  const isDanger = variant === 'danger';
+
   return (
-    <div
+    <section
       className={cn(
-        'rounded-xl border p-6',
-        variant === 'danger'
+        'overflow-hidden rounded-[30px] border p-6 shadow-[var(--shadow-card)] transition-colors',
+        isDanger
           ? 'border-red-200 bg-red-50/40 dark:border-red-900/30 dark:bg-red-950/20'
-          : 'bg-card border-border',
+          : 'bg-[var(--surface-raised)] border-[var(--border-default)]',
         className
       )}
     >
-      <div className="flex items-center gap-2 mb-5">
-        <Icon
+      <div className="mb-6 flex items-start gap-4">
+        <span
           className={cn(
-            'w-5 h-5',
-            variant === 'danger' ? 'text-red-500' : 'text-primary'
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border',
+            isDanger
+              ? 'border-red-200 bg-red-100/80 text-red-600 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-400'
+              : 'border-[var(--border-emerald-dim)] bg-[var(--brand-primary-soft)] text-[var(--brand-emerald)]'
           )}
-        />
-        <div>
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
           <h2
             className={cn(
-              'text-base font-semibold',
-              variant === 'danger' ? 'text-red-700 dark:text-red-400' : 'text-foreground'
+              'text-[1.05rem] font-semibold tracking-[-0.02em]',
+              isDanger ? 'text-red-700 dark:text-red-400' : 'text-foreground'
             )}
           >
             {title}
           </h2>
-          {description && (
-            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-          )}
+          {description ? (
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+          ) : null}
         </div>
       </div>
+
       {children}
-    </div>
+    </section>
   );
 }

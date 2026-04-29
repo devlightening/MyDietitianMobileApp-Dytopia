@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -179,7 +179,7 @@ export default function LoginScreen() {
               <Ionicons name="lock-closed-outline" size={18} color={focusedField === 'password' ? theme.primary : theme.textMuted} />
               <TextInput
                 style={[s.input, { color: theme.text }]}
-                placeholder="••••••••"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 placeholderTextColor={theme.textMuted}
                 secureTextEntry={!showPw}
                 autoCorrect={false}
@@ -407,3 +407,4 @@ const s = StyleSheet.create({
   },
   devText: { fontSize: 12, fontWeight: '700' },
 });
+

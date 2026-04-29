@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+﻿import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   StatusBar, RefreshControl, Alert, TextInput, ActivityIndicator,
@@ -266,3 +266,4 @@ const s = StyleSheet.create({
   deleteBtn: { padding: 4 },
   logNotes: { fontSize: 13, marginTop: 8, lineHeight: 19 },
 });
+

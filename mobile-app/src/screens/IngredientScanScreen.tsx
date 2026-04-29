@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -270,7 +270,7 @@ export default function IngredientScanScreen() {
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[s.title, { color: theme.text, marginTop: spacing.lg }]}>Görsel analiz ediliyor</Text>
           <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Canonical ingredient hattına uygun adaylar hazırlanıyor.
+          Kanonik malzeme hattına uygun adaylar hazırlanıyor.
           </Text>
         </View>
       )}
@@ -374,7 +374,7 @@ export default function IngredientScanScreen() {
                           <View style={s.itemMain}>
                             <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
                             <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                              %{Math.round(item.confidence * 100)} • {item.matchedBy ?? item.mappingType}
+                              %{Math.round(item.confidence * 100)} â€¢ {item.matchedBy ?? item.mappingType}
                             </Text>
                             {item.detectedName !== item.canonicalName && (
                               <Text style={[s.itemRaw, { color: theme.textMuted }]}>"{item.detectedName}"</Text>
@@ -425,7 +425,7 @@ export default function IngredientScanScreen() {
                           <View style={s.itemMain}>
                             <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
                             <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                              %{Math.round(item.confidence * 100)} • {item.matchedBy ?? item.mappingType} • onay gerekli
+                              %{Math.round(item.confidence * 100)} â€¢ {item.matchedBy ?? item.mappingType} â€¢ onay gerekli
                             </Text>
                             {item.detectedName !== item.canonicalName && (
                               <Text style={[s.itemRaw, { color: theme.textMuted }]}>"{item.detectedName}"</Text>
@@ -712,3 +712,4 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
   },
 });
+

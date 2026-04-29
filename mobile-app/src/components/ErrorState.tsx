@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { radii, spacing } from '../theme/tokens';
 import { useTheme } from '../context/ThemeContext';
@@ -14,10 +14,10 @@ export default function ErrorState({ error, onRetry, onLogout }: ErrorStateProps
   const { theme } = useTheme();
 
   const content = (() => {
-    if (error.type === 'Unauthorized') return { icon: '🔒', title: 'Oturum Süreniz Doldu', action: onLogout ? { label: 'Giriş Yap', fn: onLogout } : null };
-    if (error.type === 'NotFound')      return { icon: '🔍', title: 'Bağlantı Kurulamadı',  action: { label: 'Tekrar Dene', fn: onRetry } };
-    if (error.type === 'NetworkError')  return { icon: '📡', title: 'Bağlantı Hatası',       action: { label: 'Tekrar Dene', fn: onRetry } };
-    return { icon: '⚠️', title: 'Sunucu Hatası', action: { label: 'Tekrar Dene', fn: onRetry } };
+    if (error.type === 'Unauthorized') return { icon: 'ğŸ”’', title: 'Oturum Süreniz Doldu', action: onLogout ? { label: 'Giriş Yap', fn: onLogout } : null };
+    if (error.type === 'NotFound')      return { icon: 'ğŸ”', title: 'Bağlantı Kurulamadı',  action: { label: 'Tekrar Dene', fn: onRetry } };
+    if (error.type === 'NetworkError')  return { icon: 'ğŸ“¡', title: 'Bağlantı Hatası',       action: { label: 'Tekrar Dene', fn: onRetry } };
+    return { icon: 'âš ï¸', title: 'Sunucu Hatası', action: { label: 'Tekrar Dene', fn: onRetry } };
   })();
 
   return (
@@ -45,3 +45,4 @@ const s = StyleSheet.create({
   button: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radii.lg, minWidth: 140 },
   buttonText: { color: '#FFF', fontSize: 15, fontWeight: '700', textAlign: 'center' },
 });
+

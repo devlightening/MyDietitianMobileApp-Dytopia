@@ -1,11 +1,11 @@
-import apiClient from "./client";
+﻿import apiClient from "./client";
 import type {
   AlternativeDecisionRequest,
   AlternativeDecisionResponse,
   Ingredient,
 } from "../types/alternative";
 
-// ─── Recipe Plan Context ───────────────────────────────────────────────────────
+// â”€â”€â”€ Recipe Plan Context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface RecipeIngredientItem {
   id: string;
@@ -17,10 +17,10 @@ export interface RecipePlanContext {
   recipeName: string;
   description: string;
   steps: string[];
-  caloriesKcal?: number;
-  proteinGrams?: number;
-  carbsGrams?: number;
-  fatGrams?: number;
+  caloriesKcal?: number | null;
+  proteinGrams?: number | null;
+  carbsGrams?: number | null;
+  fatGrams?: number | null;
   ingredients: {
     mandatory: RecipeIngredientItem[];
     optional: RecipeIngredientItem[];
@@ -58,7 +58,7 @@ export async function searchIngredients(query: string): Promise<Ingredient[]> {
     // Extract the nested ingredients array from the paginated response envelope
     return res.data?.ingredients ?? [];
   } catch {
-    // Network/server error → show local fallback filtered by query
+    // Network/server error â†’ show local fallback filtered by query
     const q = query.trim().toLowerCase();
     return FALLBACK.filter((i) => i.canonicalName.toLowerCase().includes(q));
   }
@@ -68,3 +68,4 @@ export async function decideAlternative(payload: AlternativeDecisionRequest): Pr
   const res = await apiClient.post<AlternativeDecisionResponse>("/api/alternative/decide", payload);
   return res.data;
 }
+

@@ -9,6 +9,24 @@ namespace MyDietitianMobileApp.Infrastructure.Services
 {
     public class AlternativeMealDecisionService : IAlternativeMealDecisionService
     {
+        private const int MaxAlternatives = 5;
+
+        // Maximum number of missing mandatory ingredients still allowed in the alternative pool.
+        // Recipes missing 1-3 mandatory ingredients are shown but ranked below fully-cookable ones.
+        private const int MaxMissingForAlternative = 3;
+
+        // Nutritional tolerance bands (fraction of target value)
+        private const decimal ProteinTolerance  = 0.20m; // ±20%
+        private const decimal CalorieTolerance  = 0.20m; // ±20%
+        private const decimal FatTolerance      = 0.25m; // ±25%
+        private const decimal CarbsTolerance    = 0.30m; // ±30%
+
+        // Nutritional scoring weights (must sum to 100)
+        private const decimal ProteinWeight  = 40m;
+        private const decimal CalorieWeight  = 25m;
+        private const decimal FatWeight      = 25m;
+        private const decimal CarbsWeight    = 10m;
+
         private readonly AppDbContext _context;
         private readonly IRecipeRepository _recipeRepository;
         private readonly IRecipeRecommendationEngine _engine;
@@ -33,37 +51,23 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             Guid dietitianId,
             CancellationToken cancellationToken = default)
         {
-            // Get the planned recipe
             var allRecipes = await _recipeRepository.GetAllWithIngredientsAsync(cancellationToken);
             var plannedRecipe = allRecipes.FirstOrDefault(r => r.Id == plannedRecipeId);
-            
+
             if (plannedRecipe == null)
             {
-                // Log decision with missing planned recipe
                 await LogRecommendationAsync(
-                    flow: "alternative_decision",
-                    clientId: null,
-                    dietitianId: dietitianId,
-                    plannedRecipeId: plannedRecipeId,
-                    selectedRecipeId: null,
-                    originalCookable: false,
-                    matchPercentage: null,
-                    missingMandatoryCount: 0,
-                    prohibitedRejected: false,
-                    usedSubstitutes: false,
-                    missingMandatoryIds: Array.Empty<Guid>(),
-                    missingMandatoryNames: null,
-                    substituteUsages: null,
-                    additionalMeta: new { reason = "Planned recipe not found" },
-                    cancellationToken);
+                    "alternative_decision", null, dietitianId, plannedRecipeId, null,
+                    false, null, 0, false, false,
+                    Array.Empty<Guid>(), null, null,
+                    new { reason = "Planned recipe not found" }, cancellationToken);
 
                 return AlternativeMealDecision.NeedsAlternative(
                     new List<Guid>(),
-                    null,
+                    new List<AlternativeRecipeRecommendation>(),
                     "Planned recipe not found.");
             }
 
-            // Build evaluation context — substitutes populated from taxonomy compatibility rules.
             var plannedSubstituteData = await BuildSubstitutesForRecipesAsync(
                 new[] { plannedRecipe }, cancellationToken);
 
@@ -77,7 +81,6 @@ namespace MyDietitianMobileApp.Infrastructure.Services
 
             if (evaluation.Rejected || evaluation.MissingMandatoryCount > 0 || !evaluation.Explanation.IsCookable)
             {
-                // Missing mandatory or prohibited conflict - find alternative
                 var missingNames = plannedRecipe.MandatoryIngredients
                     .Where(i => evaluation.MissingMandatoryIngredientIds.Contains(i.Id))
                     .Select(i => i.CanonicalName)
@@ -89,169 +92,309 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                         ? $"Missing mandatory ingredients: {string.Join(", ", missingNames)}"
                         : "Recipe is not cookable with available ingredients.";
 
-                var alternativeDecision = await FindBestAlternativeAsync(
-                    plannedRecipe,
-                    mealType,
-                    clientAvailableIngredients,
-                    dietitianId,
-                    reason,
-                    cancellationToken);
-
-                IReadOnlyCollection<(string Required, string Substitute)>? substituteUsages = null;
+                var alternatives = await FindAlternativesAsync(
+                    plannedRecipe, mealType, clientAvailableIngredients, dietitianId, allRecipes, cancellationToken);
 
                 await LogRecommendationAsync(
-                    flow: "alternative_decision",
-                    clientId: null,
-                    dietitianId: dietitianId,
-                    plannedRecipeId: plannedRecipe.Id,
-                    selectedRecipeId: alternativeDecision.AlternativeRecommendation?.RecipeId,
-                    originalCookable: false,
-                    matchPercentage: null,
-                    missingMandatoryCount: evaluation.MissingMandatoryCount,
-                    prohibitedRejected: evaluation.Explanation.RejectedBecauseProhibited,
-                    usedSubstitutes: evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
-                    missingMandatoryIds: evaluation.MissingMandatoryIngredientIds,
-                    missingMandatoryNames: missingNames,
-                    substituteUsages: substituteUsages,
-                    additionalMeta: new { reason },
-                    cancellationToken);
+                    "alternative_decision", null, dietitianId, plannedRecipe.Id,
+                    alternatives.FirstOrDefault()?.RecipeId,
+                    false, null, evaluation.MissingMandatoryCount,
+                    evaluation.Explanation.RejectedBecauseProhibited,
+                    evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
+                    evaluation.MissingMandatoryIngredientIds, missingNames, null,
+                    new { reason }, cancellationToken);
 
-                return alternativeDecision;
+                return AlternativeMealDecision.NeedsAlternative(
+                    evaluation.MissingMandatoryIngredientIds.ToList(),
+                    alternatives,
+                    reason);
             }
 
-            // Check match percentage threshold (80%) for original recipe
             var percentage = evaluation.MatchPercentage;
             if (percentage >= 80m)
             {
-                var decision = AlternativeMealDecision.CanCook(
-                    $"You have {percentage:F0}% of ingredients for {plannedRecipe.Name}. You can cook this recipe!");
-
                 await LogRecommendationAsync(
-                    flow: "alternative_decision",
-                    clientId: null,
-                    dietitianId: dietitianId,
-                    plannedRecipeId: plannedRecipe.Id,
-                    selectedRecipeId: plannedRecipe.Id,
-                    originalCookable: true,
-                    matchPercentage: percentage,
-                    missingMandatoryCount: 0,
-                    prohibitedRejected: false,
-                    usedSubstitutes: evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
-                    missingMandatoryIds: Array.Empty<Guid>(),
-                    missingMandatoryNames: null,
-                    substituteUsages: null,
-                    additionalMeta: new { },
-                    cancellationToken);
+                    "alternative_decision", null, dietitianId, plannedRecipe.Id, plannedRecipe.Id,
+                    true, percentage, 0, false,
+                    evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
+                    Array.Empty<Guid>(), null, null, new { }, cancellationToken);
 
-                return decision;
+                return AlternativeMealDecision.CanCook(
+                    $"You have {percentage:F0}% of ingredients for {plannedRecipe.Name}. You can cook this recipe!");
             }
 
-            // Below threshold: treat as low match and look for an alternative
-            var missingOptionalIds = plannedRecipe.OptionalIngredients
-                .Select(i => i.Id)
-                .Except(clientAvailableIngredients)
-                .ToList();
-
+            // Below 80% threshold — find alternatives
             var missingOptionalNames = plannedRecipe.OptionalIngredients
-                .Where(i => missingOptionalIds.Contains(i.Id))
+                .Where(i => !clientAvailableIngredients.Contains(i.Id))
                 .Select(i => i.CanonicalName)
                 .ToList();
 
-            var lowMatchExplanation = $"You only have {percentage:F0}% of ingredients. Missing optional ingredients: {string.Join(", ", missingOptionalNames)}";
-
-            var altDecision = await FindBestAlternativeAsync(
-                plannedRecipe,
-                mealType,
-                clientAvailableIngredients,
-                dietitianId,
-                lowMatchExplanation,
-                cancellationToken);
+            var lowMatchAlternatives = await FindAlternativesAsync(
+                plannedRecipe, mealType, clientAvailableIngredients, dietitianId, allRecipes, cancellationToken);
 
             await LogRecommendationAsync(
-                flow: "alternative_decision",
-                clientId: null,
-                dietitianId: dietitianId,
-                plannedRecipeId: plannedRecipe.Id,
-                selectedRecipeId: altDecision.AlternativeRecommendation?.RecipeId,
-                originalCookable: false,
-                matchPercentage: percentage,
-                missingMandatoryCount: 0,
-                prohibitedRejected: false,
-                usedSubstitutes: evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
-                missingMandatoryIds: Array.Empty<Guid>(),
-                missingMandatoryNames: missingOptionalNames,
-                substituteUsages: null,
-                additionalMeta: new { lowMatch = true },
-                cancellationToken);
+                "alternative_decision", null, dietitianId, plannedRecipe.Id,
+                lowMatchAlternatives.FirstOrDefault()?.RecipeId,
+                false, percentage, 0, false,
+                evaluation.Explanation.UsedSubstituteIngredientIds.Any(),
+                Array.Empty<Guid>(), missingOptionalNames, null,
+                new { lowMatch = true }, cancellationToken);
 
-            return altDecision;
+            return AlternativeMealDecision.NeedsAlternative(
+                new List<Guid>(),
+                lowMatchAlternatives,
+                $"You only have {percentage:F0}% of ingredients. Looking for a better match.");
         }
 
-        private async Task<AlternativeMealDecision> FindBestAlternativeAsync(
+        /// <summary>
+        /// Returns up to <see cref="MaxAlternatives"/> recipe recommendations ordered by a combined score.
+        ///
+        /// Scoring formula per candidate:
+        ///   ingredientCoverage (40%) — fraction of mandatory ingredients the client already has
+        ///   nutritionalProximity (45%) — macro/calorie closeness to the original recipe
+        ///   cookabilityBonus  (15%) — flat bonus when ALL mandatory ingredients are present (via CombinedScore ctor)
+        ///
+        /// Pool: all dietitian recipes that are not archived/draft, excluding the original,
+        ///       with at most <see cref="MaxMissingForAlternative"/> missing mandatory ingredients.
+        ///       This ensures partial-match recipes appear when no fully-cookable alternatives exist
+        ///       and prevents the same top-5 list from appearing for every planned meal.
+        /// </summary>
+        private async Task<List<AlternativeRecipeRecommendation>> FindAlternativesAsync(
             Recipe originalRecipe,
             MealType mealType,
             List<Guid> clientAvailableIngredients,
             Guid dietitianId,
-            string reasonForAlternative,
+            IReadOnlyList<Recipe> allRecipes,
             CancellationToken cancellationToken)
         {
-            // Get all recipes for this dietitian (excluding the original recipe)
-            var allRecipes = await _recipeRepository.GetAllWithIngredientsAsync(cancellationToken);
-            var dietitianRecipes = allRecipes
-                .Where(r => r.DietitianId == dietitianId && r.Id != originalRecipe.Id)
+            // Filter candidate pool: same dietitian, not the original, not archived/draft
+            var candidates = allRecipes
+                .Where(r => r.DietitianId == dietitianId
+                         && r.Id != originalRecipe.Id
+                         && !r.IsArchived
+                         && !r.IsDraft)
                 .ToList();
 
-            if (!dietitianRecipes.Any())
-            {
-                return AlternativeMealDecision.NeedsAlternative(
-                    new List<Guid>(),
-                    null,
-                    $"{reasonForAlternative} No alternative recipes available.");
-            }
+            if (candidates.Count == 0)
+                return new List<AlternativeRecipeRecommendation>();
 
-            // Evaluate and rank alternative recipes using the shared engine.
-            // Substitutes for each alternative recipe's mandatory ingredients are resolved from taxonomy.
-            var altSubstituteData = await BuildSubstitutesForRecipesAsync(dietitianRecipes, cancellationToken);
-
+            var altSubstituteData = await BuildSubstitutesForRecipesAsync(candidates, cancellationToken);
             var context = new RecipeEvaluationContext(
                 availableIngredientIds: clientAvailableIngredients,
                 prohibitedIngredientIds: new List<Guid>(),
                 substitutesByRecipeAndRequired: altSubstituteData.SubstitutesByRecipeAndRequired,
                 substituteCompatibilityByRecipeRequiredAndCandidate: altSubstituteData.CompatibilityByRecipeRequiredAndCandidate);
 
-            var ranked = _engine.RankRecipes(dietitianRecipes, context);
-            var bestMatch = ranked.FirstOrDefault();
+            // Evaluate each candidate directly (bypasses the <=1 missing filter in RankRecipes)
+            // so partially-cookable recipes can still appear when fully-cookable ones are scarce.
+            var evaluated = candidates
+                .Select(c => _engine.EvaluateRecipe(c, context))
+                .Where(e => !e.Rejected)
+                .ToList();
 
-            if (bestMatch == null)
+            if (evaluated.Count == 0)
+                return new List<AlternativeRecipeRecommendation>();
+
+            var preferredPool = evaluated
+                .Where(e => e.MissingMandatoryCount <= MaxMissingForAlternative)
+                .ToList();
+
+            var recommendationPool = preferredPool.Count > 0 ? preferredPool : evaluated;
+
+            return recommendationPool
+                .Select(eval =>
+                {
+                    var recipe = eval.Recipe;
+                    var totalMandatory = recipe.MandatoryIngredients.Count;
+
+                    // Real ingredient coverage: percentage of mandatory ingredients the client has.
+                    // Using this instead of eval.MatchPercentage (which is always 0 when any
+                    // mandatory ingredient is missing) gives a meaningful gradient for ranking.
+                    var coveredMandatory = totalMandatory - eval.MissingMandatoryCount;
+                    var ingredientCoverageScore = totalMandatory > 0
+                        ? (decimal)coveredMandatory / totalMandatory * 100m
+                        : 0m;
+
+                    var isCookable = eval.MissingMandatoryCount == 0;
+                    var nutritionalScore = ComputeNutritionalScore(recipe, originalRecipe);
+                    var comparison = BuildNutritionalComparison(recipe, originalRecipe);
+                    var missingIngredientNames = recipe.MandatoryIngredients
+                        .Where(i => eval.MissingMandatoryIngredientIds.Contains(i.Id))
+                        .Select(i => i.CanonicalName)
+                        .ToList();
+                    var recommendationReasons = BuildRecommendationReasons(
+                        recipe,
+                        originalRecipe,
+                        ingredientCoverageScore,
+                        nutritionalScore,
+                        missingIngredientNames);
+                    var planAlignmentNote = BuildPlanAlignmentNote(ingredientCoverageScore, nutritionalScore);
+
+                    return new AlternativeRecipeRecommendation(
+                        recipeId: recipe.Id,
+                        recipeName: recipe.Name,
+                        matchPercentage: ingredientCoverageScore,
+                        missingIngredientsForAlternative: eval.MissingMandatoryIngredientIds.ToList(),
+                        missingIngredientNamesForAlternative: missingIngredientNames,
+                        nutritionalComparison: comparison,
+                        recommendationReasons: recommendationReasons,
+                        planAlignmentNote: planAlignmentNote,
+                        caloriesKcal: recipe.CaloriesKcal,
+                        proteinGrams: recipe.ProteinGrams,
+                        carbsGrams: recipe.CarbsGrams,
+                        fatGrams: recipe.FatGrams,
+                        nutritionalScore: nutritionalScore,
+                        isCookable: isCookable);
+                })
+                .OrderBy(r => r.MissingIngredientsForAlternative.Count)
+                .ThenByDescending(r => r.CombinedScore)
+                .ThenByDescending(r => r.MatchPercentage)
+                .ThenByDescending(r => r.NutritionalScore)
+                .Take(MaxAlternatives)
+                .ToList();
+        }
+
+        private static List<string> BuildRecommendationReasons(
+            Recipe candidate,
+            Recipe target,
+            decimal matchPercentage,
+            decimal nutritionalScore,
+            IReadOnlyCollection<string> missingIngredientNames)
+        {
+            var reasons = new List<string>();
+
+            if (nutritionalScore >= 85m)
             {
-                return AlternativeMealDecision.NeedsAlternative(
-                    new List<Guid>(),
-                    null,
-                    $"{reasonForAlternative} No suitable alternative recipes found (all have prohibited ingredients or missing mandatory ingredients).");
+                reasons.Add("Besin dengesi planlanan ogune cok yakin.");
+            }
+            else if (nutritionalScore >= 70m)
+            {
+                reasons.Add("Besin dengesi planlanan ogune yakin kalir.");
             }
 
-            var recommendation = new AlternativeRecipeRecommendation(
-                bestMatch.Recipe.Id,
-                bestMatch.Recipe.Name,
-                bestMatch.MatchPercentage,
-                bestMatch.MissingMandatoryIngredientIds.ToList(),
-                "Nutritional comparison not yet implemented"); // TODO: Add nutritional comparison
-            var explanation = $"{reasonForAlternative} We recommend '{bestMatch.Recipe.Name}' as an alternative ({bestMatch.MatchPercentage:F0}% ingredient match).";
+            if (HasStrongProteinMatch(candidate, target))
+            {
+                reasons.Add("Protein dengesi iyi korunur.");
+            }
 
-            return AlternativeMealDecision.NeedsAlternative(
-                new List<Guid>(),
-                recommendation,
-                explanation);
+            if (missingIngredientNames.Count == 0)
+            {
+                reasons.Add("Ek zorunlu malzeme gerektirmez.");
+            }
+            else if (missingIngredientNames.Count == 1)
+            {
+                reasons.Add($"Sadece {missingIngredientNames.First()} eklenirse hazirlanabilir.");
+            }
+
+            if (matchPercentage >= 85m)
+            {
+                reasons.Add("Elinizdeki malzemelerin buyuk coguyla hazirlanabilir.");
+            }
+            else if (matchPercentage >= 70m)
+            {
+                reasons.Add("Mutfaktaki malzemelerle buyuk olcude uyumludur.");
+            }
+
+            if (reasons.Count == 0)
+            {
+                reasons.Add("Planlanan ogune gore kontrollu bir esneklik sunar.");
+            }
+
+            return reasons
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(3)
+                .ToList();
+        }
+
+        private static bool HasStrongProteinMatch(Recipe candidate, Recipe target)
+        {
+            if (!candidate.ProteinGrams.HasValue || !target.ProteinGrams.HasValue || target.ProteinGrams.Value <= 0)
+                return false;
+
+            var diffRatio = Math.Abs(candidate.ProteinGrams.Value - target.ProteinGrams.Value) / target.ProteinGrams.Value;
+            return diffRatio <= 0.15m;
+        }
+
+        private static string BuildPlanAlignmentNote(decimal matchPercentage, decimal nutritionalScore)
+        {
+            var combinedScore = matchPercentage * 0.4m + nutritionalScore * 0.6m;
+
+            if (nutritionalScore >= 85m && matchPercentage >= 80m)
+                return "Plan uyumunu yuksek duzeyde korur.";
+
+            if (combinedScore >= 75m)
+                return "Plan akisina yakin kalir.";
+
+            if (nutritionalScore >= 65m)
+                return "Esnek bir tercih olarak dengeli kalir.";
+
+            return "Esnek bir secenektir; kucuk bir sapma yaratabilir.";
         }
 
         /// <summary>
-        /// For each recipe's mandatory ingredient, query the taxonomy service for
-        /// compatible substitutes (SubstituteAllowed or FamilyCompatible tier) and
-        /// return a dictionary keyed by (RecipeId, RequiredIngredientId).
-        ///
-        /// Ingredients that have no compatibility rules simply produce no entry,
-        /// so the engine falls back to requiring the exact ingredient.
+        /// Computes how nutritionally similar <paramref name="candidate"/> is to <paramref name="target"/>.
+        /// Returns 0–100 where 100 = perfect match on all tracked macros.
         /// </summary>
+        private static decimal ComputeNutritionalScore(Recipe candidate, Recipe target)
+        {
+            bool targetHasData = target.CaloriesKcal.HasValue || target.ProteinGrams.HasValue
+                              || target.CarbsGrams.HasValue  || target.FatGrams.HasValue;
+
+            bool candidateHasData = candidate.CaloriesKcal.HasValue || candidate.ProteinGrams.HasValue
+                                 || candidate.CarbsGrams.HasValue  || candidate.FatGrams.HasValue;
+
+            if (!targetHasData) return 50m; // neutral — cannot evaluate
+            if (!candidateHasData) return 0m;
+
+            decimal score = 0m;
+            decimal totalWeight = 0m;
+
+            void AddMacro(decimal? cVal, decimal? tVal, decimal tolerance, decimal weight)
+            {
+                if (!tVal.HasValue || tVal.Value <= 0 || !cVal.HasValue) return;
+                var diff = Math.Abs(cVal.Value - tVal.Value) / tVal.Value;
+                score += Math.Max(0m, 1m - diff / tolerance) * weight;
+                totalWeight += weight;
+            }
+
+            AddMacro(candidate.ProteinGrams, target.ProteinGrams, ProteinTolerance, ProteinWeight);
+            AddMacro(candidate.CaloriesKcal.HasValue ? (decimal)candidate.CaloriesKcal.Value : (decimal?)null,
+                     target.CaloriesKcal.HasValue    ? (decimal)target.CaloriesKcal.Value    : (decimal?)null,
+                     CalorieTolerance, CalorieWeight);
+            AddMacro(candidate.FatGrams, target.FatGrams, FatTolerance, FatWeight);
+            AddMacro(candidate.CarbsGrams, target.CarbsGrams, CarbsTolerance, CarbsWeight);
+
+            return totalWeight == 0m ? 0m : Math.Round(score / totalWeight * 100m, 1);
+        }
+
+        /// <summary>
+        /// Builds a human-readable nutritional delta string, e.g. "+3g Protein · −40 kcal".
+        /// </summary>
+        private static string BuildNutritionalComparison(Recipe candidate, Recipe target)
+        {
+            var parts = new List<string>();
+
+            void AddDelta(decimal? cVal, decimal? tVal, string unit, bool roundToInt = false)
+            {
+                if (!cVal.HasValue || !tVal.HasValue) return;
+                var diff = cVal.Value - tVal.Value;
+                if (Math.Abs(diff) < 1m) return;
+                var sign = diff > 0 ? "+" : "";
+                var formatted = roundToInt ? $"{sign}{(int)Math.Round(diff)}" : $"{sign}{diff:F0}";
+                parts.Add($"{formatted}{unit}");
+            }
+
+            AddDelta(candidate.ProteinGrams, target.ProteinGrams, "g Protein");
+            AddDelta(candidate.CaloriesKcal.HasValue ? (decimal)candidate.CaloriesKcal.Value : (decimal?)null,
+                     target.CaloriesKcal.HasValue    ? (decimal)target.CaloriesKcal.Value    : (decimal?)null,
+                     " kcal", roundToInt: true);
+            AddDelta(candidate.FatGrams, target.FatGrams, "g Yağ");
+            AddDelta(candidate.CarbsGrams, target.CarbsGrams, "g Karbonhidrat");
+
+            return string.Join(" · ", parts);
+        }
+
         private async Task<SubstituteResolutionData> BuildSubstitutesForRecipesAsync(
             IEnumerable<Recipe> recipes,
             CancellationToken cancellationToken)
@@ -264,8 +407,7 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                 foreach (var mandatory in recipe.MandatoryIngredients)
                 {
                     var key = (recipe.Id, mandatory.Id);
-                    if (result.ContainsKey(key))
-                        continue;
+                    if (result.ContainsKey(key)) continue;
 
                     var candidates = await _taxonomyService.GetCompatibleCandidatesAsync(
                         mandatory.Id,
@@ -275,14 +417,10 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                     if (candidates.Count > 0)
                     {
                         result[key] = new HashSet<Guid>(candidates.Select(c => c.Id));
-
                         foreach (var candidate in candidates)
                         {
                             var compatibilityType = await _taxonomyService.GetCompatibilityAsync(
-                                mandatory.Id,
-                                candidate.Id,
-                                cancellationToken);
-
+                                mandatory.Id, candidate.Id, cancellationToken);
                             compatibility[(recipe.Id, mandatory.Id, candidate.Id)] = compatibilityType;
                         }
                     }
@@ -297,69 +435,47 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             IReadOnlyDictionary<(Guid RecipeId, Guid RequiredIngredientId, Guid CandidateIngredientId), CompatibilityType> CompatibilityByRecipeRequiredAndCandidate);
 
         private async Task LogRecommendationAsync(
-            string flow,
-            Guid? clientId,
-            Guid? dietitianId,
-            Guid? plannedRecipeId,
-            Guid? selectedRecipeId,
-            bool originalCookable,
-            decimal? matchPercentage,
-            int missingMandatoryCount,
-            bool prohibitedRejected,
-            bool usedSubstitutes,
-            IReadOnlyCollection<Guid> missingMandatoryIds,
+            string flow, Guid? clientId, Guid? dietitianId,
+            Guid? plannedRecipeId, Guid? selectedRecipeId,
+            bool originalCookable, decimal? matchPercentage,
+            int missingMandatoryCount, bool prohibitedRejected,
+            bool usedSubstitutes, IReadOnlyCollection<Guid> missingMandatoryIds,
             IReadOnlyCollection<string>? missingMandatoryNames,
             IReadOnlyCollection<(string Required, string Substitute)>? substituteUsages,
-            object? additionalMeta,
-            CancellationToken cancellationToken)
+            object? additionalMeta, CancellationToken cancellationToken)
         {
             try
             {
-                var missingIdsJson = missingMandatoryIds != null && missingMandatoryIds.Count > 0
-                    ? System.Text.Json.JsonSerializer.Serialize(missingMandatoryIds)
-                    : null;
-
-                string? missingNamesJson = missingMandatoryNames != null && missingMandatoryNames.Count > 0
-                    ? System.Text.Json.JsonSerializer.Serialize(missingMandatoryNames)
-                    : null;
-
-                string? substituteUsageSummaryJson = substituteUsages != null && substituteUsages.Count > 0
+                var missingIdsJson = missingMandatoryIds?.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(missingMandatoryIds) : null;
+                var missingNamesJson = missingMandatoryNames?.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(missingMandatoryNames) : null;
+                var substituteJson = substituteUsages?.Count > 0
                     ? System.Text.Json.JsonSerializer.Serialize(
-                        substituteUsages.Select(s => new { required = s.Required, substitute = s.Substitute }))
-                    : null;
+                        substituteUsages.Select(s => new { required = s.Required, substitute = s.Substitute })) : null;
 
-                string? rejectionReasonSummary = null;
+                string? rejectionReason = null;
                 if (!originalCookable)
                 {
-                    if (prohibitedRejected)
-                        rejectionReasonSummary = "Prohibited ingredient conflict.";
-                    else if (missingMandatoryNames != null && missingMandatoryNames.Count > 0)
-                        rejectionReasonSummary = $"Missing: {string.Join(", ", missingMandatoryNames)}";
-                    else
-                        rejectionReasonSummary = "Recipe not cookable with available ingredients.";
+                    if (prohibitedRejected) rejectionReason = "Prohibited ingredient conflict.";
+                    else if (missingMandatoryNames?.Count > 0)
+                        rejectionReason = $"Missing: {string.Join(", ", missingMandatoryNames)}";
+                    else rejectionReason = "Recipe not cookable with available ingredients.";
                 }
 
-                string? additionalMetaJson = null;
-                if (additionalMeta != null)
-                    additionalMetaJson = System.Text.Json.JsonSerializer.Serialize(additionalMeta);
-
                 var log = new RecipeRecommendationLog(
-                    id: Guid.NewGuid(),
-                    flow: flow,
-                    clientId: clientId,
-                    dietitianId: dietitianId,
-                    plannedRecipeId: plannedRecipeId,
-                    selectedRecipeId: selectedRecipeId,
-                    originalCookable: originalCookable,
-                    matchPercentage: matchPercentage,
+                    id: Guid.NewGuid(), flow: flow,
+                    clientId: clientId, dietitianId: dietitianId,
+                    plannedRecipeId: plannedRecipeId, selectedRecipeId: selectedRecipeId,
+                    originalCookable: originalCookable, matchPercentage: matchPercentage,
                     missingMandatoryCount: missingMandatoryCount,
-                    prohibitedRejected: prohibitedRejected,
-                    usedSubstitutes: usedSubstitutes,
+                    prohibitedRejected: prohibitedRejected, usedSubstitutes: usedSubstitutes,
                     missingMandatoryIdsJson: missingIdsJson,
-                    rejectionReasonSummary: rejectionReasonSummary,
+                    rejectionReasonSummary: rejectionReason,
                     missingMandatoryNamesJson: missingNamesJson,
-                    substituteUsageSummaryJson: substituteUsageSummaryJson,
-                    additionalMetaJson: additionalMetaJson,
+                    substituteUsageSummaryJson: substituteJson,
+                    additionalMetaJson: additionalMeta != null
+                        ? System.Text.Json.JsonSerializer.Serialize(additionalMeta) : null,
                     correlationId: null);
 
                 _context.RecipeRecommendationLogs.Add(log);
@@ -367,7 +483,7 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             }
             catch
             {
-                // Logging must not break core decision flow
+                // Logging must not break the core decision flow
             }
         }
     }

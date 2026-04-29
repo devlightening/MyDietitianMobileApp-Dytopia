@@ -16,4 +16,10 @@ public sealed class NullVisionIngredientService : IVisionIngredientService
         string mediaType,
         CancellationToken cancellationToken = default)
         => Task.FromResult(VisionDetectionResult.Empty);
+
+    public Task<VisionDetectionResult> DetectReceiptItemsAsync(
+        string base64Image,
+        string mediaType,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(VisionDetectionResult.Empty);
 }

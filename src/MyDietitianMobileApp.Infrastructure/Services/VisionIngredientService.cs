@@ -2,19 +2,13 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MyDietitianMobileApp.Domain.Services;
 using Microsoft.Extensions.Logging;
+using MyDietitianMobileApp.Domain.Services;
 
 namespace MyDietitianMobileApp.Infrastructure.Services;
 
 /// <summary>
-/// GPT-4o Vision-based food detection service.
-///
-/// Strategy:
-///   1. Sends a base64 image inline to v1/chat/completions with a system prompt.
-///   2. Requests structured JSON: { "items": ["elma", "yumurta", ...] }
-///   3. Returns the raw item strings for downstream normalization.
-///   4. Any exception or API error → returns empty list (never propagates).
+/// GPT-4o Vision-based ingredient and receipt reader.
 /// </summary>
 public sealed class VisionIngredientService : IVisionIngredientService
 {
@@ -46,27 +40,70 @@ public sealed class VisionIngredientService : IVisionIngredientService
             : VisionFeatureStatus.Active;
     }
 
-    public async Task<VisionDetectionResult> DetectFoodNamesAsync(
+    public Task<VisionDetectionResult> DetectFoodNamesAsync(
         string base64Image,
         string mediaType,
         CancellationToken cancellationToken = default)
+    {
+        var prompt =
+            $"Gorseldeki yiyecekleri tani. Yalnizca bu listeden sec: {string.Join(", ", _options.ClosedSetCanonicalNames)}. " +
+            "Ambalajli veya konserve urunler de dahil, icerigini listele. " +
+            "Gorduklerini yaz, gormedigini yazma. Turkce, kucuk harf, tekil. " +
+            "JSON: {\"items\":[\"domates\",\"marul\"]}.";
+
+        return DetectItemsAsync(
+            base64Image,
+            mediaType,
+            prompt,
+            "Vision ingredient detection",
+            cancellationToken);
+    }
+
+    public Task<VisionDetectionResult> DetectReceiptItemsAsync(
+        string base64Image,
+        string mediaType,
+        CancellationToken cancellationToken = default)
+    {
+        const string prompt =
+            "Bu gorsel bir market fisi olabilir. Fisteki yenilebilir urun satirlarini ayikla ve pantry icin anlamli urun adlarini listele. " +
+            "Fiyat, adet, KDV, kampanya, toplam, kasa bilgisi ve fis numarasi gibi alanlari yok say. " +
+            "Marka varsa mumkunse sadelestir; urun turunu koru. " +
+            "Ornek: 'PINAR TAM YAGLI SUT 1L' -> 'sut', 'BANVIT TAVUK GOGSU' -> 'tavuk gogsu'. " +
+            "Yalnizca yenilebilir mutfak urunlerini dondur. Turkce, kucuk harf, kisa ve acik yaz. " +
+            "JSON: {\"items\":[\"sut\",\"yumurta\",\"domates\"]}.";
+
+        return DetectItemsAsync(
+            base64Image,
+            mediaType,
+            prompt,
+            "Receipt ingredient detection",
+            cancellationToken);
+    }
+
+    private async Task<VisionDetectionResult> DetectItemsAsync(
+        string base64Image,
+        string mediaType,
+        string systemPrompt,
+        string operationName,
+        CancellationToken cancellationToken)
     {
         try
         {
             var apiKey = _options.ApiKey ?? Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                _logger.LogWarning("Vision ingredient detection skipped: OPENAI_API_KEY is not configured.");
+                _logger.LogWarning("{Operation} skipped: OPENAI_API_KEY is not configured.", operationName);
                 return VisionDetectionResult.Empty;
             }
 
-            // Guard: base64 length (≈ 4/3 * raw bytes) against MaxImageBytes
             var approxBytes = (long)base64Image.Length * 3 / 4;
             if (approxBytes > _options.MaxImageBytes)
             {
                 _logger.LogWarning(
-                    "Vision: image too large ({Bytes} bytes approx, max {Max}). Skipping.",
-                    approxBytes, _options.MaxImageBytes);
+                    "{Operation}: image too large ({Bytes} bytes approx, max {Max}). Skipping.",
+                    operationName,
+                    approxBytes,
+                    _options.MaxImageBytes);
                 return VisionDetectionResult.Empty;
             }
 
@@ -75,7 +112,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
             var requestBody = new
             {
                 model = _options.ModelName,
-                max_tokens = 100,
+                max_tokens = 140,
                 temperature = 0.0,
                 response_format = new { type = "json_object" },
                 messages = new object[]
@@ -83,10 +120,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
                     new
                     {
                         role = "system",
-                        content = $"Görseldeki yiyecekleri tanı. Yalnızca bu listeden seç: {string.Join(", ", _options.ClosedSetCanonicalNames)}. " +
-                                  "Ambalajlı veya konserve ürünler de dahil, içeriğini listele. " +
-                                  "Gördüklerini yaz, görmediğini yazma. " +
-                                  "Türkçe, küçük harf, tekil. JSON: {\"items\":[\"domates\",\"marul\"]}."
+                        content = systemPrompt,
                     },
                     new
                     {
@@ -99,7 +133,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
                                 image_url = new
                                 {
                                     url = dataUri,
-                                    detail = "low"   // ~65 tokens — sufficient for food ID
+                                    detail = "low",
                                 }
                             }
                         }
@@ -125,7 +159,11 @@ public sealed class VisionIngredientService : IVisionIngredientService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Vision API error {Status}: {Body}", response.StatusCode, responseBody);
+                _logger.LogWarning(
+                    "{Operation} API error {Status}: {Body}",
+                    operationName,
+                    response.StatusCode,
+                    responseBody);
                 return VisionDetectionResult.Empty;
             }
 
@@ -133,12 +171,10 @@ public sealed class VisionIngredientService : IVisionIngredientService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Vision ingredient detection threw an exception. Returning empty list.");
+            _logger.LogWarning(ex, "{Operation} threw an exception. Returning empty list.", operationName);
             return VisionDetectionResult.Empty;
         }
     }
-
-    // ─── Response parsing ─────────────────────────────────────────────────────
 
     private VisionDetectionResult ParseResult(string responseBody)
     {
@@ -147,20 +183,21 @@ public sealed class VisionIngredientService : IVisionIngredientService
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
 
-            // ── Token usage ───────────────────────────────────────────────────
-            var promptTokens     = 0;
+            var promptTokens = 0;
             var completionTokens = 0;
             if (root.TryGetProperty("usage", out var usage))
             {
-                if (usage.TryGetProperty("prompt_tokens",     out var pt)) promptTokens     = pt.GetInt32();
+                if (usage.TryGetProperty("prompt_tokens", out var pt)) promptTokens = pt.GetInt32();
                 if (usage.TryGetProperty("completion_tokens", out var ct)) completionTokens = ct.GetInt32();
             }
 
             _logger.LogInformation(
                 "Vision API usage: model={Model} prompt_tokens={Prompt} completion_tokens={Completion} total={Total}",
-                _options.ModelName, promptTokens, completionTokens, promptTokens + completionTokens);
+                _options.ModelName,
+                promptTokens,
+                completionTokens,
+                promptTokens + completionTokens);
 
-            // ── Content parsing ───────────────────────────────────────────────
             var content = root
                 .GetProperty("choices")[0]
                 .GetProperty("message")
@@ -179,8 +216,8 @@ public sealed class VisionIngredientService : IVisionIngredientService
 
             return new VisionDetectionResult
             {
-                Items            = items,
-                PromptTokens     = promptTokens,
+                Items = items,
+                PromptTokens = promptTokens,
                 CompletionTokens = completionTokens,
             };
         }
@@ -190,8 +227,6 @@ public sealed class VisionIngredientService : IVisionIngredientService
             return VisionDetectionResult.Empty;
         }
     }
-
-    // ─── Internal DTO ─────────────────────────────────────────────────────────
 
     private sealed class VisionRawResponse
     {

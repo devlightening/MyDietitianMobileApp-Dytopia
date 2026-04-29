@@ -32,6 +32,8 @@ export const Routes = {
     Privacy: 'Privacy',
     RateApp: 'RateApp',
     IngredientScan: 'IngredientScan',
+    ReceiptScan: 'ReceiptScan',
+    Pantry: 'Pantry',
     BarcodeScan: 'BarcodeScan',
     WeeklySummary: 'WeeklySummary',
     MealLog: 'MealLog',

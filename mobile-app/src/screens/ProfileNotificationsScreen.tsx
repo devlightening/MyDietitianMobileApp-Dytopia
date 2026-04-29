@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -72,7 +72,7 @@ export default function ProfileNotificationsScreen() {
   }, [preferences]);
 
   const copy = useMemo(() => language === "tr" ? {
-    back: "← Geri",
+    back: "â† Geri",
     title: "Bildirimler",
     subtitle: "Su, öğün, ölçüm ve geri çağırma hatırlatıcılarını yönet.",
     permissionReady: "Bildirim izni aktif",
@@ -102,7 +102,7 @@ export default function ProfileNotificationsScreen() {
     timeStart: "Başlangıç",
     timeEnd: "Bitiş",
   } : {
-    back: "← Back",
+    back: "â† Back",
     title: "Notifications",
     subtitle: "Manage water, meal, measurement, and re-engagement reminders.",
     permissionReady: "Notifications enabled",
@@ -692,3 +692,4 @@ const s = StyleSheet.create({
   },
   primaryActionText: { color: "#FFF", fontSize: 14, fontWeight: "900" },
 });
+

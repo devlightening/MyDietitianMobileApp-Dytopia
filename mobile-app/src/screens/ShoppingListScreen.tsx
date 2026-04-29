@@ -16,6 +16,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
+import { Routes } from "../navigation/routes";
 import { radii, spacing } from "../theme/tokens";
 import ProduceBubble from "../components/decor/ProduceBubble";
 import AppEmptyState from "../components/ui/AppEmptyState";
@@ -54,8 +55,15 @@ export default function ShoppingListScreen() {
         eyebrow: "SMART GROCERY",
         title: "Shopping List",
         subtitle: "Missing ingredients from your plan and kitchen flow collect here.",
+        heroNoteTitle: "Stays in sync with your plan",
+        heroNoteBody: "Missing items from your meal flow and your own additions stay together in one place.",
         active: "active",
         checked: "checked",
+        totalItems: "items",
+        fromPlan: "from plan",
+        quickAddTitle: "Quick add",
+        quickAddHint: "Drop in pantry needs that are not in today plan.",
+        actionsTitle: "Quick actions",
         addPlaceholder: "Add a custom item",
         add: "Add item",
         generate: "Generate from today plan",
@@ -64,6 +72,8 @@ export default function ShoppingListScreen() {
         aiCountLabel: "items",
         emptyTitle: "Your list is fresh",
         emptyDesc: "Generate ingredients from your plan or add custom pantry needs.",
+        activeSection: "To buy",
+        completedSection: "Completed",
         sourcePlan: "Plan",
         sourceKitchen: "Kitchen",
         sourceRecipe: "Recipe",
@@ -75,8 +85,15 @@ export default function ShoppingListScreen() {
         eyebrow: "AKILLI LİSTE",
         title: "Alışveriş Listesi",
         subtitle: "Plan ve mutfak akışında eksik kalan malzemeler burada toplanır.",
+        heroNoteTitle: "Planınla senkron ilerler",
+        heroNoteBody: "Planından gelen eksikler ve senin eklediğin maddeler aynı listede toplanır.",
         active: "aktif",
         checked: "tamam",
+        totalItems: "ürün",
+        fromPlan: "plandan",
+        quickAddTitle: "Hızlı ekle",
+        quickAddHint: "Plan dışında kalan ihtiyaçlarını da aynı listede tut.",
+        actionsTitle: "Hızlı işlemler",
         addPlaceholder: "Listeye özel madde ekle",
         add: "Madde ekle",
         generate: "Bugünün planından üret",
@@ -85,6 +102,8 @@ export default function ShoppingListScreen() {
         aiCountLabel: "ürün",
         emptyTitle: "Listen hazır bekliyor",
         emptyDesc: "Planından malzeme üret veya kendi ihtiyaçlarını tek satırla ekle.",
+        activeSection: "Alınacaklar",
+        completedSection: "Tamamlananlar",
         sourcePlan: "Plan",
         sourceKitchen: "Mutfak",
         sourceRecipe: "Tarif",
@@ -120,6 +139,40 @@ export default function ShoppingListScreen() {
     () => items.filter((item) => item.isChecked),
     [items],
   );
+
+  const activeItems = useMemo(
+    () => items.filter((item) => !item.isChecked),
+    [items],
+  );
+
+  const planLinkedCount = useMemo(
+    () => items.filter((item) => item.sourceType === "TodayPlan" || item.sourceType === "Recipe").length,
+    [items],
+  );
+  const smartAssist = useMemo(() => {
+    if (summary.activeCount >= 6) {
+      return {
+        title: language === "tr" ? "Tek koşuda markete hazırsın" : "You are ready for one clean run",
+        body: language === "tr"
+          ? `${summary.activeCount} aktif madde var. Önce plan kaynaklı eksikleri kapat, sonra dolabı güncelle.`
+          : `${summary.activeCount} active items are waiting. Close plan-driven gaps first, then refresh the pantry.`,
+      };
+    }
+    if (generation?.generatedCount) {
+      return {
+        title: language === "tr" ? "Plan odaklı alışveriş akışı açıldı" : "Plan-led grocery flow is open",
+        body: language === "tr"
+          ? `${generation.generatedCount} yeni madde eklendi. Şimdi dolabınla karşılaştırıp gereksizleri ayıklayabilirsin.`
+          : `${generation.generatedCount} items were added. Now compare them with your pantry and trim the unnecessary ones.`,
+      };
+    }
+    return {
+      title: language === "tr" ? "Listeyi dolapla birlikte yönet" : "Run the list together with your pantry",
+      body: language === "tr"
+        ? "Evde olanlarla eksikleri ayırmak, mutfak tarafında daha temiz eşleşmeler verir."
+        : "Separating what is at home from what is missing creates cleaner kitchen matches.",
+    };
+  }, [generation?.generatedCount, language, summary.activeCount]);
 
   async function handleAdd() {
     const value = draft.trim();
@@ -191,12 +244,12 @@ export default function ShoppingListScreen() {
 
   async function handleShare() {
     if (items.length === 0) return;
-    const activeItems = items.filter(i => !i.isChecked);
+    const shareActiveItems = items.filter(i => !i.isChecked);
     const checkedItems = items.filter(i => i.isChecked);
     const lines: string[] = [];
-    if (activeItems.length > 0) {
+    if (shareActiveItems.length > 0) {
       lines.push(language === "tr" ? "🛒 Alınacaklar:" : "🛒 To buy:");
-      activeItems.forEach(i => lines.push(`• ${i.title}`));
+      shareActiveItems.forEach(i => lines.push(`• ${i.title}`));
     }
     if (checkedItems.length > 0) {
       lines.push("");
@@ -219,6 +272,63 @@ export default function ShoppingListScreen() {
       default:
         return copy.sourceManual;
     }
+  }
+
+  function renderShoppingItem(item: ShoppingListItem) {
+    return (
+      <TouchableOpacity
+        key={item.id}
+        activeOpacity={0.88}
+        style={[
+          s.itemCard,
+          {
+            backgroundColor: item.isChecked ? theme.surfaceElevated : theme.surface,
+            borderColor: item.isChecked ? `${theme.emerald}30` : theme.border,
+          },
+        ]}
+        onPress={() => void handleToggle(item)}
+      >
+        <View style={[s.checkWrap, { backgroundColor: item.isChecked ? theme.emerald : theme.surfaceElevated, borderColor: item.isChecked ? `${theme.emerald}22` : theme.border }]}>
+          <Ionicons
+            name={item.isChecked ? "checkmark" : "ellipse-outline"}
+            size={16}
+            color={item.isChecked ? "#FFFFFF" : theme.textMuted}
+          />
+        </View>
+        <View style={s.itemBody}>
+          <View style={s.itemTop}>
+            <Text
+              style={[
+                s.itemTitle,
+                { color: theme.text },
+                item.isChecked && { textDecorationLine: "line-through", color: theme.textMuted },
+              ]}
+            >
+              {item.title}
+            </Text>
+            <View style={[s.sourcePill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+              <Text style={[s.sourcePillTxt, { color: theme.emerald }]}>{sourceLabel(item.sourceType)}</Text>
+            </View>
+          </View>
+          {!!item.note && (
+            <Text style={[s.itemMeta, { color: theme.textMuted }]} numberOfLines={2}>
+              {item.note}
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={s.deleteTap}
+          onPress={() => void handleDelete(item)}
+          disabled={busyId === item.id}
+        >
+          {busyId === item.id ? (
+            <ActivityIndicator size="small" color={theme.textSub} />
+          ) : (
+            <Ionicons name="close-outline" size={22} color={theme.textSub} />
+          )}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
   }
 
   return (
@@ -262,51 +372,115 @@ export default function ShoppingListScreen() {
               <Text style={[s.eyebrowTxt, { color: theme.primaryDark }]}>{copy.eyebrow}</Text>
             </View>
             <View style={[s.counter, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-              <Text style={[s.counterNum, { color: theme.text }]}>{summary.activeCount}</Text>
-              <Text style={[s.counterTxt, { color: theme.textMuted }]}>{copy.active}</Text>
+              <Text style={[s.counterNum, { color: theme.text }]}>{summary.total}</Text>
+              <Text style={[s.counterTxt, { color: theme.textMuted }]}>{copy.totalItems}</Text>
             </View>
           </View>
           <Text style={[s.heroTitle, { color: theme.text }]}>{copy.title}</Text>
           <Text style={[s.heroSub, { color: theme.textSub }]}>{copy.subtitle}</Text>
 
+          <View style={[s.heroNoteCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+            <View style={[s.heroNoteIcon, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+              <Ionicons name="sparkles-outline" size={16} color={theme.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.heroNoteTitle, { color: theme.text }]}>{copy.heroNoteTitle}</Text>
+              <Text style={[s.heroNoteBody, { color: theme.textSub }]}>{copy.heroNoteBody}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[s.heroPantryLink, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+            onPress={() => (navigation as any).navigate(Routes.App.Pantry)}
+            activeOpacity={0.84}
+          >
+            <View style={[s.heroPantryIcon, { backgroundColor: `${theme.emerald}14`, borderColor: `${theme.emerald}28` }]}>
+              <Ionicons name="basket-outline" size={16} color={theme.emerald} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.heroPantryTitle, { color: theme.text }]}>
+                {language === "tr" ? "Dolabımı güncelle" : "Refresh pantry"}
+              </Text>
+              <Text style={[s.heroPantrySub, { color: theme.textSub }]}>
+                {language === "tr"
+                  ? "Evdeki malzemeleri aç, eksik listeni daha doğru yönet"
+                  : "Open what is at home and keep your list more accurate"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textSub} />
+          </TouchableOpacity>
+
           <View style={s.summaryRow}>
             <View style={[s.metricCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-              <Text style={[s.metricNum, { color: theme.primary }]}>{summary.total}</Text>
+              <Text style={[s.metricNum, { color: theme.primary }]}>{summary.activeCount}</Text>
               <Text style={[s.metricTxt, { color: theme.textMuted }]}>{copy.active}</Text>
             </View>
             <View style={[s.metricCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
               <Text style={[s.metricNum, { color: theme.emerald }]}>{summary.checkedCount}</Text>
               <Text style={[s.metricTxt, { color: theme.textMuted }]}>{copy.checked}</Text>
             </View>
+            <View style={[s.metricCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+              <Text style={[s.metricNum, { color: theme.accentCyan }]}>{planLinkedCount}</Text>
+              <Text style={[s.metricTxt, { color: theme.textMuted }]}>{copy.fromPlan}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[s.smartAssistCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+          <View style={[s.smartAssistIcon, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+            <Ionicons name="bulb-outline" size={16} color={theme.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.smartAssistTitle, { color: theme.text }]}>{smartAssist.title}</Text>
+            <Text style={[s.smartAssistBody, { color: theme.textSub }]}>{smartAssist.body}</Text>
           </View>
         </View>
 
         <View style={[s.composer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder={copy.addPlaceholder}
-            placeholderTextColor={theme.textMuted}
-            style={[s.input, { color: theme.text }]}
-          />
-          <TouchableOpacity
-            style={[s.inlineBtn, { backgroundColor: theme.primary }]}
-            onPress={handleAdd}
-            disabled={adding || !draft.trim()}
-          >
-            {adding ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={s.inlineBtnTxt}>{copy.add}</Text>}
-          </TouchableOpacity>
+          <View style={s.composerHead}>
+            <Text style={[s.composerTitle, { color: theme.text }]}>{copy.quickAddTitle}</Text>
+            <Text style={[s.composerHint, { color: theme.textMuted }]}>{copy.quickAddHint}</Text>
+          </View>
+          <View style={s.composerRow}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder={copy.addPlaceholder}
+              placeholderTextColor={theme.textMuted}
+              style={[s.input, { color: theme.text, backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+            />
+            <TouchableOpacity
+              style={[s.inlineBtn, { backgroundColor: theme.primary }]}
+              onPress={handleAdd}
+              disabled={adding || !draft.trim()}
+            >
+              {adding ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={s.inlineBtnTxt}>{copy.add}</Text>}
+            </TouchableOpacity>
+          </View>
         </View>
 
+        <Text style={[s.blockTitle, { color: theme.textMuted }]}>{copy.actionsTitle}</Text>
+        <TouchableOpacity
+          style={[s.generateCard, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}
+          onPress={handleGenerateFromPlan}
+          disabled={generating}
+          activeOpacity={0.86}
+        >
+          <View style={[s.generateIcon, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+            {generating ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="sparkles-outline" size={18} color={theme.primary} />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.generateTitle, { color: theme.text }]}>{copy.generate}</Text>
+            <Text style={[s.generateHint, { color: theme.textSub }]}>
+              {language === "tr"
+                ? "Bugünkü tariflerinden eksik kalan malzemeleri tek akışta çıkar."
+                : "Pull missing ingredients from today plan in one pass."}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.primary} />
+        </TouchableOpacity>
+
         <View style={s.actionRow}>
-          <TouchableOpacity
-            style={[s.actionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            onPress={handleGenerateFromPlan}
-            disabled={generating}
-          >
-            {generating ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="sparkles-outline" size={16} color={theme.primary} />}
-            <Text style={[s.actionBtnTxt, { color: theme.text }]}>{copy.generate}</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={[s.actionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
             onPress={handleClearChecked}
@@ -355,60 +529,29 @@ export default function ShoppingListScreen() {
           />
         ) : (
           <View style={s.list}>
-            {items.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.88}
-                style={[
-                  s.itemCard,
-                  {
-                    backgroundColor: item.isChecked ? theme.surfaceElevated : theme.surface,
-                    borderColor: item.isChecked ? `${theme.emerald}30` : theme.border,
-                  },
-                ]}
-                onPress={() => void handleToggle(item)}
-              >
-                <View style={[s.checkWrap, { backgroundColor: item.isChecked ? theme.emerald : theme.surfaceElevated, borderColor: item.isChecked ? `${theme.emerald}22` : theme.border }]}>
-                  <Ionicons
-                    name={item.isChecked ? "checkmark" : "ellipse-outline"}
-                    size={16}
-                    color={item.isChecked ? "#FFFFFF" : theme.textMuted}
-                  />
-                </View>
-                <View style={s.itemBody}>
-                  <View style={s.itemTop}>
-                    <Text
-                      style={[
-                        s.itemTitle,
-                        { color: theme.text },
-                        item.isChecked && { textDecorationLine: "line-through", color: theme.textMuted },
-                      ]}
-                    >
-                      {item.title}
-                    </Text>
-                    <View style={[s.sourcePill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
-                      <Text style={[s.sourcePillTxt, { color: theme.emerald }]}>{sourceLabel(item.sourceType)}</Text>
-                    </View>
+            {activeItems.length > 0 && (
+              <View style={s.sectionBlock}>
+                <View style={s.sectionHeader}>
+                  <Text style={[s.sectionTitle, { color: theme.text }]}>{copy.activeSection}</Text>
+                  <View style={[s.sectionCountPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                    <Text style={[s.sectionCountTxt, { color: theme.primary }]}>{activeItems.length}</Text>
                   </View>
-                  {!!item.note && (
-                    <Text style={[s.itemMeta, { color: theme.textMuted }]} numberOfLines={2}>
-                      {item.note}
-                    </Text>
-                  )}
                 </View>
-                <TouchableOpacity
-                  style={s.deleteTap}
-                  onPress={() => void handleDelete(item)}
-                  disabled={busyId === item.id}
-                >
-                  {busyId === item.id ? (
-                    <ActivityIndicator size="small" color={theme.textSub} />
-                  ) : (
-                    <Ionicons name="close-outline" size={22} color={theme.textSub} />
-                  )}
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
+                {activeItems.map(renderShoppingItem)}
+              </View>
+            )}
+
+            {completedItems.length > 0 && (
+              <View style={s.sectionBlock}>
+                <View style={s.sectionHeader}>
+                  <Text style={[s.sectionTitle, { color: theme.text }]}>{copy.completedSection}</Text>
+                  <View style={[s.sectionCountPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                    <Text style={[s.sectionCountTxt, { color: theme.emerald }]}>{completedItems.length}</Text>
+                  </View>
+                </View>
+                {completedItems.map(renderShoppingItem)}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -486,6 +629,45 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   heroSub: { fontSize: 13, lineHeight: 19, marginBottom: spacing.base },
+  heroNoteCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.base,
+  },
+  heroNoteIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroNoteTitle: { fontSize: 12, fontWeight: "800", marginBottom: 3 },
+  heroNoteBody: { fontSize: 12, lineHeight: 17 },
+  heroPantryLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.base,
+  },
+  heroPantryIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroPantryTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
+  heroPantrySub: { fontSize: 12, lineHeight: 17 },
   summaryRow: { flexDirection: "row", gap: spacing.sm },
   metricCard: {
     flex: 1,
@@ -496,19 +678,41 @@ const s = StyleSheet.create({
   },
   metricNum: { fontSize: 22, fontWeight: "900", marginBottom: 2 },
   metricTxt: { fontSize: 11, fontWeight: "700" },
-  composer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+  smartAssistCard: {
     borderWidth: 1,
     borderRadius: radii.xl,
-    padding: spacing.sm,
+    padding: spacing.md,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
+  smartAssistIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smartAssistTitle: { fontSize: 13.5, fontWeight: "800", marginBottom: 3 },
+  smartAssistBody: { fontSize: 11.5, lineHeight: 17 },
+  composer: {
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  composerHead: { marginBottom: spacing.sm, gap: 2 },
+  composerTitle: { fontSize: 14, fontWeight: "800" },
+  composerHint: { fontSize: 12, lineHeight: 17 },
+  composerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   input: {
     flex: 1,
     minHeight: 48,
     paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: radii.xl,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -520,14 +724,41 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   inlineBtnTxt: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  blockTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: spacing.xs,
+  },
+  generateCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.xxl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  generateIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  generateTitle: { fontSize: 15, fontWeight: "900", marginBottom: 4 },
+  generateHint: { fontSize: 12, lineHeight: 17 },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.base },
   aiCard: {
     borderWidth: 1,
-    borderRadius: radii.xl,
+    borderRadius: radii.xxl,
     padding: spacing.md,
     marginBottom: spacing.base,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing.sm,
   },
   aiIconWrap: {
@@ -570,6 +801,23 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   list: { gap: spacing.sm },
+  sectionBlock: { gap: spacing.sm },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: "900" },
+  sectionCountPill: {
+    minWidth: 36,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignItems: "center",
+  },
+  sectionCountTxt: { fontSize: 11, fontWeight: "900" },
   itemCard: {
     borderWidth: 1,
     borderRadius: radii.xl,
@@ -577,6 +825,11 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   checkWrap: {
     width: 42,

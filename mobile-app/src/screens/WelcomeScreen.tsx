@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+﻿import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -86,7 +86,7 @@ export default function WelcomeScreen() {
 
               <View style={[s.badge, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
                 <Ionicons name="heart-outline" size={14} color={theme.emerald} />
-                <Text style={[s.badgeText, { color: theme.emerald }]}>Fresh Wellness Experience</Text>
+                <Text style={[s.badgeText, { color: theme.emerald }]}>Yeni Nesil İyi Yaşam Deneyimi</Text>
               </View>
             </View>
 
@@ -340,3 +340,4 @@ const s = StyleSheet.create({
   },
   legalAccent: { fontWeight: '800' },
 });
+

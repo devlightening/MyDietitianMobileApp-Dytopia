@@ -44,6 +44,24 @@ public class DashboardDTO
     /// Motivation and streak metadata (premium only)
     /// </summary>
     public DashboardMotivationDTO? Motivation { get; set; }
+
+    /// <summary>
+    /// Latest plain-text dietitian note for the dashboard.
+    /// </summary>
+    public string? DietitianNote { get; set; }
+
+    /// <summary>
+    /// Optional structured mini task from the dietitian.
+    /// </summary>
+    public DashboardCoachTaskDTO? CoachTask { get; set; }
+}
+
+public class DashboardCoachTaskDTO
+{
+    public string ActionKey { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public string Cta { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -51,6 +69,9 @@ public class DashboardDTO
 /// </summary>
 public class NextMealDTO
 {
+    /// <summary>Card state: upcoming, all-complete, or no-plan.</summary>
+    public string Kind { get; set; } = "upcoming";
+
     /// <summary>PlanMealItem Id — used for navigation and completion actions</summary>
     public Guid? MealItemId { get; set; }
 

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+﻿import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { registerClient as registerClientAPI, loginClient as loginClientAPI, activatePremium as activatePremiumAPI } from '../api/auth';
 import { getClientState } from '../api/client-state';
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Token exists: set token and fetch fresh state from server
       setToken(storedToken);
 
-      // 🔥 CRITICAL: Always fetch fresh state from /api/client/me
+      // ğŸ”¥ CRITICAL: Always fetch fresh state from /api/client/me
       // This is the single source of truth for isPremium
       // Use ref guard to prevent multiple calls
       if (!didInitialRefresh.current) {
@@ -121,11 +121,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const state = await getClientState();
 
-      // 🔥 FORCE overwrite user state with server response
+      // ğŸ”¥ FORCE overwrite user state with server response
       // This ensures isPremium is always accurate
       setUser({
         publicUserId: state.publicUserId,
-        isPremium: state.isPremium, // 🔥 Single source of truth
+        isPremium: state.isPremium, // ğŸ”¥ Single source of truth
         activeDietitianId: state.activeDietitianId,
         gender: undefined, // Not returned by /api/client/me
         birthDate: undefined, // Not returned by /api/client/me
@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Silently changing the base URL after a failure masks misconfiguration and
       // causes unpredictable behaviour across sessions.
       //
-      // If FORCE=1 the developer explicitly pinned a URL — overriding it would
+      // If FORCE=1 the developer explicitly pinned a URL â€” overriding it would
       // defeat the purpose of the flag.  If FORCE is not set, auto-detection
       // already ran at module load time (config/api.ts) and the result is in the
       // startup diagnostic log printed by client.ts.
@@ -193,10 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // update .env, and restart Metro with: npx expo start --clear
       if (__DEV__ && error.code === 'ERR_NETWORK') {
         const isForced = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
-        console.error('❌ Login failed: ERR_NETWORK — transport/connectivity issue, not auth.');
+        console.error('âŒ Login failed: ERR_NETWORK â€” transport/connectivity issue, not auth.');
         console.error('   Configured URL:', process.env.EXPO_PUBLIC_API_BASE_URL ?? '(auto-detected)');
         if (isForced) {
-          console.error('   FORCE=1 is set — the URL above is authoritative and will NOT be overridden.');
+          console.error('   FORCE=1 is set â€” the URL above is authoritative and will NOT be overridden.');
           console.error('   Android emulator fix:');
           console.error('     adb reverse tcp:5000 tcp:5000');
           console.error('     dotnet run --launch-profile http');
@@ -235,10 +235,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    // ✅ Instant UI update - clear state first
+    // âœ… Instant UI update - clear state first
     setToken(null);
     setUser(null);
-    setIsStateLoaded(true); // ✅ token yok => state loaded sayılmalı
+    setIsStateLoaded(true); // âœ… token yok => state loaded sayılmalı
 
     // Clear React Query cache to prevent stale data
     try {
@@ -248,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn('Failed to clear query cache:', err);
     }
 
-    // ✅ storage cleanup (doesn't block UI)
+    // âœ… storage cleanup (doesn't block UI)
     try {
       await SecureStore.deleteItemAsync('access_token');
     } catch (e) {
@@ -309,3 +309,4 @@ export function useAuth() {
   }
   return context;
 }
+

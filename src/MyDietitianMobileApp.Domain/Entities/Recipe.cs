@@ -218,18 +218,29 @@ public class Recipe
     /// </summary>
     public void HydrateFromExplicitIngredients(
         IEnumerable<Ingredient> mandatoryIngredients,
-        IEnumerable<Ingredient> optionalIngredients)
+        IEnumerable<Ingredient> optionalIngredients,
+        IEnumerable<Ingredient>? prohibitedIngredients = null)
     {
-        if (_mandatoryIngredients.Count > 0 || _optionalIngredients.Count > 0)
-            return; // Already populated — do not overwrite
+        if (_mandatoryIngredients.Count == 0)
+        {
+            foreach (var ing in mandatoryIngredients)
+                if (_mandatoryIngredients.All(i => i.Id != ing.Id))
+                    _mandatoryIngredients.Add(ing);
+        }
 
-        foreach (var ing in mandatoryIngredients)
-            if (_mandatoryIngredients.All(i => i.Id != ing.Id))
-                _mandatoryIngredients.Add(ing);
+        if (_optionalIngredients.Count == 0)
+        {
+            foreach (var ing in optionalIngredients)
+                if (_optionalIngredients.All(i => i.Id != ing.Id))
+                    _optionalIngredients.Add(ing);
+        }
 
-        foreach (var ing in optionalIngredients)
-            if (_optionalIngredients.All(i => i.Id != ing.Id))
-                _optionalIngredients.Add(ing);
+        if (prohibitedIngredients != null && _prohibitedIngredients.Count == 0)
+        {
+            foreach (var ing in prohibitedIngredients)
+                if (_prohibitedIngredients.All(i => i.Id != ing.Id))
+                    _prohibitedIngredients.Add(ing);
+        }
     }
 
     public void SetSubstitutes(Guid requiredIngredientId, IEnumerable<Guid> substituteIngredientIds)

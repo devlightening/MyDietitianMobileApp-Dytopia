@@ -1,8 +1,5 @@
 namespace MyDietitianMobileApp.Application.DTOs;
 
-/// <summary>
-/// DTO for a daily meal plan returned to the client
-/// </summary>
 public class MealPlanDTO
 {
     public Guid Id { get; set; }
@@ -13,10 +10,6 @@ public class MealPlanDTO
     public DateTime UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// DTO for a single meal item within a plan.
-/// MealType and CompletionStatus are the key fields for mobile meal cards.
-/// </summary>
 public class MealItemDTO
 {
     public Guid Id { get; set; }
@@ -25,46 +18,45 @@ public class MealItemDTO
     public string Time { get; set; } = string.Empty;
 
     /// <summary>
-    /// Meal category as string: "Breakfast","MidMorning","Lunch","Afternoon","Dinner","Evening","Snack"
-    /// Mobile uses this to pick the right emoji and label.
+    /// Meal category: "Breakfast","MidMorning","Lunch","Afternoon","Dinner","Evening","Snack"
     /// </summary>
     public string MealType { get; set; } = "Snack";
 
-    /// <summary>Optional recipe linked to this meal (for Kitchen integration)</summary>
+    /// <summary>Planned recipe ID</summary>
     public Guid? RecipeId { get; set; }
 
-    /// <summary>Recipe name when RecipeId is set</summary>
+    /// <summary>Planned recipe name</summary>
     public string? RecipeName { get; set; }
 
     public string Title { get; set; } = string.Empty;
     public string? Note { get; set; }
     public int OrderIndex { get; set; }
+
+    /// <summary>Planned recipe calories</summary>
     public int? Calories { get; set; }
+
+    /// <summary>Planned recipe macros</summary>
     public MacrosDTO? Macros { get; set; }
 
-    /// <summary>
-    /// One of: "Planned" | "Done" | "Skipped" | "Alternative"
-    /// Replaces the old boolean IsCompleted.
-    /// </summary>
+    /// <summary>One of: "Planned" | "Done" | "Skipped" | "Alternative"</summary>
     public string CompletionStatus { get; set; } = "Planned";
 
     /// <summary>When CompletionStatus=Alternative, the recipe the client actually used</summary>
     public Guid? AlternativeRecipeId { get; set; }
 
-    /// <summary>
-    /// True when the client can act on this meal right now according to local day/time rules.
-    /// </summary>
+    /// <summary>Name of the alternative recipe (populated when AlternativeRecipeId is set)</summary>
+    public string? AlternativeRecipeName { get; set; }
+
+    /// <summary>Calories of the alternative recipe (populated when AlternativeRecipeId is set)</summary>
+    public int? AlternativeCalories { get; set; }
+
+    /// <summary>Macros of the alternative recipe (populated when AlternativeRecipeId is set)</summary>
+    public MacrosDTO? AlternativeMacros { get; set; }
+
     public bool IsActionableNow { get; set; }
-
-    /// <summary>
-    /// Local date key (yyyy-MM-dd) for when the meal becomes actionable.
-    /// </summary>
     public string? ActionBlockedUntilDate { get; set; }
-
-    /// <summary>
-    /// Local time key (HH:mm) for when the meal becomes actionable.
-    /// </summary>
     public string? ActionBlockedUntilTime { get; set; }
+    public string? FeedbackKey { get; set; }
 }
 
 public class MacrosDTO

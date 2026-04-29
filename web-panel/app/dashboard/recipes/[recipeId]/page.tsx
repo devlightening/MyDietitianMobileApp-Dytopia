@@ -75,7 +75,7 @@ function toInitialValue(recipe: RecipeDetail) {
 
 function toClonePayload(recipe: RecipeDetail): SaveRecipeRequest {
   return {
-    name: recipe.sourceType === 'general' ? `${recipe.name} Klinik Kopyası` : `${recipe.name} Kopya`,
+    name: `${recipe.name} Kopya`,
     description: recipe.description,
     isPublic: false,
     mandatoryIngredients: recipe.mandatoryIngredients.map((item) => item.id),
@@ -183,7 +183,7 @@ export default function RecipeDetailPage({ params }: { params: { recipeId: strin
     if (!recipe) return [];
 
     const badges: Array<{ label: string; variant?: 'primary' | 'secondary' | 'danger' }> = [
-      { label: recipe.sourceType === 'clinic' ? 'Klinik tarifi' : 'Genel kütüphane', variant: 'secondary' },
+      { label: 'Klinik tarifi', variant: 'secondary' },
     ];
 
     if (recipe.isFavorited) badges.push({ label: 'Favori', variant: 'primary' });
@@ -283,9 +283,7 @@ export default function RecipeDetailPage({ params }: { params: { recipeId: strin
             <div className="rounded-[22px] border border-border bg-card p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tarif aksiyonları</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                {recipe.canEdit
-                  ? 'Bu tarif kliniğinize ait. Düzenleme, kopyalama ve arşivleme işlemlerini buradan yönetebilirsiniz.'
-                  : 'Bu tarif genel kütüphaneden geliyor. Kliniğinize kopyalayıp özelleştirerek kullanabilirsiniz.'}
+                Bu tarif kliniğinize ait. Düzenleme, kopyalama ve arşivleme işlemlerini buradan yönetebilirsiniz.
               </p>
             </div>
 
@@ -300,28 +298,14 @@ export default function RecipeDetailPage({ params }: { params: { recipeId: strin
               </Button>
             </Link>
 
-            {recipe.canEdit ? (
-              <>
-                <Button variant="secondary" className="w-full" onClick={() => setIsEditing((current) => !current)}>
-                  <PencilLine className="h-4 w-4" />
-                  {isEditing ? 'Düzenlemeyi kapat' : 'Tarifi düzenle'}
-                </Button>
-                <Button variant="secondary" className="w-full" loading={cloneMutation.isPending} onClick={() => cloneMutation.mutate(false)}>
-                  <Copy className="h-4 w-4" />
-                  Kopyasını oluştur
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="secondary" className="w-full" loading={cloneMutation.isPending} onClick={() => cloneMutation.mutate(true)}>
-                  <Copy className="h-4 w-4" />
-                  Kliniğe kopyala ve düzenle
-                </Button>
-                <p className="rounded-[18px] border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-                  Genel tarifler doğrudan silinmez veya düzenlenmez. Önce kliniğinize kopyalayarak kendi akışınıza uyarlayabilirsiniz.
-                </p>
-              </>
-            )}
+            <Button variant="secondary" className="w-full" onClick={() => setIsEditing((current) => !current)}>
+              <PencilLine className="h-4 w-4" />
+              {isEditing ? 'Düzenlemeyi kapat' : 'Tarifi düzenle'}
+            </Button>
+            <Button variant="secondary" className="w-full" loading={cloneMutation.isPending} onClick={() => cloneMutation.mutate(false)}>
+              <Copy className="h-4 w-4" />
+              Kopyasını oluştur
+            </Button>
 
             {recipe.canDelete ? (
               <Button variant="danger" className="w-full" onClick={() => setConfirmDelete(true)}>

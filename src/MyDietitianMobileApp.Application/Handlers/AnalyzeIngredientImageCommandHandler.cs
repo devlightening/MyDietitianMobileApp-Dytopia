@@ -56,8 +56,11 @@ public class AnalyzeIngredientImageCommandHandler
             .ToHashSet(StringComparer.Ordinal);
 
         // Step 1: Call vision service — get raw food name strings + token usage
-        var detectionResult = await _visionService.DetectFoodNamesAsync(
-            request.Base64Image, request.MediaType, cancellationToken);
+        var detectionResult = request.ScanKind == VisionScanKind.Receipt
+            ? await _visionService.DetectReceiptItemsAsync(
+                request.Base64Image, request.MediaType, cancellationToken)
+            : await _visionService.DetectFoodNamesAsync(
+                request.Base64Image, request.MediaType, cancellationToken);
         var rawNames = detectionResult.Items;
 
         if (rawNames.Count == 0)

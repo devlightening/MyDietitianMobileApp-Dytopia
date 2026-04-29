@@ -1,5 +1,6 @@
 import apiClient from "./client";
 import type { Ingredient } from "../types/alternative";
+import type { AnalyzeImageResponse } from "./vision";
 
 export interface PantryItem {
   ingredientId: string;
@@ -28,4 +29,17 @@ export async function replacePantry(items: Ingredient[]): Promise<PantryItem[]> 
   });
 
   return res.data?.items ?? [];
+}
+
+export async function analyzeReceiptPantryImage(
+  base64Image: string,
+  mediaType: string = "image/jpeg",
+): Promise<AnalyzeImageResponse> {
+  const res = await apiClient.post<AnalyzeImageResponse>(
+    "/api/client/pantry/analyze-receipt",
+    { base64Image, mediaType },
+    { timeout: 35_000 },
+  );
+
+  return res.data;
 }

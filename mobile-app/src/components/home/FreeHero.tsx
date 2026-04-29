@@ -1,5 +1,5 @@
-/**
- * AURA CLINICAL OS — Free Hero
+﻿/**
+ * AURA CLINICAL OS â€” Free Hero
  * Kept for fallback use; main dashboard uses inline HeroCapsule
  */
 import React, { useEffect } from 'react';
@@ -131,3 +131,4 @@ const s = StyleSheet.create({
   },
   activateTxt: { fontSize: 12, fontWeight: '700' },
 });
+

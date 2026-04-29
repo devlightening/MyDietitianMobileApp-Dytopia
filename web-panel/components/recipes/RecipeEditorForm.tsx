@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChefHat, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { IngredientAutocomplete, IngredientOption } from '@/components/ingredients/IngredientAutocomplete';
 import { Button } from '@/components/ui/Button';
 import { SaveRecipeRequest } from '@/lib/api/recipes';
@@ -65,7 +65,6 @@ export function RecipeEditorForm({
   const [description, setDescription] = useState(DEFAULT_VALUE.description);
   const [tagsInput, setTagsInput] = useState('');
   const [stepsInput, setStepsInput] = useState('');
-  const [isPublic, setIsPublic] = useState(DEFAULT_VALUE.isPublic);
   const [prepTimeMinutes, setPrepTimeMinutes] = useState('');
   const [cookTimeMinutes, setCookTimeMinutes] = useState('');
   const [servings, setServings] = useState('');
@@ -82,7 +81,6 @@ export function RecipeEditorForm({
     setDescription(next.description);
     setTagsInput(next.tags.join(', '));
     setStepsInput(next.steps.join('\n'));
-    setIsPublic(next.isPublic);
     setPrepTimeMinutes(next.prepTimeMinutes ? String(next.prepTimeMinutes) : '');
     setCookTimeMinutes(next.cookTimeMinutes ? String(next.cookTimeMinutes) : '');
     setServings(next.servings ? String(next.servings) : '');
@@ -150,7 +148,7 @@ export function RecipeEditorForm({
     await onSubmit({
       name: name.trim(),
       description: description.trim(),
-      isPublic,
+      isPublic: false,
       mandatoryIngredients: ingredients.filter((item) => item.role === 'mandatory').map((item) => item.ingredientId),
       optionalIngredients: ingredients.filter((item) => item.role === 'optional').map((item) => item.ingredientId),
       flavoringIngredients: ingredients.filter((item) => item.role === 'flavoring').map((item) => item.ingredientId),
@@ -279,10 +277,10 @@ export function RecipeEditorForm({
       </label>
 
       <label className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-foreground">
-        <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} />
+        <span className="h-4 w-4 rounded-full bg-primary/15" />
         <span className="inline-flex items-center gap-2">
-          <ChefHat className="h-4 w-4 text-primary" />
-          Genel tarif havuzunda da görünsün
+          <span className="font-semibold text-foreground">Klinik-özel</span>
+          Bu panelden oluşturulan tarifler yalnızca sizin kliniğinizde görünür.
         </span>
       </label>
 

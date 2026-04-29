@@ -255,6 +255,12 @@ namespace MyDietitianMobileApp.Infrastructure.Migrations
                     b.Property<DateTime?>("ReadAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ReplyToId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReplyToSnippet")
+                        .HasColumnType("text");
+
                     b.Property<string>("SenderRole")
                         .IsRequired()
                         .HasMaxLength(32)

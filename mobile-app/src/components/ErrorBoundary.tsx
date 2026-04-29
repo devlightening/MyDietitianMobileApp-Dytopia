@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 
 interface Props {
@@ -25,7 +25,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
     return (
       <View style={s.wrap}>
-        <Text style={s.emoji}>⚠️</Text>
+        <Text style={s.emoji}>âš ï¸</Text>
         <Text style={s.title}>Bir şeyler yanlış gitti</Text>
         <Text style={s.sub}>{this.state.error?.message ?? 'Bilinmeyen hata'}</Text>
         <TouchableOpacity style={s.btn} onPress={() => this.setState({ hasError: false, error: null })}>
@@ -44,3 +44,4 @@ const s = StyleSheet.create({
   btn: { backgroundColor: '#4CAF50', borderRadius: 24, paddingHorizontal: 24, paddingVertical: 10 },
   btnTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
+

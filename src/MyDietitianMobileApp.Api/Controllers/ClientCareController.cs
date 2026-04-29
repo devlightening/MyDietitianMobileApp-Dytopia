@@ -57,7 +57,9 @@ public class ClientCareController : ControllerBase
                 direction = "inbound",
                 text = x.Text,
                 createdAtUtc = x.CreatedAtUtc,
-                isRead = true
+                isRead = true,
+                replyToId = (Guid?)null,
+                replyToSnippet = (string?)null
             })
             .ToListAsync();
 
@@ -71,7 +73,9 @@ public class ClientCareController : ControllerBase
                 direction = x.SenderRole == "Dietitian" ? "inbound" : "outbound",
                 text = x.Text,
                 createdAtUtc = x.CreatedAtUtc,
-                isRead = x.SenderRole == "Dietitian" ? true : x.ReadAtUtc != null
+                isRead = x.SenderRole == "Dietitian" ? true : x.ReadAtUtc != null,
+                replyToId = x.ReplyToId,
+                replyToSnippet = x.ReplyToSnippet
             })
             .ToListAsync();
 
@@ -106,7 +110,9 @@ public class ClientCareController : ControllerBase
             access.ClientId,
             access.ActiveDietitianId,
             "Client",
-            request.Text);
+            request.Text,
+            request.ReplyToId,
+            request.ReplyToSnippet);
 
         _appDb.ClientCareMessages.Add(message);
         await _appDb.SaveChangesAsync();
@@ -140,7 +146,9 @@ public class ClientCareController : ControllerBase
                 direction = "outbound",
                 text = message.Text,
                 createdAtUtc = message.CreatedAtUtc,
-                isRead = false
+                isRead = false,
+                replyToId = message.ReplyToId,
+                replyToSnippet = message.ReplyToSnippet
             }
         });
     }
@@ -264,5 +272,5 @@ public class ClientCareController : ControllerBase
     }
 }
 
-public sealed record SendClientCareMessageRequest(string Text);
+public sealed record SendClientCareMessageRequest(string Text, Guid? ReplyToId = null, string? ReplyToSnippet = null);
 public sealed record MarkAppointmentAttendanceRequest(string Status);

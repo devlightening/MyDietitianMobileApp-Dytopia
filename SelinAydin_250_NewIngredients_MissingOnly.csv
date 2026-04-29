@@ -1,0 +1,6 @@
+Id,Name,IsMandatory,IsProhibited,CanonicalName,Aliases,IsActive,IsCondiment
+f66768ce-9de1-537f-904b-57c2c65ffb98,Köftelik Dana Kıyma,False,False,Köftelik Dana Kıyma,"[""Köftelik Dana Kıyma"", ""köftelikdanakıyma"", ""meatball mince""]",True,False
+593309a7-9866-5430-a44c-45655e559ec5,Kuş Üzümü,False,False,Kuş Üzümü,"[""Kuş Üzümü"", ""kuşüzümü"", ""currants"", ""black currants""]",True,False
+17e9fe54-ddfb-5589-b7fc-62a6574cf975,Kuzu Kuşbaşı,False,False,Kuzu Kuşbaşı,"[""Kuzu Kuşbaşı"", ""kuzukuşbaşı"", ""lamb cubes""]",True,False
+a2285dcf-cf6a-5529-b7c6-6b2e6eeb83e3,Levrek Fileto,False,False,Levrek Fileto,"[""Levrek Fileto"", ""levrekfileto"", ""sea bass fillet""]",True,False
+34f4fba6-1158-5390-8a49-a067ad0696c2,Portakal Suyu,False,False,Portakal Suyu,"[""Portakal Suyu"", ""portakalsuyu"", ""orange juice""]",True,True

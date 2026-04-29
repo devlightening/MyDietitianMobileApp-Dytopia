@@ -332,6 +332,106 @@ function KitchenButton({
   );
 }
 
+// ─── SideTab ───────────────────────────────────────────────────────────────
+function SideTab({
+  tab,
+  isActive,
+  label,
+  activeText,
+  inactiveIcon,
+  inactiveText,
+  dotColor,
+  onPress,
+}: {
+  tab: Exclude<TabConfig, { center: true }>;
+  isActive: boolean;
+  label: string;
+  activeText: string;
+  inactiveIcon: string;
+  inactiveText: string;
+  dotColor: string;
+  onPress: () => void;
+}) {
+  const iconScale = useRef(new Animated.Value(isActive ? 1.14 : 1)).current;
+  const iconTY    = useRef(new Animated.Value(isActive ? -3 : 0)).current;
+  const dotScale  = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const dotOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const labelOpacity = useRef(new Animated.Value(isActive ? 1 : 0.52)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(iconScale,  { toValue: isActive ? 1.14 : 1,   damping: 14, stiffness: 220, useNativeDriver: true }),
+      Animated.spring(iconTY,     { toValue: isActive ? -3 : 0,     damping: 14, stiffness: 200, useNativeDriver: true }),
+      Animated.spring(dotScale,   { toValue: isActive ? 1 : 0,      damping: 12, stiffness: 260, useNativeDriver: true }),
+      Animated.timing(dotOpacity, { toValue: isActive ? 1 : 0,      duration: 180, useNativeDriver: true }),
+      Animated.timing(labelOpacity, { toValue: isActive ? 1 : 0.52, duration: 180, useNativeDriver: true }),
+    ]).start();
+  }, [isActive]);
+
+  function handlePressIn() {
+    Animated.spring(pressScale, { toValue: 0.88, speed: 40, bounciness: 0, useNativeDriver: true }).start();
+  }
+  function handlePressOut() {
+    Animated.spring(pressScale, { toValue: 1, speed: 14, bounciness: 10, useNativeDriver: true }).start();
+    onPress();
+  }
+
+  return (
+    <Pressable
+      style={s.slot}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      android_ripple={{ color: "transparent" }}
+    >
+      <Animated.View style={{ transform: [{ scale: pressScale }], alignItems: "center" }}>
+        {/* Icon — lifts and scales when active */}
+        <Animated.View
+          style={{
+            transform: [{ scale: iconScale }, { translateY: iconTY }],
+            marginBottom: 5,
+          }}
+        >
+          <Ionicons
+            name={isActive ? tab.activeIcon : tab.icon}
+            size={22}
+            color={isActive ? activeText : inactiveIcon}
+          />
+        </Animated.View>
+
+        {/* Dot indicator — springs in when active */}
+        <Animated.View
+          style={[
+            s.activeDot,
+            {
+              backgroundColor: dotColor,
+              opacity: dotOpacity,
+              transform: [{ scale: dotScale }],
+            },
+          ]}
+        />
+
+        {/* Label */}
+        <Animated.Text
+          style={[
+            s.sideLabel,
+            {
+              color: isActive ? activeText : inactiveText,
+              fontWeight: isActive ? "800" : "600",
+              opacity: labelOpacity,
+            },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.82}
+        >
+          {label}
+        </Animated.Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 // ─── BottomBar ─────────────────────────────────────────────────────────────
 export default function BottomBar({
   active,
@@ -389,8 +489,6 @@ export default function BottomBar({
   const shellSurface = isDark ? "rgba(14,28,21,0.96)" : "rgba(255,255,252,0.96)";
   const shellBorder  = isDark ? "rgba(223,245,229,0.08)" : "rgba(65,116,80,0.12)";
   const topLine      = isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.70)";
-  const activeTabSurface = isDark ? "rgba(97,210,136,0.14)" : "rgba(71,185,114,0.12)";
-  const activeTabBorder  = isDark ? "rgba(130,224,163,0.14)" : "rgba(56,136,77,0.12)";
   const activeText  = isDark ? "#F3FBF4" : "#2B5B36";
   const inactiveText = isDark ? "rgba(231,245,235,0.62)" : "rgba(37,65,46,0.64)";
   const inactiveIcon = isDark ? "rgba(239,249,241,0.70)" : "rgba(46,78,57,0.70)";
@@ -418,45 +516,18 @@ export default function BottomBar({
       );
     }
 
-    const isActive = active === tab.key;
-
     return (
-      <Pressable
+      <SideTab
         key={tab.key}
+        tab={tab}
+        isActive={active === tab.key}
+        label={labels[tab.key]}
+        activeText={activeText}
+        inactiveIcon={inactiveIcon}
+        inactiveText={inactiveText}
+        dotColor={isDark ? "#6FE0A4" : "#38A85E"}
         onPress={() => onChange(tab.key)}
-        style={s.slot}
-        android_ripple={{ color: "transparent" }}
-      >
-        <View
-          style={[
-            s.sideChip,
-            isActive && {
-              backgroundColor: activeTabSurface,
-              borderColor: activeTabBorder,
-            },
-          ]}
-        >
-          <Ionicons
-            name={isActive ? tab.activeIcon : tab.icon}
-            size={20}
-            color={isActive ? activeText : inactiveIcon}
-          />
-        </View>
-        <Text
-          style={[
-            s.sideLabel,
-            {
-              color: isActive ? activeText : inactiveText,
-              fontWeight: isActive ? "800" : "700",
-            },
-          ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.82}
-        >
-          {labels[tab.key]}
-        </Text>
-      </Pressable>
+      />
     );
   }
 
@@ -465,7 +536,6 @@ export default function BottomBar({
       style={[
         s.wrap,
         {
-          bottom: Platform.OS === "ios" ? 8 : 10,
           transform: [{ translateY }],
           opacity,
         },
@@ -578,17 +648,20 @@ const kb = StyleSheet.create({
 const s = StyleSheet.create({
   wrap: {
     position: "absolute",
-    left: 14,
-    right: 14,
-    height: 98,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: "flex-end",
   },
   shell: {
     minHeight: 72,
-    borderRadius: 28,
-    borderWidth: 1,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     paddingTop: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     overflow: "visible",
   },
   topLine: {
@@ -612,15 +685,11 @@ const s = StyleSheet.create({
     justifyContent: "flex-end",
     minWidth: 0,
   },
-  sideChip: {
-    width: 42,
-    height: 42,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 5,
+  activeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginBottom: 4,
   },
   sideLabel: {
     width: "100%",

@@ -33,7 +33,6 @@ import {
 
 type RecipeFilter = 'all' | 'favorites' | 'preferred' | 'used' | 'archived';
 type RangeFilter = '7d' | '30d' | 'all';
-type SourceFilter = 'all' | 'clinic' | 'general';
 type SortKey = 'recommended' | 'completion' | 'usage' | 'alphabetical';
 
 const FILTERS: Array<{ key: RecipeFilter; label: string }> = [
@@ -48,12 +47,6 @@ const RANGE_OPTIONS: Array<{ key: RangeFilter; label: string }> = [
   { key: '7d', label: '7 gün' },
   { key: '30d', label: '30 gün' },
   { key: 'all', label: 'Tümü' },
-];
-
-const SOURCE_OPTIONS: Array<{ key: SourceFilter; label: string }> = [
-  { key: 'all', label: 'Tüm kaynaklar' },
-  { key: 'clinic', label: 'Klinik tarifleri' },
-  { key: 'general', label: 'Genel tarifler' },
 ];
 
 const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
@@ -137,7 +130,6 @@ function RecipeCard({
               </span>
               {recipe.isFavorited ? <Badge>Favori</Badge> : null}
               {recipe.isArchived ? <Badge variant="secondary">Arşiv</Badge> : null}
-              {recipe.sourceType === 'general' ? <Badge variant="secondary">Genel tarif</Badge> : null}
             </div>
             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{recipe.description || 'Kısa açıklama eklenmemiş.'}</p>
           </div>
@@ -185,7 +177,7 @@ function RecipeCard({
         </div>
       </div>
 
-      {recipe.sourceType === 'clinic' ? (
+      {
         <div className="mt-4 flex gap-2">
           <Link href={`${route}?edit=1`} className="flex-1" onClick={(event) => event.stopPropagation()}>
             <Button variant="secondary" className="w-full">Tarifi Düzenle</Button>
@@ -201,7 +193,7 @@ function RecipeCard({
             Tarifi Sil
           </Button>
         </div>
-      ) : null}
+      }
     </article>
   );
 }
@@ -212,7 +204,6 @@ export default function RecipesPage() {
   const [filter, setFilter] = useState<RecipeFilter>('all');
   const [range, setRange] = useState<RangeFilter>('30d');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('recommended');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<RecipeListItem | null>(null);
@@ -224,7 +215,7 @@ export default function RecipesPage() {
 
   const recipesQuery = useQuery({
     queryKey: ['recipes', 'library', range],
-    queryFn: () => getRecipes({ page: 1, pageSize: 200, status: 'all', source: 'all', range }),
+    queryFn: () => getRecipes({ page: 1, pageSize: 200, status: 'all', source: 'clinic', range }),
   });
 
   const createMutation = useMutation({
@@ -278,14 +269,6 @@ export default function RecipesPage() {
         return false;
       }
 
-      if (sourceFilter === 'clinic' && recipe.sourceType !== 'clinic') {
-        return false;
-      }
-
-      if (sourceFilter === 'general' && recipe.sourceType !== 'general') {
-        return false;
-      }
-
       if (selectedTag && !recipe.tags.includes(selectedTag)) {
         return false;
       }
@@ -331,7 +314,7 @@ export default function RecipesPage() {
     });
 
     return sortedRecipes;
-  }, [filter, recipes, searchTerm, selectedTag, sortKey, sourceFilter]);
+  }, [filter, recipes, searchTerm, selectedTag, sortKey]);
 
   return (
     <div className="space-y-6">
@@ -420,7 +403,7 @@ export default function RecipesPage() {
         </div>
 
         <div className="mb-5 rounded-[28px] border border-border bg-background p-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px_220px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -440,17 +423,6 @@ export default function RecipesPage() {
                 </button>
               ) : null}
             </div>
-
-            <label className="space-y-2 text-sm font-medium text-foreground">
-              <span>Kaynak</span>
-              <select className="input-sfcos h-11" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}>
-                {SOURCE_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
 
             <label className="space-y-2 text-sm font-medium text-foreground">
               <span>Sıralama</span>
@@ -478,14 +450,13 @@ export default function RecipesPage() {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             <p>{filteredRecipes.length} tarif gösteriliyor</p>
-            {(searchTerm || selectedTag || sourceFilter !== 'all' || sortKey !== 'recommended') ? (
+            {(searchTerm || selectedTag || sortKey !== 'recommended') ? (
               <button
                 type="button"
                 className="inline-flex items-center gap-2 font-medium text-primary transition hover:text-primary/80"
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedTag(null);
-                  setSourceFilter('all');
                   setSortKey('recommended');
                 }}
               >

@@ -13,7 +13,9 @@ namespace MyDietitianMobileApp.Application.Handlers
             _decisionService = decisionService;
         }
 
-        public async Task<DecideAlternativeMealResult> Handle(DecideAlternativeMealQuery request, CancellationToken cancellationToken)
+        public async Task<DecideAlternativeMealResult> Handle(
+            DecideAlternativeMealQuery request,
+            CancellationToken cancellationToken)
         {
             var decision = await _decisionService.DecideForMealAsync(
                 request.PlannedRecipeId,
@@ -22,26 +24,31 @@ namespace MyDietitianMobileApp.Application.Handlers
                 request.DietitianId,
                 cancellationToken);
 
-            var result = new DecideAlternativeMealResult
+            return new DecideAlternativeMealResult
             {
                 CanCookOriginal = decision.CanCookOriginal,
                 MissingIngredients = decision.MissingIngredients,
-                Explanation = decision.Explanation
+                Explanation = decision.Explanation,
+                AlternativeRecommendations = decision.AlternativeRecommendations
+                    .Select(r => new AlternativeRecipeDto
+                    {
+                        RecipeId = r.RecipeId,
+                        RecipeName = r.RecipeName,
+                        MatchPercentage = r.MatchPercentage,
+                        MissingIngredientsForAlternative = r.MissingIngredientsForAlternative,
+                        MissingIngredientNamesForAlternative = r.MissingIngredientNamesForAlternative,
+                        NutritionalComparison = r.NutritionalComparison,
+                        RecommendationReasons = r.RecommendationReasons,
+                        PlanAlignmentNote = r.PlanAlignmentNote,
+                        CaloriesKcal = r.CaloriesKcal,
+                        ProteinGrams = r.ProteinGrams,
+                        CarbsGrams = r.CarbsGrams,
+                        FatGrams = r.FatGrams,
+                        NutritionalScore = r.NutritionalScore,
+                        CombinedScore = r.CombinedScore,
+                    })
+                    .ToList(),
             };
-
-            if (decision.AlternativeRecommendation != null)
-            {
-                result.AlternativeRecommendation = new AlternativeRecipeDto
-                {
-                    RecipeId = decision.AlternativeRecommendation.RecipeId,
-                    RecipeName = decision.AlternativeRecommendation.RecipeName,
-                    MatchPercentage = decision.AlternativeRecommendation.MatchPercentage,
-                    MissingIngredientsForAlternative = decision.AlternativeRecommendation.MissingIngredientsForAlternative,
-                    NutritionalComparison = decision.AlternativeRecommendation.NutritionalComparison
-                };
-            }
-
-            return result;
         }
     }
 }

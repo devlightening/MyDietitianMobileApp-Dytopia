@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+﻿import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -395,3 +395,4 @@ const sh = StyleSheet.create({
     marginLeft: 10,
   },
 });
+

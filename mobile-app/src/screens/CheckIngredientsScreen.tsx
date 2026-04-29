@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,11 +16,17 @@ import { Routes } from '../navigation/routes';
 import { radii, spacing } from '../theme/tokens';
 import { useTheme } from '../context/ThemeContext';
 
+// Backend MealType enum: Breakfast=1, Lunch=2, Dinner=3, Snack=4
+const MEAL_TYPE_TO_INT: Record<string, number> = {
+  Breakfast: 1, MidMorning: 4, Lunch: 2,
+  Afternoon: 4, Dinner: 3, Evening: 4, Snack: 4,
+};
+
 type CheckIngredientsRouteProp = RouteProp<{
   params: {
     mealId: string;
     plannedRecipeId: string;
-    mealType: number;
+    mealType: string | number;
     recipeName: string;
   };
 }>;
@@ -92,9 +98,12 @@ export default function CheckIngredientsScreen() {
     }
     setChecking(true);
     try {
+      const mealTypeInt = typeof mealType === 'number'
+        ? mealType
+        : (MEAL_TYPE_TO_INT[mealType as string] ?? 4);
       const result = await decideAlternative({
         plannedRecipeId,
-        mealType,
+        mealType: mealTypeInt,
         clientAvailableIngredients: checkedIds,
       });
       (navigation as any).navigate(Routes.App.AlternativeResult, {
@@ -160,7 +169,7 @@ export default function CheckIngredientsScreen() {
     <ScrollView style={{ backgroundColor: theme.bg }} keyboardShouldPersistTaps="handled">
       <View style={s.content}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backRow}>
-          <Text style={[s.backText, { color: theme.primary }]}>← Geri</Text>
+          <Text style={[s.backText, { color: theme.primary }]}>â† Geri</Text>
         </TouchableOpacity>
 
         <Text style={[s.title, { color: theme.text }]}>Malzeme Kontrolü</Text>
@@ -189,7 +198,7 @@ export default function CheckIngredientsScreen() {
                     borderColor: item.checked ? theme.primary : theme.textMuted,
                   },
                 ]}>
-                  {item.checked && <Text style={s.checkmark}>✓</Text>}
+                  {item.checked && <Text style={s.checkmark}>âœ“</Text>}
                 </View>
                 <Text style={[
                   s.rowText,
@@ -231,7 +240,7 @@ export default function CheckIngredientsScreen() {
                     borderColor: item.checked ? theme.primary : theme.textMuted,
                   },
                 ]}>
-                  {item.checked && <Text style={s.checkmark}>✓</Text>}
+                  {item.checked && <Text style={s.checkmark}>âœ“</Text>}
                 </View>
                 <Text style={[s.rowText, { color: item.checked ? theme.text : theme.textSub }]}>
                   {item.name}
@@ -377,3 +386,4 @@ function styles(theme: any) {
     cancelText: { fontSize: 15, fontWeight: '600' },
   });
 }
+

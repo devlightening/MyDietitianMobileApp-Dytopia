@@ -1,6 +1,6 @@
 import apiClient from './client';
 
-export type AcquisitionSource = 'Text' | 'Barcode' | 'Vision';
+export type AcquisitionSource = 'Text' | 'Barcode' | 'Vision' | 'Receipt';
 export type MappingType =
   | 'ExactIngredient'
   | 'IngredientFamily'

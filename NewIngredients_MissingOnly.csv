@@ -1,0 +1,11 @@
+﻿Id,Name,IsMandatory,IsProhibited,CanonicalName,Aliases,IsActive,IsCondiment
+5c061912-16b1-5e7a-9046-43d3c488fbd6,Yoğurt Sos,False,False,Yoğurt Sos,"[""Yoğurt Sos"", ""yogurt-sos"", ""yogurtsos"", ""yoğurt-sos"", ""yoğurtsos"", ""yogurt sos"", ""yogurt sauce"", ""yogurt-sauce"", ""yogurtsauce""]",True,True
+511a2389-7ef2-5361-9455-595e7100e11e,Karabuğday,False,False,Karabuğday,"[""Karabuğday"", ""karabugday"", ""buckwheat""]",True,False
+704d8747-e898-52a2-9218-f7aef1196f65,Humus,False,False,Humus,"[""Humus"", ""hummus""]",True,False
+cacf61d5-ec4e-5d49-8427-8a5115f1f130,Kabak Spagetti,False,False,Kabak Spagetti,"[""Kabak Spagetti"", ""kabak-spagetti"", ""kabakspagetti"", ""zucchini noodles"", ""zucchini-noodles"", ""zucchininoodles"", ""zucchini spaghetti"", ""zucchini-spaghetti"", ""zucchinispaghetti""]",True,False
+9131cbaa-899e-5906-bb10-7847db3f2a3d,Domates Sosu,False,False,Domates Sosu,"[""Domates Sosu"", ""domates-sosu"", ""domatessosu"", ""tomato sauce"", ""tomato-sauce"", ""tomatosauce""]",True,True
+d561de1d-82b1-55b7-882d-ace004cd4f47,Hindistan Cevizi,False,False,Hindistan Cevizi,"[""Hindistan Cevizi"", ""hindistan-cevizi"", ""hindistancevizi"", ""coconut""]",True,False
+8025d902-d108-54f1-8098-dda56a0f86b9,Avokado Ezmesi,False,False,Avokado Ezmesi,"[""Avokado Ezmesi"", ""avokado-ezmesi"", ""avokadoezmesi"", ""avocado mash"", ""avocado-mash"", ""avocadomash"", ""mashed avocado"", ""mashed-avocado"", ""mashedavocado""]",True,False
+1b2472d6-97ef-57fa-bf07-4a9f68fc3b7d,Tofu,False,False,Tofu,"[""Tofu""]",True,False
+60cdf24f-6345-5fe3-b0d7-8379cb6d0bce,Yaban Mersini,False,False,Yaban Mersini,"[""Yaban Mersini"", ""yaban-mersini"", ""yabanmersini"", ""blueberry"", ""blueberries""]",True,False
+0d6ea7b3-003a-50ee-b54d-fc99a495a54d,Ekşi Mayalı Ekmek,False,False,Ekşi Mayalı Ekmek,"[""Ekşi Mayalı Ekmek"", ""eksi-mayali-ekmek"", ""eksimayaliekmek"", ""ekşi-mayalı-ekmek"", ""ekşimayalıekmek"", ""eksi mayali ekmek"", ""sourdough bread"", ""sourdough-bread"", ""sourdoughbread"", ""sourdough""]",True,False

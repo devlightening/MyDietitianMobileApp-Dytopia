@@ -12,7 +12,7 @@ export type ImportSessionStatus =
 export type ImportDocumentKind = 'StructuredTable' | 'SemiStructuredDoc' | 'TextPdf' | 'Unsupported';
 export type ImportMode = 'auto' | 'table' | 'freeform';
 export type MatchType = 'Exact' | 'Alias' | 'Normalized' | 'Fuzzy' | 'Ambiguous' | 'Manual' | 'None';
-export type IngredientRole = 'Mandatory' | 'Optional' | 'Substitute' | 'Prohibited';
+export type IngredientRole = 'Mandatory' | 'Optional' | 'Flavoring' | 'Substitute' | 'Prohibited';
 export type IssueSeverity = 'Info' | 'Warning' | 'Error';
 export type DuplicateResolutionMode = 'CreateNew' | 'UpdateExisting' | 'Skip';
 

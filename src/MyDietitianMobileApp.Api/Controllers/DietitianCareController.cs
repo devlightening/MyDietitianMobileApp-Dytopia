@@ -73,7 +73,9 @@ public class DietitianCareController : ControllerBase
                 direction = "outbound",
                 text = x.Text,
                 createdAtUtc = x.CreatedAtUtc,
-                isRead = true
+                isRead = true,
+                replyToId = (Guid?)null,
+                replyToSnippet = (string?)null
             })
             .ToListAsync();
 
@@ -88,7 +90,9 @@ public class DietitianCareController : ControllerBase
                 direction = x.SenderRole == "Dietitian" ? "outbound" : "inbound",
                 text = x.Text,
                 createdAtUtc = x.CreatedAtUtc,
-                isRead = x.SenderRole == "Dietitian" ? true : x.ReadAtUtc != null
+                isRead = x.SenderRole == "Dietitian" ? true : x.ReadAtUtc != null,
+                replyToId = x.ReplyToId,
+                replyToSnippet = x.ReplyToSnippet
             })
             .ToListAsync();
 
@@ -143,7 +147,8 @@ public class DietitianCareController : ControllerBase
         if (text.Length > 2000)
             return BadRequest(ApiProblems.Validation("INVALID_REPLY", "Yanit metni en fazla 2000 karakter olabilir."));
 
-        var reply = new ClientCareMessage(clientId, dietitianId.Value, "Dietitian", text);
+        var reply = new ClientCareMessage(clientId, dietitianId.Value, "Dietitian", text,
+            request.ReplyToId, request.ReplyToSnippet);
         _appDb.ClientCareMessages.Add(reply);
         await _appDb.SaveChangesAsync();
         await PublishCareUpdateAsync(dietitianId.Value, clientId, "reply");
@@ -158,7 +163,9 @@ public class DietitianCareController : ControllerBase
                 direction = "outbound",
                 text = reply.Text,
                 createdAtUtc = reply.CreatedAtUtc,
-                isRead = true
+                isRead = true,
+                replyToId = reply.ReplyToId,
+                replyToSnippet = reply.ReplyToSnippet
             }
         });
     }
@@ -371,4 +378,4 @@ public sealed record UpdateAppointmentRequest(
     string? Location,
     string? Note);
 
-public sealed record SendCareReplyRequest(string Text);
+public sealed record SendCareReplyRequest(string Text, Guid? ReplyToId = null, string? ReplyToSnippet = null);

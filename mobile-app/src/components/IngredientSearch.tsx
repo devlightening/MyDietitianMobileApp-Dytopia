@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -308,7 +308,7 @@ function IngredientRow({
           <Text style={[s.rowTitle, { color: theme.text }]}>{item.canonicalName}</Text>
           {!!item.aliases?.length && (
             <Text style={[s.rowAlias, { color: theme.textMuted }]} numberOfLines={1}>
-              {item.aliases.slice(0, 2).join(' • ')}
+              {item.aliases.slice(0, 2).join(' â€¢ ')}
             </Text>
           )}
         </View>
@@ -384,3 +384,4 @@ const s = StyleSheet.create({
   rowTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
   rowAlias: { fontSize: 11.5, fontWeight: '500' },
 });
+

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+﻿import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -96,14 +96,14 @@ export default function PremiumActivationScreen() {
             { transform: [{ scale: iconScale }] },
           ]}
         >
-          <Text style={s.iconEmoji}>🔑</Text>
+          <Text style={s.iconEmoji}>ğŸ”‘</Text>
         </Animated.View>
 
         {/* Title */}
         <Text style={[s.title, { color: theme.text }]}>Premium'u Aktifleştir</Text>
         <Text style={[s.sub, { color: theme.textSub }]}>
           Diyetisyeninin sana verdiği{" "}
-          <Text style={[s.subBold, { color: theme.text }]}>Access Key</Text>'i gir.{"\n"}
+          <Text style={[s.subBold, { color: theme.text }]}>Erişim Anahtarı</Text>'nı gir.{"\n"}
           Planlarına, notlarına ve klinik tariflere anında erişim kazanırsın.
         </Text>
 
@@ -116,7 +116,7 @@ export default function PremiumActivationScreen() {
               { transform: [{ scale: successScale }] },
             ]}
           >
-            <Text style={s.successCheck}>✅</Text>
+            <Text style={s.successCheck}>âœ…</Text>
             <Text style={[s.successTxt, { color: theme.success }]}>{msg}</Text>
           </Animated.View>
         )}
@@ -130,7 +130,7 @@ export default function PremiumActivationScreen() {
                 setKey(t);
                 if (msg) setMsg(null);
               }}
-              placeholder="Access Key kodunu gir"
+              placeholder="Erişim Anahtarını gir"
               placeholderTextColor={theme.textMuted}
               style={[
                 s.input,
@@ -156,7 +156,7 @@ export default function PremiumActivationScreen() {
         {/* Error message */}
         {!isSuccess && msg && (
           <View style={[s.errorWrap, { backgroundColor: theme.error + '10', borderColor: theme.error + '35' }]}>
-            <Text style={[s.errorTxt, { color: theme.error }]}>✕ {msg}</Text>
+            <Text style={[s.errorTxt, { color: theme.error }]}>âœ• {msg}</Text>
           </View>
         )}
 
@@ -319,3 +319,4 @@ const s = StyleSheet.create({
   close: { alignItems: "center" },
   closeText: { fontWeight: "800", fontSize: 14 },
 });
+

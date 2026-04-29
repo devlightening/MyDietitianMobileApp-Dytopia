@@ -1,4 +1,4 @@
-export enum MealType {
+﻿export enum MealType {
   Breakfast = 1,
   Lunch = 2,
   Dinner = 3,
@@ -28,3 +28,4 @@ export function getMealTypeName(type: MealType): string {
     case MealType.Snack: return 'Ara Öğün';
   }
 }
+

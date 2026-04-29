@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Alert, Linking, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +16,7 @@ export default function RateAppScreen() {
 
   const copy = language === "tr"
     ? {
-        back: "← Geri",
+        back: "â† Geri",
         title: "Uygulamayı Değerlendir",
         subtitle: "Deneyimini puanla, paylaş veya mağaza bağlantısını aç.",
         openStore: "Mağaza Sayfasını Aç",
@@ -25,7 +25,7 @@ export default function RateAppScreen() {
         storeError: "Mağaza bağlantısı açılamadı.",
       }
     : {
-        back: "← Back",
+        back: "â† Back",
         title: "Rate the App",
         subtitle: "Rate your experience, share the app, or open the store page.",
         openStore: "Open Store Page",
@@ -171,3 +171,4 @@ const s = StyleSheet.create({
   },
   secondaryText: { fontSize: 14, fontWeight: "800" },
 });
+

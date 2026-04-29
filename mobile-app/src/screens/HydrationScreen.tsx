@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+﻿import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,18 +18,46 @@ import {
   type TodayTracking,
 } from "../api/progress";
 import { useAuth } from "../auth/AuthContext";
+import { useTranslation } from "../context/I18nContext";
 import { useTheme } from "../context/ThemeContext";
 import { refreshWidgetsFromApp } from "../widgets/services/widgetSyncService";
 import { DEFAULT_HYDRATION_GOAL_GLASSES } from "../widgets/types";
 
 export default function HydrationScreen() {
   const { theme } = useTheme();
+  const { language } = useTranslation();
   const insets = useSafeAreaInsets();
   const { isPremium } = useAuth();
   const [tracking, setTracking] = useState<TodayTracking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const copy = language === "tr"
+    ? {
+        loadErrorTitle: "Su takibi kullanılamıyor",
+        loadErrorBody: "Su verileri şu anda yüklenemedi.",
+        updateErrorTitle: "Güncelleme başarısız",
+        updateErrorBody: "Su takibi güncellenemedi.",
+        title: "Su Takibi",
+        subtitle: "Su tüketimini uygulama ve widget üzerinden güncel tut.",
+        progressLabel: "bugün bardak",
+        decrease: "-1 bardak",
+        increase: "+1 bardak",
+        saving: "Su güncellemesi kaydediliyor...",
+      }
+    : {
+        loadErrorTitle: "Hydration unavailable",
+        loadErrorBody: "Could not load hydration data.",
+        updateErrorTitle: "Update failed",
+        updateErrorBody: "Could not update hydration.",
+        title: "Hydration",
+        subtitle: "Keep your water intake current from the app and the widget.",
+        progressLabel: "glasses today",
+        decrease: "-1 glass",
+        increase: "+1 glass",
+        saving: "Saving hydration update...",
+      };
 
   const loadTracking = useCallback(async (silent = false) => {
     if (!silent) {
@@ -40,12 +68,12 @@ export default function HydrationScreen() {
       const nextTracking = await getTodayTracking();
       setTracking(nextTracking);
     } catch (error: any) {
-      Alert.alert("Hydration unavailable", error?.message ?? "Could not load hydration data.");
+      Alert.alert(copy.loadErrorTitle, error?.message ?? copy.loadErrorBody);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [copy.loadErrorBody, copy.loadErrorTitle]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,11 +94,11 @@ export default function HydrationScreen() {
       setTracking(updated);
       void refreshWidgetsFromApp(isPremium);
     } catch (error: any) {
-      Alert.alert("Update failed", error?.message ?? "Could not update hydration.");
+      Alert.alert(copy.updateErrorTitle, error?.message ?? copy.updateErrorBody);
     } finally {
       setIsSaving(false);
     }
-  }, [isPremium, isSaving, tracking]);
+  }, [copy.updateErrorBody, copy.updateErrorTitle, isPremium, isSaving, tracking]);
 
   const goalGlasses = DEFAULT_HYDRATION_GOAL_GLASSES;
   const currentGlasses = tracking?.waterGlasses ?? 0;
@@ -109,16 +137,16 @@ export default function HydrationScreen() {
           <View style={[styles.iconWrap, { backgroundColor: `${theme.primary}14` }]}>
             <Ionicons name="water-outline" size={28} color={theme.primary} />
           </View>
-          <Text style={[styles.title, { color: theme.text }]}>Hydration</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{copy.title}</Text>
           <Text style={[styles.subtitle, { color: theme.textMuted }]}>
-            Keep your water intake current from the app and the widget.
+            {copy.subtitle}
           </Text>
 
           <Text style={[styles.progressValue, { color: theme.text }]}>
             {currentGlasses} / {goalGlasses}
           </Text>
           <Text style={[styles.progressLabel, { color: theme.textMuted }]}>
-            glasses today
+            {copy.progressLabel}
           </Text>
 
           <View style={[styles.progressTrack, { backgroundColor: theme.surfaceElevated }]}>
@@ -142,7 +170,7 @@ export default function HydrationScreen() {
               onPress={() => void updateHydration(-1)}
               disabled={isSaving}
             >
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>-1 glass</Text>
+              <Text style={[styles.actionButtonText, { color: theme.text }]}>{copy.decrease}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -150,7 +178,7 @@ export default function HydrationScreen() {
               onPress={() => void updateHydration(1)}
               disabled={isSaving}
             >
-              <Text style={styles.actionPrimaryText}>+1 glass</Text>
+              <Text style={styles.actionPrimaryText}>{copy.increase}</Text>
             </TouchableOpacity>
           </View>
 
@@ -158,7 +186,7 @@ export default function HydrationScreen() {
             <View style={styles.syncRow}>
               <ActivityIndicator size="small" color={theme.primary} />
               <Text style={[styles.syncText, { color: theme.textMuted }]}>
-                Saving hydration update...
+                {copy.saving}
               </Text>
             </View>
           ) : null}
@@ -256,3 +284,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

@@ -19,4 +19,13 @@ public interface IVisionIngredientService
         string base64Image,
         string mediaType,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads a market receipt image and extracts pantry-worthy ingredient/product names.
+    /// Contract: never throws — returns <see cref="VisionDetectionResult.Empty"/> on failure.
+    /// </summary>
+    Task<VisionDetectionResult> DetectReceiptItemsAsync(
+        string base64Image,
+        string mediaType,
+        CancellationToken cancellationToken = default);
 }

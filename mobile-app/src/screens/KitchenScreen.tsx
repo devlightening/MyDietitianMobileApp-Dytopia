@@ -49,20 +49,23 @@ import {
 import IngredientSearch from '../components/IngredientSearch';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import KitchenStreakRail from '../components/gamification/KitchenStreakRail';
+import RecipeSearchStage from '../components/kitchen/RecipeSearchStage';
 import { Routes } from '../navigation/routes';
 import { getRecentPantryIngredients } from '../api/kitchen';
 import type { Ingredient } from '../types/alternative';
 import { useTranslation } from '../context/I18nContext';
 import { useGamification } from '../queries/useGamification';
 import { useCustomPacks, type CustomPack } from '../hooks/useCustomPacks';
+import { useShakeDetector } from '../hooks/useShakeDetector';
+import * as Haptics from 'expo-haptics';
 import CreatePackSheet from '../components/CreatePackSheet';
 
 const CHIP_COLLAPSE_AT = 8;
 const BOTTOM_NAV_CLEARANCE = Platform.OS === 'ios' ? 112 : 96;
 
 const MERGE_TEXTS = {
-  tr: ['Malzemeler hazırlanıyor', 'Tarif motoru çalışıyor', 'Tarifler bulundu'],
-  en: ['Ingredients getting ready', 'Recipe engine running', 'Recipes found'],
+  tr: ['Malzemeler tencerede', 'Aromalar yükseliyor', 'Tarif servis ediliyor'],
+  en: ['Ingredients in the pot', 'Flavors are rising', 'Recipe is plating'],
 } as const;
 
 function shortIngredientLabel(name: string) {
@@ -237,62 +240,19 @@ function ReactorSearchOverlay({
   theme: Theme;
   language: 'tr' | 'en';
 }) {
-  const copy = language === 'en'
-    ? {
-        title: 'Recipes are being prepared',
-        detail: `${selectedIngredients.length} ingredients are being matched with the strongest recipes.`,
-        tip: 'AI is building the best recipe match for your kitchen.',
-      }
-    : {
-        title: 'Tarifler hazırlanıyor',
-        detail: `${selectedIngredients.length} malzeme en uygun tariflerle eşleştiriliyor.`,
-        tip: 'AI mutfağındaki en iyi tarifi senin için hazırlıyor.',
-      };
-
   const overlayOpacity = useSharedValue(0);
-  const cardScale = useSharedValue(0.94);
-  const cardTranslateY = useSharedValue(18);
-  const textOpacity = useSharedValue(0);
-  const spotlightOpacity = useSharedValue(0.2);
-  const mergeTexts = MERGE_TEXTS[language];
-  const reactorMerge = useReactorMerge(active);
-  const sweepStyle = useSweepScan(active);
-  const shimmerStyle = useShimmerBand(active);
-  const orbitAStyle = useSoftOrbit(active, 0);
-  const orbitBStyle = useSoftOrbit(active, 520);
-  const orbitCStyle = useSoftOrbit(active, 980);
-  const orbitDStyle = useSoftOrbit(active, 1380);
-  const orbitChipRadii = [110, 92, 104, 86];
-  const orbitChipAngles = [24, 118, 212, 308];
 
   useEffect(() => {
     if (!active) {
       overlayOpacity.value = withTiming(0, { duration: dur.fast });
-      cardScale.value = 0.94;
-      cardTranslateY.value = 18;
-      textOpacity.value = 0;
-      spotlightOpacity.value = 0.2;
       return;
     }
 
     overlayOpacity.value = withTiming(1, { duration: 220 });
-    cardScale.value = withSpring(1, spring.gentle);
-    cardTranslateY.value = withSpring(0, spring.standard);
-    textOpacity.value = withTiming(1, { duration: 260 });
-    spotlightOpacity.value = withTiming(0.5, { duration: 600 });
-  }, [active, cardScale, cardTranslateY, overlayOpacity, spotlightOpacity, textOpacity]);
+  }, [active, overlayOpacity]);
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
-  }));
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: cardScale.value }, { translateY: cardTranslateY.value }],
-  }));
-  const textStyle = useAnimatedStyle(() => ({
-    opacity: textOpacity.value,
-  }));
-  const spotlightStyle = useAnimatedStyle(() => ({
-    opacity: spotlightOpacity.value,
   }));
 
   if (!active) return null;
@@ -300,152 +260,577 @@ function ReactorSearchOverlay({
   return (
     <Animated.View style={[StyleSheet.absoluteFillObject, po.overlay, overlayStyle]}>
       <View style={[po.overlayVeil, { backgroundColor: `${theme.bg}8F` }]} />
-      <View style={[po.ambientOrbA, { backgroundColor: `${theme.primary}24` }]} />
-      <View style={[po.ambientOrbB, { backgroundColor: `${theme.emerald}20` }]} />
-      <Animated.View
-        style={[
-          po.card,
-          {
-            backgroundColor: `${theme.surface}F2`,
-            borderColor: `${theme.borderEmerald}66`,
-          },
-          cardStyle,
-        ]}
-      >
-        <Animated.View style={[po.statusRow, textStyle]}>
-          <View style={[po.statusDot, { backgroundColor: theme.emerald }]} />
-          <Text style={[po.statusText, { color: theme.emerald }]}>
-            {mergeTexts[Math.min(mergePhase, mergeTexts.length - 1)]}
-          </Text>
-        </Animated.View>
+      <RecipeSearchStage
+        theme={theme}
+        ingredientNames={selectedIngredients.map((ingredient) => ingredient.canonicalName)}
+        language={language}
+        phase={mergePhase}
+      />
+    </Animated.View>
+  );
+}
 
-        <View style={po.spotlightWrap}>
-          <View style={[po.reactorShell, { borderColor: `${theme.borderEmerald}45` }]} />
-          <Animated.View
-            style={[
-              po.spotlightGlow,
-              { backgroundColor: `${theme.primary}1E` },
-              spotlightStyle,
-            ]}
-          />
-          <Animated.View
-            style={[
-              po.reactorHalo,
-              { backgroundColor: `${theme.primary}12` },
-              reactorMerge.haloStyle,
-            ]}
-          />
-          <Animated.View style={[po.reactorRingOuter, { borderColor: `${theme.primary}42` }]} />
-          <Animated.View
-            style={[
-              po.reactorRingMid,
-              { borderColor: `${theme.primary}26` },
-              reactorMerge.counterRingStyle,
-            ]}
-          />
-          <Animated.View style={[po.reactorRingInner, { borderColor: `${theme.emerald}4C` }]} />
-          <Animated.View
-            style={[
-              po.reactorSweep,
-              { backgroundColor: `${theme.primary}38` },
-              sweepStyle,
-            ]}
-          />
-          <Animated.View
-            style={[
-              po.reactorRibbon,
-              { backgroundColor: `${theme.surface}66` },
-              shimmerStyle,
-            ]}
-          />
-          <Animated.View style={[po.nodeA, orbitAStyle]}>
-            <View style={[po.nodeRing, { borderColor: `${theme.primary}55` }]} />
-            <View style={[po.nodeCoreA, { backgroundColor: theme.primary }]} />
-          </Animated.View>
-          <Animated.View style={[po.nodeB, orbitBStyle]}>
-            <View style={[po.nodeRing, { borderColor: `${theme.emerald}55` }]} />
-            <View style={[po.nodeCoreB, { backgroundColor: theme.emerald }]} />
-          </Animated.View>
-          <Animated.View style={[po.nodeC, orbitCStyle]}>
-            <View style={[po.nodeRing, { borderColor: `${theme.accentCyan}55` }]} />
-            <View style={[po.nodeCoreC, { backgroundColor: theme.accentCyan }]} />
-          </Animated.View>
-          <Animated.View style={[po.nodeD, orbitDStyle]}>
-            <View style={[po.nodeRing, { borderColor: `${theme.warning}55` }]} />
-            <View style={[po.nodeCoreC, { backgroundColor: theme.warning }]} />
-          </Animated.View>
-          {selectedIngredients.slice(0, 4).map((ingredient, index) => (
-            <OrbitingIngredientChip
-              key={`${ingredient.id}-${index}`}
-              active={active}
-              ingredient={ingredient}
-              radius={orbitChipRadii[index]}
-              startDeg={orbitChipAngles[index]}
-              delay={index * 180}
-              theme={theme}
-              index={index}
-            />
-          ))}
-          <Animated.View
-            style={[
-              po.reactorCoreAura,
-              { backgroundColor: `${theme.primary}18` },
-              spotlightStyle,
-            ]}
-          />
-          <Animated.View
-            style={[
-              po.reactorCore,
-              {
-                backgroundColor: theme.surface,
-                borderColor: `${theme.borderEmerald}CC`,
-              },
-              reactorMerge.coreStyle,
-            ]}
-          >
-            <View style={[po.reactorCoreInner, { backgroundColor: theme.primary }]} />
-          </Animated.View>
+const POT_DROP_LANES = [-82, -40, 0, 40, 82] as const;
+const POT_ACCENT_KEYS = ['primary', 'emerald', 'accentCyan', 'accentGold'] as const;
+
+type KitchenPotComposerCopy = {
+  reactorTitle: string;
+  reactorReady: string;
+  reactorWaiting: string;
+  reactorHintReady: string;
+  reactorHintIdle: string;
+  reactorAction: string;
+  reactorActionSub: string;
+  reactorActionClosing: string;
+  reactorActionClosingSub: string;
+  reactorModeReady: string;
+  reactorModeIdle: string;
+  reactorLocked: string;
+  reactorWaitingLabel: string;
+  reactorFooterHint: string;
+};
+
+type PotDropCue = {
+  key: string;
+  label: string;
+  lane: number;
+  accent: string;
+  spin: number;
+};
+
+function PotIngredientDropCue({
+  cue,
+  theme,
+}: {
+  cue: PotDropCue;
+  theme: Theme;
+}) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(1, { duration: 1180, easing: Easing.inOut(Easing.quad) });
+  }, [progress]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const opacity = progress.value < 0.82
+      ? 0.96
+      : Math.max(0, 1 - (progress.value - 0.82) / 0.18);
+    const approach = Math.min(progress.value / 0.76, 1);
+
+    return {
+      opacity,
+      transform: [
+        { translateX: cue.lane * (1 - approach) },
+        { translateY: progress.value * 154 },
+        { scale: 1 - progress.value * 0.22 },
+        { rotate: `${cue.spin * (1 - progress.value)}deg` },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        s.potDropCue,
+        {
+          backgroundColor: `${theme.surface}F3`,
+          borderColor: `${cue.accent}42`,
+          shadowColor: cue.accent,
+        },
+        animatedStyle,
+      ]}
+    >
+      <View style={[s.potDropCueDot, { backgroundColor: cue.accent }]} />
+      <Text style={[s.potDropCueText, { color: theme.text }]} numberOfLines={1}>
+        {shortIngredientLabel(cue.label)}
+      </Text>
+    </Animated.View>
+  );
+}
+
+function KitchenPotComposer({
+  theme,
+  selectedIngredients,
+  hasIngredients,
+  transitioning,
+  copy,
+  onPress,
+}: {
+  theme: Theme;
+  selectedIngredients: Ingredient[];
+  hasIngredients: boolean;
+  transitioning: boolean;
+  copy: KitchenPotComposerCopy;
+  onPress: () => void;
+}) {
+  const [dropCues, setDropCues] = useState<PotDropCue[]>([]);
+  const prevIdsRef = React.useRef<string[]>(selectedIngredients.map((ingredient) => ingredient.id));
+  const dropIndexRef = React.useRef(0);
+  const dropTimeoutsRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const lidOpen = useSharedValue(hasIngredients ? 0.24 : 0);
+  const brothLevel = useSharedValue(hasIngredients ? 0.28 : 0);
+  const steamOpacity = useSharedValue(hasIngredients ? 1 : 0);
+  const ctaScale = useSharedValue(1);
+  const brothWave = useSharedValue(0);
+  const burnerGlow = useSharedValue(0);
+  const flamePulse = useSharedValue(0);
+  const flameFlicker = useSharedValue(0);
+  const ctaGlowStyle = usePulseRing(hasIngredients && !transitioning, 1.03, 2400);
+
+  useEffect(() => {
+    brothWave.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 1800, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      true,
+    );
+  }, [brothWave]);
+
+  useEffect(() => {
+    lidOpen.value = withSpring(
+      transitioning ? 0 : hasIngredients ? Math.min(0.28 + selectedIngredients.length * 0.08, 0.96) : 0,
+      spring.gentle,
+    );
+    brothLevel.value = withSpring(
+      transitioning
+        ? Math.min(0.22 + selectedIngredients.length * 0.06, 0.5)
+        : hasIngredients
+          ? Math.min(0.26 + selectedIngredients.length * 0.09, 0.78)
+          : 0,
+      spring.gentle,
+    );
+    steamOpacity.value = withTiming(transitioning ? 0 : hasIngredients ? 1 : 0, { duration: 320 });
+  }, [brothLevel, hasIngredients, lidOpen, selectedIngredients.length, steamOpacity, transitioning]);
+
+  useEffect(() => {
+    cancelAnimation(flamePulse);
+    cancelAnimation(flameFlicker);
+
+    if (transitioning) {
+      burnerGlow.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+      flamePulse.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) }),
+          withTiming(0.76, { duration: 360, easing: Easing.inOut(Easing.quad) }),
+        ),
+        -1,
+        true,
+      );
+      flameFlicker.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 170, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 210, easing: Easing.inOut(Easing.quad) }),
+        ),
+        -1,
+        true,
+      );
+      return;
+    }
+
+    burnerGlow.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.quad) });
+    flamePulse.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+    flameFlicker.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) });
+  }, [burnerGlow, flameFlicker, flamePulse, transitioning]);
+
+  useEffect(() => {
+    const previous = prevIdsRef.current;
+    const additions = selectedIngredients.filter(
+      (ingredient) => !previous.includes(ingredient.id),
+    );
+
+    if (additions.length > 0) {
+      const nextCues = additions.map((ingredient, index) => {
+        const laneIndex = (dropIndexRef.current + index) % POT_DROP_LANES.length;
+        const accentKey = POT_ACCENT_KEYS[(dropIndexRef.current + index) % POT_ACCENT_KEYS.length];
+        dropIndexRef.current += 1;
+
+        return {
+          key: `${ingredient.id}-${Date.now()}-${index}`,
+          label: ingredient.canonicalName,
+          lane: POT_DROP_LANES[laneIndex],
+          accent: theme[accentKey],
+          spin: laneIndex % 2 === 0 ? -8 : 8,
+        };
+      });
+
+      setDropCues((current) => [...current, ...nextCues].slice(-6));
+
+      nextCues.forEach((cue) => {
+        const timeout = setTimeout(() => {
+          setDropCues((current) => current.filter((item) => item.key !== cue.key));
+        }, 1280);
+
+        dropTimeoutsRef.current.push(timeout);
+      });
+    }
+
+    prevIdsRef.current = selectedIngredients.map((ingredient) => ingredient.id);
+  }, [selectedIngredients, theme]);
+
+  useEffect(() => {
+    return () => {
+      dropTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+    };
+  }, []);
+
+  useEffect(() => {
+    if (transitioning) {
+      setDropCues([]);
+    }
+  }, [transitioning]);
+
+  const lidStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: -lidOpen.value * 34 },
+      { translateX: lidOpen.value * 6 },
+      { rotate: `${-lidOpen.value * 9}deg` },
+    ],
+  }));
+
+  const brothStyle = useAnimatedStyle(() => ({
+    height: 34 + brothLevel.value * 44,
+  }));
+
+  const brothSurfaceStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -8 + brothWave.value * 16 }],
+  }));
+
+  const steamStyle = useAnimatedStyle(() => ({
+    opacity: steamOpacity.value,
+  }));
+
+  const ctaPressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ctaScale.value }],
+  }));
+
+  const burnerGlowStyle = useAnimatedStyle(() => ({
+    opacity: burnerGlow.value * 0.78,
+    transform: [{ scale: 0.92 + burnerGlow.value * 0.16 }],
+  }));
+
+  const burnerRingStyle = useAnimatedStyle(() => ({
+    opacity: 0.34 + burnerGlow.value * 0.58,
+    transform: [{ scale: 1 + burnerGlow.value * 0.06 }],
+  }));
+
+  const flameCenterStyle = useAnimatedStyle(() => ({
+    opacity: burnerGlow.value * (0.72 + flameFlicker.value * 0.18),
+    transform: [
+      { translateY: -2 - flamePulse.value * 16 },
+      { scaleY: 0.72 + flamePulse.value * 0.46 },
+      { scaleX: 0.9 + flameFlicker.value * 0.08 },
+    ],
+  }));
+
+  const flameLeftStyle = useAnimatedStyle(() => ({
+    opacity: burnerGlow.value * (0.54 + flameFlicker.value * 0.14),
+    transform: [
+      { translateY: -1 - flamePulse.value * 10 },
+      { scaleY: 0.66 + flamePulse.value * 0.32 },
+      { scaleX: 0.82 + flameFlicker.value * 0.06 },
+    ],
+  }));
+
+  const flameRightStyle = useAnimatedStyle(() => ({
+    opacity: burnerGlow.value * (0.5 + flameFlicker.value * 0.16),
+    transform: [
+      { translateY: -1 - flamePulse.value * 11 },
+      { scaleY: 0.68 + flamePulse.value * 0.34 },
+      { scaleX: 0.8 + flameFlicker.value * 0.06 },
+    ],
+  }));
+
+  const insideIngredients = selectedIngredients.slice(-3);
+  const extraIngredients = Math.max(0, selectedIngredients.length - insideIngredients.length);
+  const statusText = transitioning
+    ? copy.reactorActionClosingSub
+    : hasIngredients
+      ? copy.reactorLocked
+      : copy.reactorWaitingLabel;
+  const ctaTitle = transitioning
+    ? copy.reactorActionClosing
+    : copy.reactorAction;
+  const ctaSub = transitioning
+    ? copy.reactorActionClosingSub
+    : hasIngredients
+      ? copy.reactorActionSub
+      : copy.reactorWaitingLabel;
+
+  return (
+    <View style={[s.reactorSection, { borderTopColor: `${theme.border}88` }]}>
+      <View style={s.reactorHeader}>
+        <View style={s.reactorHeaderText}>
+          <Text style={[s.reactorTitle, { color: theme.text }]}>{copy.reactorTitle}</Text>
+          <Text style={[s.reactorSub, { color: theme.textMuted }]}>
+            {hasIngredients ? copy.reactorReady : copy.reactorWaiting}
+          </Text>
         </View>
 
-        <Animated.View style={[po.copyBlock, textStyle]}>
-          <Text style={[po.copyTitle, { color: theme.text }]}>{copy.title}</Text>
-          <Text style={[po.copyDetail, { color: theme.textMuted }]}>{copy.detail}</Text>
-          <Text style={[po.copyTip, { color: theme.emerald }]}>{copy.tip}</Text>
-          <Text style={[po.phaseLabel, { color: theme.textMuted }]}>
-            {mergeTexts[Math.min(mergePhase, mergeTexts.length - 1)]}
+        <View
+          style={[
+            s.reactorBadge,
+            {
+              backgroundColor: hasIngredients ? theme.glassEmerald : `${theme.border}22`,
+              borderColor: hasIngredients ? theme.borderEmerald : `${theme.border}70`,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              s.reactorBadgeTxt,
+              { color: hasIngredients ? theme.emerald : theme.textMuted },
+            ]}
+          >
+            {selectedIngredients.length}
           </Text>
-          <View style={po.phaseProgressRow}>
-            {mergeTexts.map((label, index) => {
-              const activeStep = index <= mergePhase;
-              return (
-                <View
-                  key={label}
-                  style={[
-                    po.phaseProgressDot,
-                    {
-                      backgroundColor: activeStep ? theme.primary : `${theme.border}88`,
-                      borderColor: activeStep ? `${theme.primary}40` : `${theme.border}44`,
-                    },
-                  ]}
-                />
-              );
-            })}
+        </View>
+      </View>
+
+      <View style={s.composerShell}>
+        <View
+          style={[
+            s.composerCanvas,
+            {
+              backgroundColor: `${theme.surfaceElevated}DE`,
+              borderColor: `${theme.borderEmerald}4A`,
+            },
+          ]}
+        >
+          <View style={[s.composerGlowA, { backgroundColor: `${theme.primary}0F` }]} />
+          <View style={[s.composerGlowB, { backgroundColor: `${theme.emerald}10` }]} />
+          <View style={[s.composerCounterGlow, { backgroundColor: `${theme.primary}14` }]} />
+
+          <View
+            style={[
+              s.composerSignalPill,
+              {
+                backgroundColor: `${theme.surface}E2`,
+                borderColor: hasIngredients ? `${theme.borderEmerald}58` : `${theme.border}60`,
+              },
+            ]}
+          >
+            <View
+              style={[
+                s.composerSignalDot,
+                { backgroundColor: hasIngredients ? theme.emerald : theme.textMuted },
+              ]}
+            />
+            <Text
+              style={[
+                s.composerSignalText,
+                { color: hasIngredients ? theme.text : theme.textMuted },
+              ]}
+              numberOfLines={1}
+            >
+              {statusText}
+            </Text>
           </View>
-          <View style={po.loaderRow}>
-            {[0, 1, 2].map(index => (
-              <Animated.View
-                key={index}
-                entering={FadeIn.delay(index * 120).duration(dur.fast)}
+
+          {dropCues.map((cue) => (
+            <PotIngredientDropCue key={cue.key} cue={cue} theme={theme} />
+          ))}
+
+          <Animated.View
+            style={[
+              s.composerAura,
+              { backgroundColor: `${theme.primary}14` },
+              ctaGlowStyle,
+            ]}
+          />
+
+          <View
+            style={[
+              s.composerStoveDeck,
+              {
+                backgroundColor: `${theme.surface}EC`,
+                borderColor: `${theme.border}86`,
+              },
+            ]}
+          >
+            <Animated.View
+              style={[
+                s.composerBurnerGlow,
+                { backgroundColor: `${theme.warning}24` },
+                burnerGlowStyle,
+              ]}
+            />
+            <Animated.View
+              style={[
+                s.composerBurnerRing,
+                { borderColor: `${theme.warning}88`, backgroundColor: `${theme.surfaceElevated}EA` },
+                burnerRingStyle,
+              ]}
+            />
+            <View style={[s.composerFlameTray, { opacity: transitioning ? 1 : 0.001 }]}>
+              <Animated.View style={[s.composerFlame, s.composerFlameLeft, { backgroundColor: theme.warning }, flameLeftStyle]} />
+              <Animated.View style={[s.composerFlame, s.composerFlameCenter, { backgroundColor: theme.accentGold }, flameCenterStyle]} />
+              <Animated.View style={[s.composerFlame, s.composerFlameRight, { backgroundColor: theme.warning }, flameRightStyle]} />
+            </View>
+          </View>
+
+          <Animated.View style={s.composerPotCluster}>
+            <Animated.View style={[s.composerLidWrap, lidStyle]}>
+              <View
                 style={[
-                  po.loaderDot,
-                  { backgroundColor: index === 1 ? theme.primary : theme.emerald },
+                  s.composerLid,
+                  {
+                    backgroundColor: `${theme.surface}F8`,
+                    borderColor: `${theme.borderEmerald}A0`,
+                  },
                 ]}
               />
-            ))}
-          </View>
+              <View
+                style={[
+                  s.composerLidKnob,
+                  {
+                    backgroundColor: theme.accentGold,
+                    borderColor: `${theme.accentGold}5A`,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  s.composerLidHighlight,
+                  { backgroundColor: `${theme.surfaceElevated}D0` },
+                ]}
+              />
+            </Animated.View>
+
+            <Animated.View style={[s.composerSteamWrap, steamStyle]}>
+              <View style={[s.composerSteamPuff, s.composerSteamPuffLeft, { backgroundColor: `${theme.primary}28` }]} />
+              <View style={[s.composerSteamPuff, s.composerSteamPuffCenter, { backgroundColor: `${theme.emerald}2A` }]} />
+              <View style={[s.composerSteamPuff, s.composerSteamPuffRight, { backgroundColor: `${theme.primary}22` }]} />
+            </Animated.View>
+
+            <View style={[s.composerHandle, s.composerHandleLeft, { borderColor: `${theme.borderEmerald}86` }]} />
+            <View style={[s.composerHandle, s.composerHandleRight, { borderColor: `${theme.borderEmerald}86` }]} />
+            <View style={[s.composerPotShadow, { backgroundColor: `${theme.primary}18` }]} />
+            <View style={[s.composerPotBase, { backgroundColor: `${theme.surfaceElevated}E4`, borderColor: `${theme.border}72` }]} />
+
+            <View
+              style={[
+                s.composerPot,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: hasIngredients ? `${theme.borderEmerald}D0` : `${theme.border}AA`,
+                  shadowColor: theme.shadowEmerald,
+                },
+              ]}
+            >
+              <View style={[s.composerPotHighlight, { backgroundColor: `${theme.surfaceElevated}D4` }]} />
+              <View style={[s.composerPotRim, { borderColor: `${theme.borderEmerald}86` }]} />
+              <View style={[s.composerBrothMask, { backgroundColor: `${theme.primary}12` }]}>
+                <Animated.View style={[s.composerBroth, { backgroundColor: `${theme.primary}2A` }, brothStyle]}>
+                  <Animated.View style={[s.composerBrothSurface, { backgroundColor: `${theme.primary}88` }, brothSurfaceStyle]} />
+                  <View style={[s.composerBrothBubble, s.composerBrothBubbleA, { backgroundColor: `${theme.surface}D2` }]} />
+                  <View style={[s.composerBrothBubble, s.composerBrothBubbleB, { backgroundColor: `${theme.surface}BE` }]} />
+                </Animated.View>
+              </View>
+
+              <View style={s.composerIngredientWell}>
+                {insideIngredients.map((ingredient, index) => (
+                  <Animated.View
+                    key={ingredient.id}
+                    entering={FadeIn.duration(dur.base).delay(index * 80)}
+                    style={[
+                      s.composerIngredientPearl,
+                      {
+                        backgroundColor: `${theme.surface}F0`,
+                        borderColor: `${theme.primary}30`,
+                      },
+                    ]}
+                  >
+                    <Text style={[s.composerIngredientPearlText, { color: theme.text }]}>
+                      {shortIngredientLabel(ingredient.canonicalName)}
+                    </Text>
+                  </Animated.View>
+                ))}
+                {extraIngredients > 0 && (
+                  <View
+                    style={[
+                      s.composerIngredientPearl,
+                      {
+                        backgroundColor: `${theme.primary}14`,
+                        borderColor: `${theme.primary}30`,
+                      },
+                    ]}
+                  >
+                    <Text style={[s.composerIngredientPearlText, { color: theme.primary }]}>
+                      +{extraIngredients}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Animated.View>
+
+          <Text style={[s.composerFooterText, { color: theme.textMuted }]}>
+            {copy.reactorFooterHint}
+          </Text>
+        </View>
+
+        <Animated.View style={[s.composerCtaWrap, ctaPressStyle]}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={onPress}
+            disabled={!hasIngredients || transitioning}
+            onPressIn={() => {
+              ctaScale.value = withSpring(0.98, spring.snappy);
+            }}
+            onPressOut={() => {
+              ctaScale.value = withSpring(1, spring.gentle);
+            }}
+            style={[
+              s.composerCta,
+              {
+                backgroundColor: hasIngredients ? theme.primary : `${theme.surface}F2`,
+                borderColor: hasIngredients ? `${theme.primary}66` : theme.border,
+              },
+            ]}
+          >
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                s.composerCtaGlow,
+                { backgroundColor: hasIngredients ? `${theme.primary}28` : 'transparent' },
+                ctaGlowStyle,
+              ]}
+            />
+            <View style={s.composerCtaTextBlock}>
+              <Text style={[s.composerCtaTitle, { color: hasIngredients ? '#FFFFFF' : theme.textMuted }]}>
+                {ctaTitle}
+              </Text>
+              <Text style={[s.composerCtaSub, { color: hasIngredients ? '#F2FFFA' : theme.textMuted }]}>
+                {ctaSub}
+              </Text>
+            </View>
+            <View
+              style={[
+                s.composerCtaIcon,
+                {
+                  backgroundColor: hasIngredients ? 'rgba(255,255,255,0.18)' : `${theme.primary}12`,
+                  borderColor: hasIngredients ? 'rgba(255,255,255,0.24)' : `${theme.primary}18`,
+                },
+              ]}
+            >
+              <Ionicons
+                name={transitioning ? 'hourglass-outline' : hasIngredients ? 'sparkles' : 'add-circle-outline'}
+                size={16}
+                color={hasIngredients ? '#FFFFFF' : theme.primary}
+              />
+            </View>
+          </TouchableOpacity>
         </Animated.View>
-      </Animated.View>
-    </Animated.View>
+      </View>
+
+      <Text style={[s.reactorHint, { color: `${theme.textMuted}B8` }]}>
+        {hasIngredients ? copy.reactorHintReady : copy.reactorHintIdle}
+      </Text>
+    </View>
   );
 }
 
@@ -468,23 +853,27 @@ export default function KitchenScreen({
     ? {
         active: 'active',
         quick: 'Quick',
+        pantry: 'Pantry',
         search: 'INGREDIENT SEARCH',
         selectedIngredients: 'SELECTED INGREDIENTS',
         collapse: 'Collapse',
         more: 'more',
         clear: 'Clear',
-        reactorTitle: 'AI Recipe Lab',
-        reactorReady: `${selectedIngredients.length} ingredients ready for analysis`,
-        reactorWaiting: 'Idle mode - add ingredients',
-        reactorHintReady: 'Tap the pot to find recipes',
-        reactorHintIdle: 'AI analyzes ingredient compatibility',
+        reactorTitle: 'AI Recipe Pot',
+        reactorReady: `${selectedIngredients.length} ingredients are simmering in the pot`,
+        reactorWaiting: 'Choose ingredients and watch them fall into the pot',
+        reactorHintReady: 'The lid is open. Tap Find Recipes when you are ready.',
+        reactorHintIdle: 'Each ingredient drops into the pot and wakes the AI gently.',
         reactorAction: 'Find Recipes',
-        reactorActionSub: 'Tap to launch AI search',
+        reactorActionSub: 'The pot is warm and ready for tasting',
+        reactorActionClosing: 'Sealing the pot',
+        reactorActionClosingSub: 'The lid is closing before the recipe story begins',
         reactorModeLive: 'Live',
-        reactorModeReady: 'AI ready',
-        reactorModeIdle: 'Idle',
-        reactorLocked: `${selectedIngredients.length} items ready`,
-        reactorWaitingLabel: 'Waiting for ingredients',
+        reactorModeReady: 'Pot ready',
+        reactorModeIdle: 'Pot waiting',
+        reactorLocked: `${selectedIngredients.length} ingredients in the pot`,
+        reactorWaitingLabel: 'Pot waiting for ingredients',
+        reactorFooterHint: 'Selected ingredients slide into the pot one by one',
         quickStart: 'My Packs',
         quickStartSub: 'Your custom ingredient bundles',
         packs: 'packs',
@@ -496,23 +885,27 @@ export default function KitchenScreen({
     : {
         active: 'aktif',
         quick: 'Hızlı',
+        pantry: 'Dolabım',
         search: 'MALZEME SORGUSU',
         selectedIngredients: 'SEÇİLEN MALZEMELER',
         collapse: 'Daralt',
         more: 'daha',
         clear: 'Temizle',
-        reactorTitle: 'AI Tarif Laboratuvari',
-        reactorReady: `${selectedIngredients.length} malzeme analiz için hazır`,
-        reactorWaiting: 'Beklemede - malzeme ekle',
-        reactorHintReady: 'Tarif bulmak için tencereye dokun',
-        reactorHintIdle: 'AI motoru malzeme uyumunu analiz eder',
+        reactorTitle: 'AI Tarif Kazanı',
+        reactorReady: `${selectedIngredients.length} malzeme kazanda demleniyor`,
+        reactorWaiting: 'Malzeme seç, tencereye yumuşakça düşsün',
+        reactorHintReady: 'Kapak aralandı. Hazırsan Tarif Bul’a dokun.',
+        reactorHintIdle: 'Her malzeme seçimi tencereye düşer ve kapağı biraz daha açar.',
         reactorAction: 'Tarif Bul',
-        reactorActionSub: 'AI aramasını başlat',
+        reactorActionSub: 'Kazan ısındı, AI tadım için hazır',
+        reactorActionClosing: 'Kazan kapanıyor',
+        reactorActionClosingSub: 'Kapak kapanıyor, tarif hikâyesi şimdi başlıyor',
         reactorModeLive: 'Canlı',
-        reactorModeReady: 'AI hazır',
-        reactorModeIdle: 'Beklemede',
-        reactorLocked: `${selectedIngredients.length} malzeme hazır`,
-        reactorWaitingLabel: 'Malzeme bekleniyor',
+        reactorModeReady: 'Kazan hazır',
+        reactorModeIdle: 'Kazan bekliyor',
+        reactorLocked: `${selectedIngredients.length} malzeme kazanda`,
+        reactorWaitingLabel: 'Kazan malzeme bekliyor',
+        reactorFooterHint: 'Seçilen malzemeler tek tek kazana iner',
         quickStart: 'Paketlerim',
         quickStartSub: 'Özel malzeme paketlerin',
         packs: 'paket',
@@ -528,11 +921,11 @@ export default function KitchenScreen({
   const [activePack, setActivePack] = useState<string | null>(null);
   const [recentIngredients, setRecentIngredients] = useState<Ingredient[]>([]);
   const [chipsExpanded, setChipsExpanded] = useState(false);
-  const [merging, setMerging] = useState(false);
-  const [mergePhase, setMergePhase] = useState(0);
+  const [searchTransitioning, setSearchTransitioning] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [searchPrefill, setSearchPrefill] = useState('');
   const [searchPrefillKey, setSearchPrefillKey] = useState(0);
+  const searchTransitionTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasIngredients = selectedIngredients.length > 0;
   const hiddenCount = Math.max(0, selectedIngredients.length - CHIP_COLLAPSE_AT);
@@ -543,31 +936,6 @@ export default function KitchenScreen({
   const headerStyle = useScaleSettle(20, 0.98);
   const workspaceStyle = useScaleSettle(70, 0.985);
   const packsStyle = useFadeRise(120, 12);
-
-  const reactorIdle = useReactorIdle(!merging);
-  const reactorMerge = useReactorMerge(merging);
-  const sweepStyle = useSweepScan(true);          // always scanning
-  const shimmerStyle = useShimmerBand(true);       // always shimmering
-  const orbitAStyle = useIdleOrbit(hasIngredients || merging, 0);
-  const orbitBStyle = useIdleOrbit(hasIngredients || merging, 620);
-  const orbitCStyle = useIdleOrbit(hasIngredients || merging, 1080);
-  const orbitDStyle = useIdleOrbit(hasIngredients || merging, 1480);
-  const potFloatStyle = useFloating(0, merging ? 6 : 3, merging ? 1500 : 2400);
-  const potAuraStyle = usePulseRing(hasIngredients || merging, merging ? 1.22 : 1.1, merging ? 900 : 1800);
-  const coreTouchScale = useSharedValue(1);
-  const corePulseScale = useSharedValue(hasIngredients ? 1 : 0.92);
-  const corePulseOpacity = useSharedValue(hasIngredients ? 0.4 : 0.18);
-  const lockRingOpacity = useSharedValue(hasIngredients ? 1 : 0.48);
-  const coreTouchStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: coreTouchScale.value }],
-  }));
-  const corePulseStyle = useAnimatedStyle(() => ({
-    opacity: corePulseOpacity.value,
-    transform: [{ scale: corePulseScale.value }],
-  }));
-  const lockRingStyle = useAnimatedStyle(() => ({
-    opacity: lockRingOpacity.value,
-  }));
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -595,69 +963,12 @@ export default function KitchenScreen({
   }, [selectedIngredients.length]);
 
   useEffect(() => {
-    cancelAnimation(corePulseScale);
-    cancelAnimation(corePulseOpacity);
-    cancelAnimation(lockRingOpacity);
-
-    if (merging) {
-      corePulseScale.value = withRepeat(
-        withSequence(
-          withTiming(1.2, { duration: 480 }),
-          withTiming(0.98, { duration: 420 }),
-        ),
-        -1,
-        false,
-      );
-      corePulseOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.64, { duration: 480 }),
-          withTiming(0.24, { duration: 420 }),
-        ),
-        -1,
-        false,
-      );
-      lockRingOpacity.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: 360 }),
-          withTiming(0.62, { duration: 360 }),
-        ),
-        -1,
-        false,
-      );
-      return;
-    }
-
-    if (hasIngredients) {
-      corePulseScale.value = withRepeat(
-        withSequence(
-          withTiming(1.08, { duration: 1200 }),
-          withTiming(0.98, { duration: 1200 }),
-        ),
-        -1,
-        false,
-      );
-      corePulseOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.46, { duration: 1200 }),
-          withTiming(0.2, { duration: 1200 }),
-        ),
-        -1,
-        false,
-      );
-      lockRingOpacity.value = withTiming(1, { duration: dur.medium });
-      return;
-    }
-
-    corePulseScale.value = withTiming(0.92, { duration: dur.medium });
-    corePulseOpacity.value = withTiming(0.16, { duration: dur.medium });
-    lockRingOpacity.value = withTiming(0.42, { duration: dur.fast });
-  }, [
-    corePulseOpacity,
-    corePulseScale,
-    hasIngredients,
-    lockRingOpacity,
-    merging,
-  ]);
+    return () => {
+      if (searchTransitionTimeoutRef.current) {
+        clearTimeout(searchTransitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function addIngredient(ingredient: Ingredient) {
     if (selectedIngredients.some(item => item.id === ingredient.id)) return;
@@ -762,31 +1073,39 @@ export default function KitchenScreen({
   }
 
   function handleMerge() {
-    if (!hasIngredients || merging) return;
+    if (!hasIngredients || searchTransitioning) return;
 
-    setMerging(true);
-    setMergePhase(0);
+    setSearchTransitioning(true);
 
-    const phaseTimer = setInterval(() => {
-      setMergePhase(prev => Math.min(prev + 1, MERGE_TEXTS[language].length - 1));
-    }, 760);
+    if (searchTransitionTimeoutRef.current) {
+      clearTimeout(searchTransitionTimeoutRef.current);
+    }
 
-    setTimeout(() => {
-      clearInterval(phaseTimer);
-      setMerging(false);
+    searchTransitionTimeoutRef.current = setTimeout(() => {
       (nav as any).navigate(Routes.App.KitchenResult, {
         ingredientIds: selectedIngredients.map(item => item.id),
         ingredientNames: selectedIngredients.map(item => item.canonicalName),
       });
-    }, 2500);
+
+      searchTransitionTimeoutRef.current = setTimeout(() => {
+        setSearchTransitioning(false);
+      }, 620);
+    }, 920);
   }
 
-  function handleCorePressIn() {
-    coreTouchScale.value = withSpring(0.94, spring.snappy);
-  }
+  useShakeDetector(() => {
+    if (!hasIngredients || searchTransitioning) return;
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    handleMerge();
+  }, hasIngredients && !searchTransitioning);
 
-  function handleCorePressOut() {
-    coreTouchScale.value = withSpring(1, spring.playful);
+  function handlePantryPress() {
+    (nav as any).navigate(Routes.App.Pantry, {
+      selectedIngredients,
+      onConfirm: (ingredients: Ingredient[]) => {
+        onChangeSelected(ingredients);
+      },
+    });
   }
 
   return (
@@ -853,7 +1172,14 @@ export default function KitchenScreen({
                     {language === 'en' ? 'AI KITCHEN' : 'AI MUTFAK'}
                   </Text>
                 </View>
-                <Text style={[s.wsTitle, { color: theme.text }]}>{t.kitchen.title}</Text>
+                <Text
+                  style={[s.wsTitle, { color: theme.text }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.76}
+                >
+                  {t.kitchen.title}
+                </Text>
                 <Text style={[s.wsSubtitle, { color: theme.textMuted }]}>
                   {t.kitchen.subtitle}
                 </Text>
@@ -877,6 +1203,21 @@ export default function KitchenScreen({
                     </Text>
                   </Animated.View>
                 )}
+
+                <TouchableOpacity
+                  onPress={handlePantryPress}
+                  activeOpacity={0.82}
+                  style={[
+                    s.quickBtn,
+                    {
+                      borderColor: `${theme.emerald}2F`,
+                      backgroundColor: `${theme.emerald}12`,
+                    },
+                  ]}
+                >
+                  <Ionicons name="basket-outline" size={13} color={theme.emerald} />
+                  <Text style={[s.quickBtnTxt, { color: theme.emerald }]}>{copy.pantry}</Text>
+                </TouchableOpacity>
 
                 <TouchableOpacity
                   onPress={openQuickSheet}
@@ -1020,282 +1361,14 @@ export default function KitchenScreen({
               </Text>
             )}
           </View>
-          <View style={[s.reactorSection, { borderTopColor: `${theme.border}88` }]}> 
-            <View style={s.reactorHeader}>
-              <View style={s.reactorHeaderText}>
-                <Text style={[s.reactorTitle, { color: theme.text }]}>{copy.reactorTitle}</Text>
-                <Text style={[s.reactorSub, { color: theme.textMuted }]}> 
-                  {hasIngredients ? copy.reactorReady : copy.reactorWaiting}
-                </Text>
-              </View>
-
-              <Animated.View
-                entering={FadeIn.duration(dur.fast)}
-                style={[
-                  s.reactorBadge,
-                  {
-                    backgroundColor: hasIngredients ? theme.glassEmerald : `${theme.border}22`,
-                    borderColor: hasIngredients ? theme.borderEmerald : `${theme.border}70`,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    s.reactorBadgeTxt,
-                    { color: hasIngredients ? theme.emerald : theme.textMuted },
-                  ]}
-                >
-                  {selectedIngredients.length}
-                </Text>
-              </Animated.View>
-            </View>
-
-            <View style={s.reactorActionShell}>
-              <Animated.View
-                style={[
-                  s.reactorCanvas,
-                  {
-                    backgroundColor: `${theme.surfaceElevated}D8`,
-                    borderColor: `${theme.borderEmerald}50`,
-                  },
-                ]}
-              >
-                <View style={[s.reactorCanvasGlowA, { backgroundColor: `${theme.primary}0E` }]} />
-                <View style={[s.reactorCanvasGlowB, { backgroundColor: `${theme.emerald}10` }]} />
-
-                <View style={s.reactorTopRow}>
-                  <View
-                    style={[
-                      s.reactorSignalPill,
-                      {
-                        backgroundColor: `${theme.surface}D8`,
-                        borderColor: `${theme.borderEmerald}42`,
-                      },
-                    ]}
-                  >
-                    <View style={[s.reactorSignalDot, { backgroundColor: theme.emerald }]} />
-                    <Text style={[s.reactorSignalText, { color: theme.text }]} numberOfLines={1}>
-                      {hasIngredients ? copy.reactorLocked : copy.reactorWaitingLabel}
-                    </Text>
-                  </View>
-                </View>
-
-                <Animated.View
-                  style={[
-                    s.reactorHalo,
-                    { backgroundColor: `${theme.primary}14` },
-                    reactorMerge.haloStyle,
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    s.reactorRingOuter,
-                    { borderColor: hasIngredients ? `${theme.primary}58` : `${theme.primary}2E` },
-                    reactorIdle.ringStyle,
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    s.reactorRingMid,
-                    { borderColor: hasIngredients ? `${theme.primary}36` : `${theme.primary}1A` },
-                    reactorMerge.counterRingStyle,
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    s.reactorRingInner,
-                    { borderColor: hasIngredients ? `${theme.emerald}62` : `${theme.emerald}30` },
-                    reactorIdle.ringStyle,
-                  ]}
-                />
-
-                {/* Ghost orbit chips — always visible decorative orbs */}
-                {GHOST_ITEMS.map((g, i) => (
-                  <GhostOrbitChip
-                    key={i}
-                    icon={g.icon}
-                    radius={g.radius}
-                    startDeg={g.startDeg}
-                    speed={g.speed}
-                    hasIngredients={hasIngredients}
-                    theme={theme}
-                  />
-                ))}
-                <Animated.View
-                  style={[
-                    s.reactorSweep,
-                    { backgroundColor: `${theme.primary}32` },
-                    sweepStyle,
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    s.reactorShimmerRibbon,
-                    { backgroundColor: `${theme.surface}66` },
-                    shimmerStyle,
-                  ]}
-                />
-                <Animated.View style={[s.reactorNodeA, orbitAStyle]}>
-                  <View style={[s.nodeRing, { borderColor: `${theme.primary}50` }]} />
-                  <View style={[s.nodeCoreA, { backgroundColor: theme.primary }]} />
-                </Animated.View>
-                <Animated.View style={[s.reactorNodeB, orbitBStyle]}>
-                  <View style={[s.nodeRing, { borderColor: `${theme.emerald}50` }]} />
-                  <View style={[s.nodeCoreB, { backgroundColor: theme.emerald }]} />
-                </Animated.View>
-                <Animated.View style={[s.reactorNodeC, orbitCStyle]}>
-                  <View style={[s.nodeRing, { borderColor: `${theme.accentCyan}50` }]} />
-                  <View style={[s.nodeCoreC, { backgroundColor: theme.accentCyan }]} />
-                </Animated.View>
-                <Animated.View style={[s.reactorNodeD, orbitDStyle]}>
-                  <View style={[s.nodeRing, { borderColor: `${theme.warning}50` }]} />
-                  <View style={[s.nodeCoreC, { backgroundColor: theme.warning }]} />
-                </Animated.View>
-                <Animated.View
-                  style={[
-                    s.reactorCorePulse,
-                    { backgroundColor: `${theme.primary}16` },
-                    corePulseStyle,
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    s.reactorLockRing,
-                    { borderColor: `${theme.emerald}55` },
-                    lockRingStyle,
-                  ]}
-                />
-
-                <TouchableOpacity
-                  activeOpacity={1}
-                  disabled={!hasIngredients || merging}
-                  onPress={handleMerge}
-                  onPressIn={handleCorePressIn}
-                  onPressOut={handleCorePressOut}
-                  style={s.reactorCoreTouch}
-                >
-                  <Animated.View
-                    style={[
-                      s.reactorPotAura,
-                      { backgroundColor: `${theme.primary}12` },
-                      potAuraStyle,
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      s.reactorSteamColumn,
-                      s.reactorSteamColumnA,
-                      { borderColor: `${theme.primary}30` },
-                      orbitAStyle,
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      s.reactorSteamColumn,
-                      s.reactorSteamColumnB,
-                      { borderColor: `${theme.emerald}30` },
-                      orbitBStyle,
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      s.reactorSteamColumn,
-                      s.reactorSteamColumnC,
-                      { borderColor: `${theme.accentCyan}30` },
-                      orbitCStyle,
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      s.reactorCore,
-                      {
-                        backgroundColor: theme.surface,
-                        borderColor: hasIngredients
-                          ? `${theme.borderEmerald}CC`
-                          : `${theme.border}AA`,
-                      },
-                      hasIngredients ? reactorMerge.coreStyle : null,
-                      reactorIdle.coreStyle,
-                      coreTouchStyle,
-                      potFloatStyle,
-                    ]}
-                  >
-                    <View style={s.reactorPotStack}>
-                      <View style={[s.reactorSteamRow, s.reactorSteamRowTop]}>
-                        <View
-                          style={[
-                            s.reactorSteamPuff,
-                            { backgroundColor: hasIngredients ? `${theme.primary}32` : `${theme.border}44` },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            s.reactorSteamPuff,
-                            s.reactorSteamPuffTall,
-                            { backgroundColor: hasIngredients ? `${theme.emerald}2A` : `${theme.border}40` },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            s.reactorSteamPuff,
-                            { backgroundColor: hasIngredients ? `${theme.primary}26` : `${theme.border}3A` },
-                          ]}
-                        />
-                      </View>
-                      <MaterialCommunityIcons
-                        name="pot-steam-outline"
-                        size={58}
-                        color={hasIngredients ? theme.primary : theme.textMuted}
-                      />
-                      <Text
-                        style={[
-                          s.reactorPotTitle,
-                          { color: hasIngredients ? theme.text : theme.textMuted },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {copy.reactorAction}
-                      </Text>
-                      <Text
-                        style={[
-                          s.reactorCoreSub,
-                          { color: hasIngredients ? theme.primary : `${theme.textMuted}BB` },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {hasIngredients ? copy.reactorActionSub : t.kitchen.noIngredients}
-                      </Text>
-                    </View>
-                  </Animated.View>
-                </TouchableOpacity>
-
-                <View style={s.reactorFooter}>
-                  <View
-                    style={[
-                      s.reactorFooterPill,
-                      {
-                        backgroundColor: `${theme.surface}C8`,
-                        borderColor: `${theme.borderEmerald}44`,
-                      },
-                    ]}
-                  >
-                    <MaterialCommunityIcons name="pot-steam-outline" size={14} color={theme.emerald} />
-                    <Text style={[s.reactorFooterText, { color: theme.emerald }]} numberOfLines={1}>
-                      {merging
-                        ? copy.reactorModeLive
-                        : hasIngredients
-                          ? copy.reactorModeReady
-                          : copy.reactorModeIdle}
-                    </Text>
-                  </View>
-                </View>
-              </Animated.View>
-            </View>
-
-            <Text style={[s.reactorHint, { color: `${theme.textMuted}B8` }]}>
-              {hasIngredients ? copy.reactorHintReady : copy.reactorHintIdle}
-            </Text>
-          </View>
+          <KitchenPotComposer
+            theme={theme}
+            selectedIngredients={selectedIngredients}
+            hasIngredients={hasIngredients}
+            transitioning={searchTransitioning}
+            copy={copy}
+            onPress={handleMerge}
+          />
         </Animated.View>
 
         {recentIngredients.length > 0 && (
@@ -1462,14 +1535,6 @@ export default function KitchenScreen({
 
         <View style={s.scrollBottomPad} />
       </ScrollView>
-
-      <ReactorSearchOverlay
-        active={merging}
-        mergePhase={mergePhase}
-        selectedIngredients={selectedIngredients}
-        theme={theme}
-        language={language}
-      />
     </KeyboardAvoidingView>
   );
 }
@@ -1492,34 +1557,35 @@ function IngredientCapsule({
 
   return (
     <Animated.View
-      style={animatedStyle}
       entering={FadeInRight.delay(index * 22).duration(dur.base)}
       exiting={ZoomOut.duration(dur.fast)}
       layout={Layout.springify()}
     >
-      <TouchableOpacity
-        onPress={onRemove}
-        onPressIn={() => {
-          scale.value = withSpring(0.94, spring.snappy);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, spring.snappy);
-        }}
-        activeOpacity={1}
-        style={[
-          s.capsule,
-          {
-            backgroundColor: `${theme.primary}14`,
-            borderColor: `${theme.primary}30`,
-          },
-        ]}
-      >
-        <View style={[s.capsuleDot, { backgroundColor: theme.primary }]} />
-        <Text style={[s.capsuleTxt, { color: theme.text }]} numberOfLines={1}>
-          {ingredient.canonicalName}
-        </Text>
-        <Ionicons name="close" size={11} color={theme.textMuted} />
-      </TouchableOpacity>
+      <Animated.View style={animatedStyle}>
+        <TouchableOpacity
+          onPress={onRemove}
+          onPressIn={() => {
+            scale.value = withSpring(0.94, spring.snappy);
+          }}
+          onPressOut={() => {
+            scale.value = withSpring(1, spring.snappy);
+          }}
+          activeOpacity={1}
+          style={[
+            s.capsule,
+            {
+              backgroundColor: `${theme.primary}14`,
+              borderColor: `${theme.primary}30`,
+            },
+          ]}
+        >
+          <View style={[s.capsuleDot, { backgroundColor: theme.primary }]} />
+          <Text style={[s.capsuleTxt, { color: theme.text }]} numberOfLines={1}>
+            {ingredient.canonicalName}
+          </Text>
+          <Ionicons name="close" size={11} color={theme.textMuted} />
+        </TouchableOpacity>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -1792,7 +1858,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  wsTitleBlock: { flex: 1 },
+  wsTitleBlock: { flex: 1, minWidth: 0, paddingRight: 8 },
   wsEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1811,6 +1877,7 @@ const s = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -1,
     lineHeight: 34,
+    flexShrink: 1,
   },
   wsSubtitle: {
     fontSize: 12.5,
@@ -1819,10 +1886,11 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   wsHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexShrink: 0,
+    },
   wsCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2293,6 +2361,403 @@ const s = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     letterSpacing: 0.1,
+  },
+  potDropCue: {
+    position: 'absolute',
+    top: 58,
+    left: '50%',
+    marginLeft: -46,
+    minWidth: 92,
+    maxWidth: 112,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  potDropCueDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  potDropCueText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  composerShell: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  composerCanvas: {
+    width: 286,
+    height: 342,
+    borderRadius: 38,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 22,
+  },
+  composerGlowA: {
+    position: 'absolute',
+    top: -28,
+    right: -22,
+    width: 168,
+    height: 168,
+    borderRadius: 84,
+  },
+  composerGlowB: {
+    position: 'absolute',
+    bottom: 32,
+    left: -24,
+    width: 134,
+    height: 134,
+    borderRadius: 67,
+  },
+  composerCounterGlow: {
+    position: 'absolute',
+    bottom: 22,
+    width: 220,
+    height: 38,
+    borderRadius: 19,
+  },
+  composerSignalPill: {
+    position: 'absolute',
+    top: 16,
+    left: 20,
+    right: 20,
+    minHeight: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    zIndex: 4,
+  },
+  composerSignalDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  composerSignalText: {
+    flex: 1,
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
+  composerAura: {
+    position: 'absolute',
+    bottom: 54,
+    width: 214,
+    height: 214,
+    borderRadius: 107,
+  },
+  composerStoveDeck: {
+    position: 'absolute',
+    bottom: 26,
+    width: 214,
+    height: 64,
+    borderRadius: 28,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerBurnerGlow: {
+    position: 'absolute',
+    bottom: 18,
+    width: 132,
+    height: 34,
+    borderRadius: 18,
+  },
+  composerBurnerRing: {
+    width: 116,
+    height: 18,
+    borderRadius: 999,
+    borderWidth: 1.5,
+  },
+  composerFlameTray: {
+    position: 'absolute',
+    bottom: 20,
+    width: 88,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerFlame: {
+    position: 'absolute',
+    bottom: 0,
+    width: 18,
+    height: 22,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  composerFlameLeft: {
+    left: 14,
+  },
+  composerFlameCenter: {
+    width: 20,
+    height: 28,
+  },
+  composerFlameRight: {
+    right: 14,
+  },
+  composerPotCluster: {
+    width: 210,
+    height: 232,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: 42,
+  },
+  composerLidWrap: {
+    position: 'absolute',
+    top: 54,
+    width: 156,
+    height: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  composerLid: {
+    width: 144,
+    height: 40,
+    borderWidth: 1.5,
+    borderTopLeftRadius: 80,
+    borderTopRightRadius: 80,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  composerLidKnob: {
+    position: 'absolute',
+    top: 4,
+    width: 28,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+  },
+  composerLidHighlight: {
+    position: 'absolute',
+    top: 16,
+    left: 30,
+    width: 54,
+    height: 7,
+    borderRadius: 4,
+    opacity: 0.9,
+  },
+  composerSteamWrap: {
+    position: 'absolute',
+    top: 22,
+    width: 120,
+    height: 62,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerSteamPuff: {
+    position: 'absolute',
+    bottom: 0,
+    width: 16,
+    borderRadius: 16,
+  },
+  composerSteamPuffLeft: {
+    left: 18,
+    height: 30,
+  },
+  composerSteamPuffCenter: {
+    height: 42,
+    width: 18,
+  },
+  composerSteamPuffRight: {
+    right: 20,
+    height: 28,
+  },
+  composerHandle: {
+    position: 'absolute',
+    bottom: 48,
+    width: 32,
+    height: 48,
+    borderWidth: 6,
+    borderRadius: 18,
+  },
+  composerHandleLeft: {
+    left: 18,
+    borderRightWidth: 0,
+  },
+  composerHandleRight: {
+    right: 18,
+    borderLeftWidth: 0,
+  },
+  composerPotShadow: {
+    position: 'absolute',
+    bottom: 28,
+    width: 156,
+    height: 30,
+    borderRadius: 15,
+  },
+  composerPotBase: {
+    position: 'absolute',
+    bottom: 26,
+    width: 98,
+    height: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  composerPot: {
+    width: 154,
+    height: 120,
+    borderRadius: 32,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  composerPotHighlight: {
+    position: 'absolute',
+    top: 12,
+    left: 20,
+    width: 60,
+    height: 14,
+    borderRadius: 7,
+    opacity: 0.82,
+  },
+  composerPotRim: {
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    right: 12,
+    height: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  composerBrothMask: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 10,
+    top: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    overflow: 'hidden',
+  },
+  composerBroth: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  composerBrothSurface: {
+    position: 'absolute',
+    top: 0,
+    left: -10,
+    right: -10,
+    height: 4,
+    borderRadius: 2,
+  },
+  composerBrothBubble: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  composerBrothBubbleA: {
+    width: 8,
+    height: 8,
+    left: 34,
+    top: 14,
+  },
+  composerBrothBubbleB: {
+    width: 6,
+    height: 6,
+    right: 30,
+    top: 26,
+  },
+  composerIngredientWell: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  composerIngredientPearl: {
+    minHeight: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerIngredientPearlText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  composerFooterText: {
+    position: 'absolute',
+    bottom: 16,
+    fontSize: 10.5,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  composerCtaWrap: {
+    width: '100%',
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  composerCta: {
+    width: '100%',
+    minHeight: 72,
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    overflow: 'hidden',
+  },
+  composerCtaGlow: {
+    position: 'absolute',
+    top: -24,
+    left: 18,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  composerCtaTextBlock: {
+    flex: 1,
+  },
+  composerCtaTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+  },
+  composerCtaSub: {
+    marginTop: 4,
+    fontSize: 11.5,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  composerCtaIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   packSectionHeader: {
     flexDirection: 'row',

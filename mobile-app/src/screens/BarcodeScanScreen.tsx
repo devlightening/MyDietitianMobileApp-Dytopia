@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -140,7 +140,7 @@ export default function BarcodeScanScreen() {
           <Ionicons name="barcode-outline" size={40} color={theme.primary} />
           <Text style={[s.title, { color: theme.text }]}>Barkod tarayıcı izni gerekiyor</Text>
           <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Paketli ürünleri canonical ingredient ailesine çevirmek için kameraya erişim vermelisin.
+            Paketli ürünleri kanonik malzeme ailesine çevirmek için kameraya erişim vermelisin.
           </Text>
           <TouchableOpacity
             style={[s.primaryButton, { backgroundColor: theme.primary }]}
@@ -170,7 +170,7 @@ export default function BarcodeScanScreen() {
         <View style={s.scannerWrap}>
           <Text style={[s.title, { color: theme.text }]}>Paketli ürün barkodunu okut</Text>
           <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Sistem önce local mapping cache’e, sonra Open Food Facts yardımcı verisine bakar.
+            Sistem önce yerel eşleme önbelleğine, sonra Open Food Facts yardımcı verisine bakar.
           </Text>
 
           <View style={[s.cameraShell, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}>
@@ -198,7 +198,7 @@ export default function BarcodeScanScreen() {
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[s.title, { color: theme.text, marginTop: spacing.lg }]}>Barkod çözülüyor</Text>
           <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Ürün adı canonical ingredient ailesine eşleniyor.
+            Ürün adı kanonik malzeme ailesine eşleniyor.
           </Text>
         </View>
       )}
@@ -208,12 +208,12 @@ export default function BarcodeScanScreen() {
           <View style={[s.resultCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
             <Text style={[s.resultTitle, { color: theme.text }]}>{result.productName || result.barcode}</Text>
             <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-              {result.brand ? `${result.brand} • ` : ''}
-              {result.sourceProvider} • {Math.round(result.confidence * 100)}%
+              {result.brand ? `${result.brand} â€¢ ` : ''}
+              {result.sourceProvider} â€¢ {Math.round(result.confidence * 100)}%
             </Text>
             <Text style={[s.resultMeta, { color: theme.textMuted }]}>
               {result.mappingType}
-              {result.requiresConfirmation ? ' • kullanıcı onayı gerekli' : ' • güvenli otomatik eşleşme'}
+              {result.requiresConfirmation ? ' â€¢ kullanıcı onayı gerekli' : ' â€¢ güvenli otomatik eşleşme'}
             </Text>
           </View>
 
@@ -236,7 +236,7 @@ export default function BarcodeScanScreen() {
                   <View style={s.candidateMain}>
                     <Text style={[s.candidateTitle, { color: theme.text }]}>{candidate.canonicalName}</Text>
                     <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-                      {candidate.mappingType} • {Math.round(candidate.confidence * 100)}%
+                      {candidate.mappingType} â€¢ {Math.round(candidate.confidence * 100)}%
                     </Text>
                   </View>
                   <View
@@ -255,7 +255,7 @@ export default function BarcodeScanScreen() {
             })
           ) : (
             <View style={[s.resultCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={[s.resultTitle, { color: theme.text }]}>Doğrudan ingredient adayı bulunamadı</Text>
+              <Text style={[s.resultTitle, { color: theme.text }]}>Doğrudan malzeme adayı bulunamadı</Text>
               <Text style={[s.resultMeta, { color: theme.textMuted }]}>
                 Ürünü metin aramasıyla doğrulamak daha güvenli olacak.
               </Text>
@@ -405,3 +405,4 @@ const s = StyleSheet.create({
   },
   secondaryButtonText: { fontSize: 15, fontWeight: '700' },
 });
+

@@ -7,6 +7,7 @@ using MyDietitianMobileApp.Application.Services;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Api.Problems;
+using MyDietitianMobileApp.Api.Features;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Realtime;
 using MyDietitianMobileApp.Api.Time;
@@ -74,14 +75,14 @@ public class ClientPlanController : ControllerBase
         if (plan == null)
             return Ok(new { plan = (object?)null });
 
-        // Fetch completions for today in one query
         var mealIds = plan.Items.Select(i => i.Id).ToList();
         var completions = await _appDb.MealCompletions
             .Where(c => c.ClientId == clientId!.Value && mealIds.Contains(c.DietPlanMealId))
             .ToListAsync();
         var completionMap = completions.ToDictionary(c => c.DietPlanMealId);
+        var altRecipeMap = await LoadAlternativeRecipeMapAsync(completions);
 
-        var dto = MapPlan(plan, completionMap);
+        var dto = MapPlan(plan, completionMap, altRecipeMap);
         return Ok(new { plan = dto });
     }
 
@@ -122,8 +123,9 @@ public class ClientPlanController : ControllerBase
             .Where(c => c.ClientId == clientId!.Value && allMealIds.Contains(c.DietPlanMealId))
             .ToListAsync();
         var completionMap = completions.ToDictionary(c => c.DietPlanMealId);
+        var altRecipeMap = await LoadAlternativeRecipeMapAsync(completions);
 
-        var dtos = plans.Select(p => MapPlan(p, completionMap)).ToList();
+        var dtos = plans.Select(p => MapPlan(p, completionMap, altRecipeMap)).ToList();
         return Ok(new { plans = dtos });
     }
 
@@ -263,6 +265,40 @@ public class ClientPlanController : ControllerBase
             body.AlternativeRecipeId);
     }
 
+    [HttpPost("meals/{mealItemId}/feedback")]
+    public async Task<IActionResult> SaveMealFeedback(Guid mealItemId, [FromBody] MealFeedbackRequest body)
+    {
+        var (clientId, premiumError) = await RequirePremiumClientAsync();
+        if (premiumError != null) return premiumError;
+
+        var (mealItem, ownershipError) = await VerifyMealOwnership(mealItemId, clientId!.Value);
+        if (ownershipError != null) return ownershipError;
+
+        var completion = await _appDb.MealCompletions
+            .FirstOrDefaultAsync(c => c.ClientId == clientId.Value && c.DietPlanMealId == mealItemId);
+
+        if (completion == null)
+        {
+            return BadRequest(new { message = "Değerlendirme yalnızca tamamlanan öğünlere eklenebilir." });
+        }
+
+        var normalizedFeedback = NormalizeFeedbackKey(body.FeedbackKey);
+        if (normalizedFeedback == null)
+        {
+            return BadRequest(new { message = "Geçersiz değerlendirme anahtarı." });
+        }
+
+        completion.Update(
+            completion.Status,
+            MealFeedbackCodec.Apply(completion.Note, normalizedFeedback),
+            completion.AlternativeRecipeId);
+
+        await _appDb.SaveChangesAsync();
+        await PublishPlanAndGamificationEventsAsync(clientId.Value, mealItem!.Plan.CreatedBy, mealItemId);
+
+        return Ok(new { message = "Öğün değerlendirmesi kaydedildi.", feedbackKey = normalizedFeedback });
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // DELETE /api/client/meals/{mealItemId}/complete  (undo)
     // ─────────────────────────────────────────────────────────────────────────
@@ -348,7 +384,35 @@ public class ClientPlanController : ControllerBase
     // Private helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private static MealPlanDTO MapPlan(MealPlan plan, Dictionary<Guid, MealCompletion> completionMap)
+    private async Task<Dictionary<Guid, AltRecipeInfo>> LoadAlternativeRecipeMapAsync(
+        IEnumerable<MealCompletion> completions)
+    {
+        var altIds = completions
+            .Where(c => c.AlternativeRecipeId.HasValue)
+            .Select(c => c.AlternativeRecipeId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (altIds.Count == 0) return new Dictionary<Guid, AltRecipeInfo>();
+
+        return await _appDb.Recipes
+            .Where(r => altIds.Contains(r.Id))
+            .Select(r => new AltRecipeInfo
+            {
+                Id           = r.Id,
+                Name         = r.Name,
+                CaloriesKcal = r.CaloriesKcal,
+                ProteinGrams = r.ProteinGrams,
+                CarbsGrams   = r.CarbsGrams,
+                FatGrams     = r.FatGrams,
+            })
+            .ToDictionaryAsync(r => r.Id);
+    }
+
+    private static MealPlanDTO MapPlan(
+        MealPlan plan,
+        Dictionary<Guid, MealCompletion> completionMap,
+        Dictionary<Guid, AltRecipeInfo> altRecipeMap)
     {
         var planDateKey = AppTime.FormatDateKey(plan.Date);
         return new MealPlanDTO
@@ -363,34 +427,50 @@ public class ClientPlanController : ControllerBase
                 .Select(i =>
                 {
                     completionMap.TryGetValue(i.Id, out var comp);
+                    AltRecipeInfo? alt = comp?.AlternativeRecipeId.HasValue == true
+                        && altRecipeMap.TryGetValue(comp.AlternativeRecipeId!.Value, out var a) ? a : null;
+
                     return new MealItemDTO
                     {
-                        Id                = i.Id,
-                        Time              = i.Time.ToString(@"hh\:mm"),
-                        MealType          = i.MealType.ToString(),
-                        RecipeId          = i.RecipeId,
-                        RecipeName        = i.Recipe?.Name,
-                        Title             = i.Title,
-                        Note              = i.Note,
-                        OrderIndex        = i.OrderIndex,
-                        Calories          = i.Calories,
-                        Macros            = i.ProteinGrams.HasValue || i.CarbsGrams.HasValue || i.FatGrams.HasValue
-                            ? new MacrosDTO
-                            {
-                                ProteinGrams = i.ProteinGrams,
-                                CarbsGrams   = i.CarbsGrams,
-                                FatGrams     = i.FatGrams
-                            }
+                        Id               = i.Id,
+                        Time             = i.Time.ToString(@"hh\:mm"),
+                        MealType         = i.MealType.ToString(),
+                        RecipeId         = i.RecipeId,
+                        RecipeName       = i.Recipe?.Name,
+                        Title            = i.Title,
+                        Note             = i.Note,
+                        OrderIndex       = i.OrderIndex,
+                        Calories         = i.Calories,
+                        Macros           = i.ProteinGrams.HasValue || i.CarbsGrams.HasValue || i.FatGrams.HasValue
+                            ? new MacrosDTO { ProteinGrams = i.ProteinGrams, CarbsGrams = i.CarbsGrams, FatGrams = i.FatGrams }
                             : null,
-                        CompletionStatus      = comp?.Status.ToString() ?? "Planned",
-                        AlternativeRecipeId   = comp?.AlternativeRecipeId,
-                        IsActionableNow       = AppTime.CanClientActOnMeal(plan.Date, i.Time),
+                        CompletionStatus       = comp?.Status.ToString() ?? "Planned",
+                        AlternativeRecipeId    = comp?.AlternativeRecipeId,
+                        AlternativeRecipeName  = alt?.Name,
+                        AlternativeCalories    = alt?.CaloriesKcal,
+                        AlternativeMacros      = alt != null && (alt.ProteinGrams.HasValue || alt.CarbsGrams.HasValue || alt.FatGrams.HasValue)
+                            ? new MacrosDTO { ProteinGrams = alt.ProteinGrams, CarbsGrams = alt.CarbsGrams, FatGrams = alt.FatGrams }
+                            : null,
+                        FeedbackKey            = MealFeedbackCodec.TryParse(comp?.Note, out var feedbackKey)
+                            ? feedbackKey
+                            : null,
+                        IsActionableNow        = AppTime.CanClientActOnMeal(plan.Date, i.Time),
                         ActionBlockedUntilDate = planDateKey,
-                        ActionBlockedUntilTime = AppTime.FormatTimeKey(i.Time)
+                        ActionBlockedUntilTime = AppTime.FormatTimeKey(i.Time),
                     };
                 })
                 .ToList()
         };
+    }
+
+    private sealed class AltRecipeInfo
+    {
+        public Guid Id { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public int? CaloriesKcal { get; init; }
+        public decimal? ProteinGrams { get; init; }
+        public decimal? CarbsGrams { get; init; }
+        public decimal? FatGrams { get; init; }
     }
 
     private IActionResult? ValidateMealActionWindow(PlanMealItem item, bool allowBeforeMealTime = false)
@@ -457,13 +537,24 @@ public class ClientPlanController : ControllerBase
         var existing = await _appDb.MealCompletions
             .FirstOrDefaultAsync(c => c.ClientId == clientId && c.DietPlanMealId == mealItemId);
 
+        var effectiveStatus = status;
+        var effectiveAlternativeRecipeId = alternativeRecipeId;
+
         if (existing != null)
         {
-            existing.Update(status, note, alternativeRecipeId);
+            if (existing.Status == MealCompletionStatus.Alternative && status == MealCompletionStatus.Done)
+            {
+                // Protect alternative-based progress from accidental "Done" taps on a different
+                // screen. Switching back to the planned recipe should require an explicit undo.
+                effectiveStatus = MealCompletionStatus.Alternative;
+                effectiveAlternativeRecipeId = existing.AlternativeRecipeId;
+            }
+
+            existing.Update(effectiveStatus, note, effectiveAlternativeRecipeId);
         }
         else
         {
-            var completion = new MealCompletion(clientId, dietitianId, mealItemId, status, note, alternativeRecipeId);
+            var completion = new MealCompletion(clientId, dietitianId, mealItemId, effectiveStatus, note, effectiveAlternativeRecipeId);
             _appDb.MealCompletions.Add(completion);
         }
 
@@ -472,17 +563,22 @@ public class ClientPlanController : ControllerBase
             clientId,
             true,
             dietitianId,
-            status switch
+            effectiveStatus switch
             {
                 MealCompletionStatus.Done => ClientGamificationService.EventTypes.MealDone,
                 MealCompletionStatus.Alternative => ClientGamificationService.EventTypes.MealAlternative,
                 MealCompletionStatus.Skipped => ClientGamificationService.EventTypes.MealSkipped,
                 _ => ClientGamificationService.EventTypes.MealDone
             },
-            new { mealItemId, status = status.ToString() });
+            new
+            {
+                mealItemId,
+                requestedStatus = status.ToString(),
+                effectiveStatus = effectiveStatus.ToString()
+            });
         await PublishPlanAndGamificationEventsAsync(clientId, dietitianId, mealItemId);
 
-        var message = status switch
+        var message = effectiveStatus switch
         {
             MealCompletionStatus.Done        => "Harika! Öğün tamamlandı 🎉",
             MealCompletionStatus.Skipped     => "Öğün atlandı olarak işaretlendi",
@@ -490,7 +586,18 @@ public class ClientPlanController : ControllerBase
             _                                => "Kaydedildi"
         };
 
-        return Ok(new { message, status = status.ToString() });
+        return Ok(new { message, status = effectiveStatus.ToString() });
+    }
+
+    private static string? NormalizeFeedbackKey(string? feedbackKey)
+    {
+        if (string.IsNullOrWhiteSpace(feedbackKey))
+            return null;
+
+        var normalized = feedbackKey.Trim().ToLowerInvariant();
+        return normalized is "filling" or "light" or "again" or "hard"
+            ? normalized
+            : null;
     }
 
     private async Task PublishPlanAndGamificationEventsAsync(Guid clientId, Guid dietitianId, Guid mealItemId)
@@ -522,3 +629,5 @@ public class ClientPlanController : ControllerBase
 public record MealActionRequest(string? Note);
 
 public record AlternativeMealRequest(Guid? AlternativeRecipeId, string? Note);
+
+public record MealFeedbackRequest(string FeedbackKey);

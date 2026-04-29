@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
@@ -23,25 +23,33 @@ import {
 
 type Step = 'upload' | 'preview' | 'confirm';
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 const MODES: { key: ImportMode; title: string; description: string }[] = [
-  { key: 'auto', title: 'Akıllı tanı', description: 'Belge yapısını otomatik algılar.' },
-  { key: 'table', title: 'Tablolu dosya', description: 'Excel ve kolonlu yapı için.' },
-  { key: 'freeform', title: 'Serbest belge', description: 'Word ve metin PDF için.' },
+  { key: 'auto',     title: 'Akıllı tanı',   description: 'Belge yapısını otomatik algılar.' },
+  { key: 'table',    title: 'Tablolu dosya',  description: 'Excel ve kolonlu yapı için.' },
+  { key: 'freeform', title: 'Serbest belge',  description: 'Word ve metin PDF için.' },
 ];
 
 const MATCH_STYLE: Record<string, string> = {
-  Exact: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
-  Alias: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200',
+  Exact:      'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
+  Alias:      'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200',
   Normalized: 'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-200',
-  Fuzzy: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
-  Ambiguous: 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-200',
-  Manual: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200',
-  None: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200',
+  Fuzzy:      'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
+  Ambiguous:  'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-200',
+  Manual:     'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200',
+  None:       'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200',
 };
 
 function MatchBadge({ type, confidence }: { type: string; confidence: number }) {
-  const label = type === 'None' ? 'Eşleşmedi' : type === 'Ambiguous' ? 'Belirsiz' : `${type} · ${Math.round(confidence * 100)}%`;
-  return <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold', MATCH_STYLE[type] ?? MATCH_STYLE.None)}>{label}</span>;
+  const label = type === 'None' ? 'Eşleşmedi'
+    : type === 'Ambiguous' ? 'Belirsiz'
+    : `${type} · ${Math.round(confidence * 100)}%`;
+  return (
+    <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold', MATCH_STYLE[type] ?? MATCH_STYLE.None)}>
+      {label}
+    </span>
+  );
 }
 
 function Summary({ title, value, hint }: { title: string; value: string | number; hint: string }) {
@@ -51,6 +59,24 @@ function Summary({ title, value, hint }: { title: string; value: string | number
       <p className="mt-2 text-2xl font-bold text-foreground">{value}</p>
       <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
     </Card>
+  );
+}
+
+function PreviewSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="grid gap-3 md:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-24 rounded-2xl bg-secondary" />
+        ))}
+      </div>
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i} className="h-48 rounded-3xl bg-secondary" />
+      ))}
+      <div className="flex justify-end">
+        <div className="h-11 w-56 rounded-full bg-secondary" />
+      </div>
+    </div>
   );
 }
 
@@ -76,17 +102,16 @@ function IngredientLookup({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <MatchBadge type={ingredient.matchType} confidence={ingredient.matchConfidence} />
-        <span className="text-sm text-foreground">{ingredient.matchedCanonicalName ?? 'Manuel seçim bekleniyor'}</span>
+        <span className="text-sm text-foreground">
+          {ingredient.matchedCanonicalName ?? 'Manuel seçim bekleniyor'}
+        </span>
       </div>
       <div className="relative">
         <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-3 py-2">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setOpen(true);
-            }}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="Malzeme ara"
@@ -95,27 +120,33 @@ function IngredientLookup({
         </div>
         {open && query.trim().length >= 2 ? (
           <div className="absolute left-0 top-full z-20 mt-2 w-full rounded-2xl border border-border bg-card p-2 shadow-lg">
-            {results && results.length > 0 ? results.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-secondary"
-                onMouseDown={() => {
-                  onResolve(item.id, item.canonicalName);
-                  setQuery(item.canonicalName);
-                  setOpen(false);
-                }}
-              >
-                {item.canonicalName}
-              </button>
-            )) : <p className="px-3 py-2 text-sm text-muted-foreground">Sonuç bulunamadı.</p>}
+            {results && results.length > 0
+              ? results.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-secondary"
+                    onMouseDown={() => {
+                      onResolve(item.id, item.canonicalName);
+                      setQuery(item.canonicalName);
+                      setOpen(false);
+                    }}
+                  >
+                    {item.canonicalName}
+                  </button>
+                ))
+              : <p className="px-3 py-2 text-sm text-muted-foreground">Sonuç bulunamadı.</p>}
           </div>
         ) : null}
       </div>
       <button
         type="button"
         disabled={!ingredient.matchedIngredientId || !ingredient.matchedCanonicalName}
-        onClick={() => ingredient.matchedIngredientId && ingredient.matchedCanonicalName && onResolveAll(ingredient.matchedIngredientId, ingredient.matchedCanonicalName)}
+        onClick={() =>
+          ingredient.matchedIngredientId &&
+          ingredient.matchedCanonicalName &&
+          onResolveAll(ingredient.matchedIngredientId, ingredient.matchedCanonicalName)
+        }
         className="text-xs font-semibold text-primary disabled:text-muted-foreground"
       >
         Aynı ham malzemeyi tüm tariflerde böyle eşleştir
@@ -133,16 +164,13 @@ export default function RecipeImportPage() {
   const [recipes, setRecipes] = useState<ImportRecipe[]>([]);
   const [saveAsTemplate, setSaveAsTemplate] = useState(true);
   const [hydratedSessionId, setHydratedSessionId] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
+  // Redirect window.alert → toast (defensive, in case any dep uses alert)
   useEffect(() => {
-    const previousAlert = window.alert;
-    window.alert = (message?: unknown) => {
-      toast.error(String(message ?? 'İşlem tamamlanamadı.'));
-    };
-
-    return () => {
-      window.alert = previousAlert;
-    };
+    const prev = window.alert;
+    window.alert = (msg?: unknown) => toast.error(String(msg ?? 'İşlem tamamlanamadı.'));
+    return () => { window.alert = prev; };
   }, []);
 
   const uploadMutation = useMutation({
@@ -153,114 +181,185 @@ export default function RecipeImportPage() {
       setRecipes([]);
       setHydratedSessionId(null);
     },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error ?? 'Dosya yüklenemedi.');
+    },
   });
 
   const previewQuery = useQuery({
     queryKey: ['recipe-import-preview', sessionId],
     queryFn: () => getImportPreview(sessionId!),
     enabled: !!sessionId && step !== 'upload',
-    refetchInterval: step === 'preview' ? 1500 : false,
+    // Stop polling once the session leaves the transient states (Parsing / Uploading).
+    refetchInterval: (data) => {
+      const status = data?.status;
+      if (!status || status === 'Uploading' || status === 'Parsing') return 1500;
+      return false;
+    },
   });
 
+  // Hydrate local recipes state from first successful preview load (one-time per session).
   useEffect(() => {
-    if (!previewQuery.data || !sessionId || hydratedSessionId === sessionId || previewQuery.data.recipes.length === 0) return;
+    if (
+      !previewQuery.data ||
+      !sessionId ||
+      hydratedSessionId === sessionId ||
+      previewQuery.data.recipes.length === 0
+    ) return;
     setRecipes(previewQuery.data.recipes);
     setHydratedSessionId(sessionId);
   }, [hydratedSessionId, previewQuery.data, sessionId]);
 
   const reviewMutation = useMutation({
-    mutationFn: () => reviewImportSession(sessionId!, {
-      saveAsTemplate,
-      recipes: recipes.map((recipe) => ({
-        id: recipe.id,
-        title: recipe.title,
-        description: recipe.description,
-        isPublic: recipe.isPublic,
-        duplicateResolutionMode: recipe.duplicateResolutionMode,
-        targetRecipeId: recipe.existingRecipeId,
-        isSkipped: recipe.isSkipped,
-        steps: recipe.steps,
-        tags: recipe.tags,
-        prepTimeText: recipe.prepTimeText,
-        cookTimeText: recipe.cookTimeText,
-        servingsText: recipe.servingsText,
-        needsReview: recipe.needsReview,
-        ingredients: recipe.ingredients.map((ingredient) => ({
-          id: ingredient.id,
-          matchedIngredientId: ingredient.matchedIngredientId,
-          matchedCanonicalName: ingredient.matchedCanonicalName,
-          role: ingredient.role,
-          amountRaw: ingredient.amountRaw,
-          amountValue: ingredient.amountValue,
-          unit: ingredient.unit,
-          needsReview: ingredient.needsReview,
-          resolutionState: ingredient.isResolved ? 'Resolved' : 'NeedsReview',
-          issueCodes: ingredient.issueCodes,
+    mutationFn: () =>
+      reviewImportSession(sessionId!, {
+        saveAsTemplate,
+        recipes: recipes.map((r) => ({
+          id: r.id,
+          title: r.title,
+          description: r.description,
+          isPublic: r.isPublic,
+          duplicateResolutionMode: r.duplicateResolutionMode,
+          targetRecipeId: r.existingRecipeId,
+          isSkipped: r.isSkipped,
+          steps: r.steps,
+          tags: r.tags,
+          prepTimeText: r.prepTimeText,
+          cookTimeText: r.cookTimeText,
+          servingsText: r.servingsText,
+          needsReview: r.needsReview,
+          ingredients: r.ingredients.map((ing) => ({
+            id: ing.id,
+            matchedIngredientId: ing.matchedIngredientId,
+            matchedCanonicalName: ing.matchedCanonicalName,
+            role: ing.role,
+            amountRaw: ing.amountRaw,
+            amountValue: ing.amountValue,
+            unit: ing.unit,
+            needsReview: ing.needsReview,
+            resolutionState: ing.isResolved ? 'Resolved' : 'NeedsReview',
+            issueCodes: ing.issueCodes,
+          })),
         })),
-      })),
-    }),
+      }),
     onSuccess: () => setStep('confirm'),
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error ?? 'İnceleme kaydedilemedi.');
+    },
   });
 
   const confirmMutation = useMutation({
     mutationFn: () => confirmImport(sessionId!),
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error ?? 'Onay sırasında hata oluştu.');
+    },
   });
 
   const unresolvedMandatory = useMemo(
-    () => recipes.filter((recipe) => !recipe.isSkipped).flatMap((recipe) => recipe.ingredients).filter((ingredient) => !ingredient.isResolved && ingredient.role !== 'Optional').length,
-    [recipes]
+    () =>
+      recipes
+        .filter((r) => !r.isSkipped)
+        .flatMap((r) => r.ingredients)
+        .filter((ing) => !ing.isResolved && ing.role !== 'Optional' && ing.role !== 'Flavoring')
+        .length,
+    [recipes],
   );
 
-  const patchRecipe = (recipeId: string, patch: Partial<ImportRecipe>) => {
-    setRecipes((current) => current.map((recipe) => recipe.id === recipeId ? { ...recipe, ...patch } : recipe));
-  };
+  const patchRecipe = (recipeId: string, patch: Partial<ImportRecipe>) =>
+    setRecipes((cur) => cur.map((r) => r.id === recipeId ? { ...r, ...patch } : r));
 
-  const patchIngredient = (recipeId: string, ingredientId: string, patch: Partial<ImportIngredient>) => {
-    setRecipes((current) => current.map((recipe) => recipe.id !== recipeId ? recipe : ({
-      ...recipe,
-      ingredients: recipe.ingredients.map((ingredient) => ingredient.id === ingredientId ? { ...ingredient, ...patch } : ingredient),
-    })));
-  };
+  const patchIngredient = (recipeId: string, ingredientId: string, patch: Partial<ImportIngredient>) =>
+    setRecipes((cur) =>
+      cur.map((r) =>
+        r.id !== recipeId ? r : {
+          ...r,
+          ingredients: r.ingredients.map((ing) =>
+            ing.id === ingredientId ? { ...ing, ...patch } : ing,
+          ),
+        },
+      ),
+    );
 
-  const resolveAll = (rawName: string, matchedIngredientId: string, matchedCanonicalName: string) => {
-    setRecipes((current) => current.map((recipe) => ({
-      ...recipe,
-      ingredients: recipe.ingredients.map((ingredient) => ingredient.rawName.trim().toLowerCase() === rawName.trim().toLowerCase()
-        ? { ...ingredient, matchedIngredientId, matchedCanonicalName, matchType: 'Manual', matchConfidence: 1, isResolved: true, needsReview: false }
-        : ingredient),
-    })));
-  };
+  const resolveAll = (rawName: string, matchedIngredientId: string, matchedCanonicalName: string) =>
+    setRecipes((cur) =>
+      cur.map((r) => ({
+        ...r,
+        ingredients: r.ingredients.map((ing) =>
+          ing.rawName.trim().toLowerCase() === rawName.trim().toLowerCase()
+            ? { ...ing, matchedIngredientId, matchedCanonicalName, matchType: 'Manual', matchConfidence: 1, isResolved: true, needsReview: false }
+            : ing,
+        ),
+      })),
+    );
 
-  const handleFile = (file: File) => {
+  const handleFile = useCallback((file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!ext || !['csv', 'xlsx', 'docx', 'pdf'].includes(ext)) {
       toast.error('Lütfen CSV, XLSX, DOCX veya seçilebilir metin içeren PDF yükleyin.');
       return;
     }
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error('Dosya 10 MB sınırını aşıyor. Daha küçük bir dosya seçin.');
+      return;
+    }
     uploadMutation.mutate({ file, mode });
-  };
+  }, [mode, uploadMutation]);
+
+  // ── Drag-and-drop handlers ─────────────────────────────────────────────────
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  const isPreviewLoading =
+    step === 'preview' &&
+    (previewQuery.isLoading || previewQuery.data?.status === 'Parsing' || previewQuery.data?.status === 'Uploading');
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-6">
+      {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={() => router.push('/dashboard/recipes')} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground">
+        <button
+          onClick={() => router.push('/dashboard/recipes')}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
+        >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Tarif kütüphanesi</p>
           <h1 className="text-4xl font-bold text-foreground">Tarif içe aktar</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Dağınık dosyaları önce aday kayda dönüştürüp sonra kontrollü şekilde tarif listesine aktarıyoruz.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Dağınık dosyaları önce aday kayda dönüştürüp sonra kontrollü şekilde tarif listesine aktarıyoruz.
+          </p>
         </div>
       </div>
 
+      {/* Step indicator */}
       <div className="flex flex-wrap items-center gap-3 rounded-full border border-border bg-card px-4 py-3">
-        {['upload', 'preview', 'confirm'].map((key, index) => {
+        {(['upload', 'preview', 'confirm'] as Step[]).map((key, index) => {
           const current = step === key;
-          const done = ['upload', 'preview', 'confirm'].indexOf(step) > index;
+          const done = (['upload', 'preview', 'confirm'] as Step[]).indexOf(step) > index;
           return (
             <div key={key} className="flex items-center gap-3">
               <div className={cn('flex items-center gap-2 text-sm font-semibold', current ? 'text-primary' : done ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>
-                <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-xs', current ? 'bg-primary text-primary-foreground' : done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-secondary text-muted-foreground')}>{done ? '✓' : index + 1}</span>
+                <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-xs', current ? 'bg-primary text-primary-foreground' : done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-secondary text-muted-foreground')}>
+                  {done ? '✓' : index + 1}
+                </span>
                 {key === 'upload' ? 'Dosya yükle' : key === 'preview' ? 'İncele' : 'Onayla'}
               </div>
               {index < 2 ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : null}
@@ -269,11 +368,23 @@ export default function RecipeImportPage() {
         })}
       </div>
 
+      {/* ── STEP 1: Upload ── */}
       {step === 'upload' ? (
         <div className="space-y-6">
+          {/* Mode selector */}
           <div className="grid gap-3 md:grid-cols-3">
             {MODES.map((item) => (
-              <button key={item.key} type="button" onClick={() => setMode(item.key)} className={cn('rounded-3xl border p-5 text-left transition', mode === item.key ? 'border-primary bg-primary/8' : 'border-border bg-card hover:border-primary/30 hover:bg-secondary/70')}>
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setMode(item.key)}
+                className={cn(
+                  'rounded-3xl border p-5 text-left transition',
+                  mode === item.key
+                    ? 'border-primary bg-primary/8'
+                    : 'border-border bg-card hover:border-primary/30 hover:bg-secondary/70',
+                )}
+              >
                 <div className="flex items-center gap-3">
                   <div className={cn('flex h-11 w-11 items-center justify-center rounded-2xl', mode === item.key ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground')}>
                     <Wand2 className="h-5 w-5" />
@@ -287,153 +398,326 @@ export default function RecipeImportPage() {
             ))}
           </div>
 
+          {/* Drop zone */}
           <Card className="p-8">
-            <div onClick={() => inputRef.current?.click()} className="cursor-pointer rounded-[2rem] border-2 border-dashed border-border bg-secondary/30 px-6 py-16 text-center hover:border-primary/30 hover:bg-secondary/60">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-secondary text-primary"><Upload className="h-8 w-8" /></div>
-              <p className="mt-5 text-lg font-semibold text-foreground">Dosyayı sürükleyin veya seçmek için tıklayın</p>
-              <p className="mt-2 text-sm text-muted-foreground">.csv, .xlsx, .docx, .pdf · Maks. 10 MB</p>
-              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-muted-foreground">Seçili mod: {MODES.find((item) => item.key === mode)?.title}</p>
-              <input ref={inputRef} type="file" accept=".csv,.xlsx,.docx,.pdf" className="hidden" onChange={(event) => event.target.files?.[0] && handleFile(event.target.files[0])} />
+            <div
+              onClick={() => !uploadMutation.isPending && inputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={cn(
+                'cursor-pointer rounded-[2rem] border-2 border-dashed px-6 py-16 text-center transition',
+                isDragOver
+                  ? 'border-primary bg-primary/10 scale-[1.01]'
+                  : 'border-border bg-secondary/30 hover:border-primary/30 hover:bg-secondary/60',
+                uploadMutation.isPending && 'pointer-events-none opacity-60',
+              )}
+            >
+              <div className={cn('mx-auto flex h-16 w-16 items-center justify-center rounded-3xl transition', isDragOver ? 'bg-primary text-primary-foreground' : 'bg-secondary text-primary')}>
+                <Upload className="h-8 w-8" />
+              </div>
+              <p className="mt-5 text-lg font-semibold text-foreground">
+                {isDragOver ? 'Bırakın, yüklensin!' : 'Dosyayı sürükleyin veya seçmek için tıklayın'}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">.csv · .xlsx · .docx · .pdf · Maks. 10 MB</p>
+              <p className="mt-4 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                Seçili mod: {MODES.find((item) => item.key === mode)?.title}
+              </p>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".csv,.xlsx,.docx,.pdf"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              />
             </div>
-            {uploadMutation.isPending ? <div className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-primary"><Loader2 className="h-4 w-4 animate-spin" /> Dosya analiz kuyruğuna alındı...</div> : null}
-            {uploadMutation.isError ? <div className="mt-5 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{(uploadMutation.error as any)?.response?.data?.error ?? 'Dosya yüklenemedi.'}</div> : null}
+
+            {uploadMutation.isPending ? (
+              <div className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-primary">
+                <Loader2 className="h-4 w-4 animate-spin" /> Dosya analiz kuyruğuna alındı...
+              </div>
+            ) : null}
+
+            {uploadMutation.isError ? (
+              <div className="mt-5 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+                {(uploadMutation.error as any)?.response?.data?.error ?? 'Dosya yüklenemedi. Lütfen tekrar deneyin.'}
+              </div>
+            ) : null}
           </Card>
         </div>
       ) : null}
 
-      {step === 'preview' && previewQuery.data ? (
-        <div className="space-y-6">
-          <div className="grid gap-3 md:grid-cols-5">
-            <Summary title="Tarif" value={previewQuery.data.totalRecipes} hint={previewQuery.data.originalFileName} />
-            <Summary title="Eşleşen" value={previewQuery.data.matchedIngredients} hint="Doğrudan bağlanan malzemeler" />
-            <Summary title="Belirsiz" value={previewQuery.data.ambiguousIngredients} hint="Birden fazla aday var" />
-            <Summary title="Eşleşmeyen" value={previewQuery.data.unmatchedIngredients} hint="Manuel seçim isteyenler" />
-            <Summary title="Güven" value={previewQuery.data.confidenceScore ? `${Math.round(previewQuery.data.confidenceScore * 100)}%` : '—'} hint={`${previewQuery.data.parserUsed ?? 'Bilinmiyor'} · ${previewQuery.data.documentKind}`} />
+      {/* ── STEP 2: Preview ── */}
+      {step === 'preview' ? (
+        isPreviewLoading ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {previewQuery.data?.status === 'Parsing' ? 'Belge ayrıştırılıyor, malzemeler eşleştiriliyor…' : 'Önizleme yükleniyor…'}
+            </div>
+            <PreviewSkeleton />
           </div>
+        ) : previewQuery.data ? (
+          <div className="space-y-6">
+            {/* Summary pills */}
+            <div className="grid gap-3 md:grid-cols-5">
+              <Summary title="Tarif"        value={previewQuery.data.totalRecipes}        hint={previewQuery.data.originalFileName} />
+              <Summary title="Eşleşen"      value={previewQuery.data.matchedIngredients}  hint="Doğrudan bağlanan malzemeler" />
+              <Summary title="Belirsiz"     value={previewQuery.data.ambiguousIngredients} hint="Birden fazla aday var" />
+              <Summary title="Eşleşmeyen"   value={previewQuery.data.unmatchedIngredients} hint="Manuel seçim isteyenler" />
+              <Summary
+                title="Güven"
+                value={previewQuery.data.confidenceScore ? `${Math.round(previewQuery.data.confidenceScore * 100)}%` : '—'}
+                hint={`${previewQuery.data.parserUsed ?? 'Bilinmiyor'} · ${previewQuery.data.documentKind}`}
+              />
+            </div>
 
-          {previewQuery.data.issues.length > 0 ? <Card className="space-y-2 p-4">{previewQuery.data.issues.map((issue) => <div key={`${issue.code}-${issue.message}`} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"><strong>{issue.code}</strong><div className="mt-1">{issue.message}</div>{issue.hint ? <div className="mt-1 text-xs opacity-80">{issue.hint}</div> : null}</div>)}</Card> : null}
-
-          {previewQuery.data.totalRecipes === 0 ? (
-            <Card className="space-y-3 p-6">
-              <div className="flex items-center gap-3 text-foreground"><AlertCircle className="h-5 w-5 text-danger" /><p className="text-lg font-semibold">Bu belgeden tarif adayı çıkarılamadı</p></div>
-              <p className="text-sm text-muted-foreground">Metin içeren bir belge yükleyin veya Word / Excel olarak yeniden dışa aktarıp tekrar deneyin.</p>
-            </Card>
-          ) : null}
-
-          {recipes.map((recipe) => (
-            <Card key={recipe.id} className={cn('space-y-4 p-5', recipe.isSkipped && 'opacity-60')}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input label="Tarif adı" value={recipe.title} onChange={(event) => patchRecipe(recipe.id, { title: event.target.value })} />
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-foreground/90">Görünürlük</label>
-                  <select value={recipe.isPublic ? 'public' : 'private'} onChange={(event) => patchRecipe(recipe.id, { isPublic: event.target.value === 'public' })} className="input-sfcos h-11">
-                    <option value="private">Sadece klinik</option>
-                    <option value="public">Genel kütüphane</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <Input label="Hazırlık süresi" value={recipe.prepTimeText ?? ''} onChange={(event) => patchRecipe(recipe.id, { prepTimeText: event.target.value })} />
-                <Input label="Pişirme süresi" value={recipe.cookTimeText ?? ''} onChange={(event) => patchRecipe(recipe.id, { cookTimeText: event.target.value })} />
-                <Input label="Porsiyon" value={recipe.servingsText ?? ''} onChange={(event) => patchRecipe(recipe.id, { servingsText: event.target.value })} />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="flex flex-col gap-1.5"><label className="text-sm font-semibold text-foreground/90">Açıklama</label><textarea rows={4} value={recipe.description ?? ''} onChange={(event) => patchRecipe(recipe.id, { description: event.target.value })} className="input-sfcos min-h-[120px] resize-y py-3" /></div>
-                <div className="flex flex-col gap-1.5"><label className="text-sm font-semibold text-foreground/90">Yapılış adımları</label><textarea rows={4} value={recipe.steps.join('\n')} onChange={(event) => patchRecipe(recipe.id, { steps: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} className="input-sfcos min-h-[120px] resize-y py-3" /></div>
-              </div>
-
-              <Input label="Etiketler" value={recipe.tags.join(', ')} helperText="Virgül ile ayırın" onChange={(event) => patchRecipe(recipe.id, { tags: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
-
-              {recipe.hasDuplicate ? (
-                <div className="flex flex-col gap-1.5 rounded-2xl bg-secondary/50 p-4">
-                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Mükerrer çözümü</label>
-                  <select value={recipe.duplicateResolutionMode} onChange={(event) => patchRecipe(recipe.id, { duplicateResolutionMode: event.target.value as DuplicateResolutionMode })} className="input-sfcos h-11">
-                    <option value="CreateNew">Yeni oluştur</option>
-                    <option value="UpdateExisting">Mevcut tarifi güncelle</option>
-                    <option value="Skip">Bu kaydı atla</option>
-                  </select>
-                </div>
-              ) : null}
-
-              <Button variant={recipe.isSkipped ? 'secondary' : 'ghost'} onClick={() => patchRecipe(recipe.id, { isSkipped: !recipe.isSkipped })}>
-                {recipe.isSkipped ? 'Kaydı tekrar dahil et' : 'Bu kaydı atla'}
-              </Button>
-
-              <div className="space-y-4">
-                {recipe.ingredients.map((ingredient) => (
-                  <div key={ingredient.id} className="rounded-[1.5rem] border border-border bg-background p-4">
-                    <div className="grid gap-4 lg:grid-cols-[1fr_1.3fr_0.8fr_0.8fr]">
-                      <div><p className="text-sm font-semibold text-foreground">{ingredient.rawName}</p><p className="mt-1 text-xs text-muted-foreground">{ingredient.rawLineText ?? 'Ham satır bilgisi yok'}</p></div>
-                      <IngredientLookup
-                        ingredient={ingredient}
-                        onResolve={(matchedIngredientId, matchedCanonicalName) => patchIngredient(recipe.id, ingredient.id, { matchedIngredientId, matchedCanonicalName, matchType: 'Manual', matchConfidence: 1, isResolved: true, needsReview: false })}
-                        onResolveAll={(matchedIngredientId, matchedCanonicalName) => resolveAll(ingredient.rawName, matchedIngredientId, matchedCanonicalName)}
-                      />
-                      <div className="space-y-2">
-                        <Input label="Miktar" value={ingredient.amountRaw ?? ''} onChange={(event) => patchIngredient(recipe.id, ingredient.id, { amountRaw: event.target.value })} />
-                        <Input label="Birim" value={ingredient.unit ?? ''} onChange={(event) => patchIngredient(recipe.id, ingredient.id, { unit: event.target.value })} />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-sm font-semibold text-foreground/90">Rol</label>
-                          <select value={ingredient.role} onChange={(event) => patchIngredient(recipe.id, ingredient.id, { role: event.target.value as ImportIngredient['role'] })} className="input-sfcos h-11">
-                            <option value="Mandatory">Zorunlu</option>
-                            <option value="Optional">Opsiyonel</option>
-                            <option value="Substitute">Alternatif</option>
-                            <option value="Prohibited">Yasak</option>
-                          </select>
-                        </div>
-                        <div className="rounded-2xl bg-secondary px-3 py-2 text-xs text-muted-foreground">Parse güveni: %{Math.round(ingredient.parseConfidence * 100)}</div>
-                      </div>
-                    </div>
+            {/* Global issues */}
+            {previewQuery.data.issues.length > 0 ? (
+              <Card className="space-y-2 p-4">
+                {previewQuery.data.issues.map((issue) => (
+                  <div
+                    key={`${issue.code}-${issue.message}`}
+                    className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                  >
+                    <strong>{issue.code}</strong>
+                    <div className="mt-1">{issue.message}</div>
+                    {issue.hint ? <div className="mt-1 text-xs opacity-80">{issue.hint}</div> : null}
                   </div>
                 ))}
+              </Card>
+            ) : null}
+
+            {/* No recipes parsed */}
+            {previewQuery.data.totalRecipes === 0 ? (
+              <Card className="space-y-3 p-6">
+                <div className="flex items-center gap-3 text-foreground">
+                  <AlertCircle className="h-5 w-5 text-danger" />
+                  <p className="text-lg font-semibold">Bu belgeden tarif adayı çıkarılamadı</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Metin içeren bir belge yükleyin veya Word / Excel olarak yeniden dışa aktarıp tekrar deneyin.
+                </p>
+              </Card>
+            ) : null}
+
+            {/* Recipe cards */}
+            {recipes.map((recipe) => (
+              <Card key={recipe.id} className={cn('space-y-4 p-5', recipe.isSkipped && 'opacity-60')}>
+                <div className="grid gap-3 md:grid-cols-1">
+                  <Input
+                    label="Tarif adı"
+                    value={recipe.title}
+                    onChange={(e) => patchRecipe(recipe.id, { title: e.target.value })}
+                  />
+                  {/* Visibility — wired to isPublic state */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-semibold text-foreground/90">Görünürlük</label>
+                    <select
+                      value={recipe.isPublic ? 'public' : 'private'}
+                      onChange={(e) => patchRecipe(recipe.id, { isPublic: e.target.value === 'public' })}
+                      className="input-sfcos h-11"
+                    >
+                      <option value="private">Sadece klinik</option>
+                      <option value="public">Genel kütüphane</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Input label="Hazırlık süresi" value={recipe.prepTimeText ?? ''} onChange={(e) => patchRecipe(recipe.id, { prepTimeText: e.target.value })} />
+                  <Input label="Pişirme süresi"  value={recipe.cookTimeText  ?? ''} onChange={(e) => patchRecipe(recipe.id, { cookTimeText:  e.target.value })} />
+                  <Input label="Porsiyon"         value={recipe.servingsText  ?? ''} onChange={(e) => patchRecipe(recipe.id, { servingsText:  e.target.value })} />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-semibold text-foreground/90">Açıklama</label>
+                    <textarea
+                      rows={4}
+                      value={recipe.description ?? ''}
+                      onChange={(e) => patchRecipe(recipe.id, { description: e.target.value })}
+                      className="input-sfcos min-h-[120px] resize-y py-3"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-semibold text-foreground/90">Yapılış adımları</label>
+                    <textarea
+                      rows={4}
+                      value={recipe.steps.join('\n')}
+                      onChange={(e) =>
+                        patchRecipe(recipe.id, { steps: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) })
+                      }
+                      className="input-sfcos min-h-[120px] resize-y py-3"
+                    />
+                  </div>
+                </div>
+
+                <Input
+                  label="Etiketler"
+                  value={recipe.tags.join(', ')}
+                  helperText="Virgül ile ayırın"
+                  onChange={(e) =>
+                    patchRecipe(recipe.id, { tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })
+                  }
+                />
+
+                {recipe.hasDuplicate ? (
+                  <div className="flex flex-col gap-1.5 rounded-2xl bg-secondary/50 p-4">
+                    <label className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Mükerrer çözümü
+                    </label>
+                    <select
+                      value={recipe.duplicateResolutionMode}
+                      onChange={(e) => patchRecipe(recipe.id, { duplicateResolutionMode: e.target.value as DuplicateResolutionMode })}
+                      className="input-sfcos h-11"
+                    >
+                      <option value="CreateNew">Yeni oluştur</option>
+                      <option value="UpdateExisting">Mevcut tarifi güncelle</option>
+                      <option value="Skip">Bu kaydı atla</option>
+                    </select>
+                  </div>
+                ) : null}
+
+                <Button
+                  variant={recipe.isSkipped ? 'secondary' : 'ghost'}
+                  onClick={() => patchRecipe(recipe.id, { isSkipped: !recipe.isSkipped })}
+                >
+                  {recipe.isSkipped ? 'Kaydı tekrar dahil et' : 'Bu kaydı atla'}
+                </Button>
+
+                {/* Ingredient rows */}
+                <div className="space-y-4">
+                  {recipe.ingredients.map((ingredient) => (
+                    <div key={ingredient.id} className="rounded-[1.5rem] border border-border bg-background p-4">
+                      <div className="grid gap-4 lg:grid-cols-[1fr_1.3fr_0.8fr_0.8fr]">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{ingredient.rawName}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{ingredient.rawLineText ?? 'Ham satır bilgisi yok'}</p>
+                        </div>
+                        <IngredientLookup
+                          ingredient={ingredient}
+                          onResolve={(mid, mcn) =>
+                            patchIngredient(recipe.id, ingredient.id, {
+                              matchedIngredientId: mid, matchedCanonicalName: mcn,
+                              matchType: 'Manual', matchConfidence: 1, isResolved: true, needsReview: false,
+                            })
+                          }
+                          onResolveAll={(mid, mcn) => resolveAll(ingredient.rawName, mid, mcn)}
+                        />
+                        <div className="space-y-2">
+                          <Input label="Miktar" value={ingredient.amountRaw ?? ''} onChange={(e) => patchIngredient(recipe.id, ingredient.id, { amountRaw: e.target.value })} />
+                          <Input label="Birim"  value={ingredient.unit      ?? ''} onChange={(e) => patchIngredient(recipe.id, ingredient.id, { unit:      e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-sm font-semibold text-foreground/90">Rol</label>
+                            <select
+                              value={ingredient.role}
+                              onChange={(e) => patchIngredient(recipe.id, ingredient.id, { role: e.target.value as ImportIngredient['role'] })}
+                              className="input-sfcos h-11"
+                            >
+                              <option value="Mandatory">Zorunlu</option>
+                              <option value="Optional">Opsiyonel</option>
+                              <option value="Flavoring">Lezzetlendirici</option>
+                              <option value="Substitute">Alternatif</option>
+                              <option value="Prohibited">Yasak</option>
+                            </select>
+                          </div>
+                          <div className="rounded-2xl bg-secondary px-3 py-2 text-xs text-muted-foreground">
+                            Parse güveni: %{Math.round(ingredient.parseConfidence * 100)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+
+            {/* Review footer */}
+            <Card className="space-y-4 p-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-lg font-semibold text-foreground">İnceleme özeti</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {unresolvedMandatory > 0
+                      ? `${unresolvedMandatory} zorunlu malzeme hâlâ kesin eşleşmedi.`
+                      : 'Kritik zorunlu malzeme açığı görünmüyor.'}
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={saveAsTemplate}
+                    onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  Bu düzeni gelecekte hatırla
+                </label>
+              </div>
+              {reviewMutation.isError ? (
+                <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+                  {(reviewMutation.error as any)?.response?.data?.error ?? 'İnceleme kaydedilemedi.'}
+                </div>
+              ) : null}
+              <div className="flex justify-end">
+                <Button
+                  disabled={reviewMutation.isPending || previewQuery.data.totalRecipes === 0}
+                  onClick={() => reviewMutation.mutate()}
+                >
+                  {reviewMutation.isPending ? 'Kaydediliyor…' : 'İncelemeyi kaydet ve onaya geç'}
+                </Button>
               </div>
             </Card>
-          ))}
-
-          <Card className="space-y-4 p-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-lg font-semibold text-foreground">İnceleme özeti</p>
-                <p className="mt-1 text-sm text-muted-foreground">{unresolvedMandatory > 0 ? `${unresolvedMandatory} zorunlu malzeme hâlâ kesin eşleşmedi.` : 'Kritik zorunlu malzeme açığı görünmüyor.'}</p>
-              </div>
-              <label className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm text-foreground">
-                <input type="checkbox" checked={saveAsTemplate} onChange={(event) => setSaveAsTemplate(event.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-                Bu düzeni gelecekte hatırla
-              </label>
+          </div>
+        ) : (
+          // Fallback: query errored before data arrived
+          <Card className="space-y-3 p-6">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-danger" />
+              <p className="text-lg font-semibold text-foreground">Önizleme yüklenemedi</p>
             </div>
-            <div className="flex justify-end">
-              <Button disabled={reviewMutation.isPending || previewQuery.data.totalRecipes === 0} onClick={() => reviewMutation.mutate()}>
-                {reviewMutation.isPending ? 'Kaydediliyor...' : 'İncelemeyi kaydet ve onaya geç'}
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground">Lütfen sayfayı yenileyip tekrar deneyin.</p>
+            <Button variant="secondary" onClick={() => setStep('upload')}>Geri dön</Button>
           </Card>
-        </div>
+        )
       ) : null}
 
+      {/* ── STEP 3: Confirm ── */}
       {step === 'confirm' ? (
         confirmMutation.isSuccess ? (
           <Card className="mx-auto max-w-2xl space-y-5 p-8 text-center">
             <p className="text-2xl font-semibold text-foreground">İçe aktarma tamamlandı</p>
             <div className="grid gap-3 md:grid-cols-4">
-              <Summary title="Yeni" value={confirmMutation.data.createdCount} hint="Oluşturuldu" />
+              <Summary title="Yeni"        value={confirmMutation.data.createdCount} hint="Oluşturuldu" />
               <Summary title="Güncellendi" value={confirmMutation.data.updatedCount} hint="Mevcut tarif" />
-              <Summary title="Atlandı" value={confirmMutation.data.skippedCount} hint="Kaydedilmedi" />
-              <Summary title="Uyarı" value={confirmMutation.data.warningCount} hint="Review geçmişi" />
+              <Summary title="Atlandı"     value={confirmMutation.data.skippedCount} hint="Kaydedilmedi" />
+              <Summary title="Uyarı"       value={confirmMutation.data.warningCount} hint="Review geçmişi" />
             </div>
             <Button onClick={() => router.push('/dashboard/recipes')}>Tarif kütüphanesine dön</Button>
           </Card>
         ) : (
           <Card className="mx-auto max-w-2xl space-y-5 p-8">
             <p className="text-2xl font-semibold text-foreground">İçe aktarmayı onaylayın</p>
-            {previewQuery.data ? <div className="grid gap-3 md:grid-cols-4"><Summary title="Tarif" value={previewQuery.data.totalRecipes} hint="İşlenecek kayıt" /><Summary title="Belirsiz" value={previewQuery.data.ambiguousIngredients} hint="Manuel kontrol" /><Summary title="Eşleşmeyen" value={previewQuery.data.unmatchedIngredients} hint="Kayda girmeyecek" /><Summary title="Uyarı" value={previewQuery.data.warningsCount} hint="Review geçmişi" /></div> : null}
-            {confirmMutation.isError ? <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{(confirmMutation.error as any)?.response?.data?.error ?? 'Onay sırasında hata oluştu.'}</div> : null}
+            {previewQuery.data ? (
+              <div className="grid gap-3 md:grid-cols-4">
+                <Summary title="Tarif"       value={previewQuery.data.totalRecipes}        hint="İşlenecek kayıt" />
+                <Summary title="Belirsiz"    value={previewQuery.data.ambiguousIngredients} hint="Manuel kontrol" />
+                <Summary title="Eşleşmeyen" value={previewQuery.data.unmatchedIngredients} hint="Kayda girmeyecek" />
+                <Summary title="Uyarı"       value={previewQuery.data.warningsCount}        hint="Review geçmişi" />
+              </div>
+            ) : null}
+            {confirmMutation.isError ? (
+              <div className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+                {(confirmMutation.error as any)?.response?.data?.error ?? 'Onay sırasında hata oluştu.'}
+              </div>
+            ) : null}
             <div className="flex justify-end gap-3">
               <Button variant="secondary" onClick={() => router.push('/dashboard/recipes')}>Tariflere dön</Button>
-              <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>{confirmMutation.isPending ? 'Kaydediliyor...' : 'Onayla ve kütüphaneye işle'}</Button>
+              <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
+                {confirmMutation.isPending ? 'Kaydediliyor…' : 'Onayla ve kütüphaneye işle'}
+              </Button>
             </div>
           </Card>
         )

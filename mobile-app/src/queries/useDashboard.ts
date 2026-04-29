@@ -11,18 +11,21 @@ import { getDashboardData, type DashboardDTO, type DashboardError } from '../dat
  * - Error retry logic
  * - Cache management
  */
-export function useDashboard() {
+export function useDashboard(enabled = true) {
   const navigation = useNavigation();
 
   const query = useQuery<DashboardDTO, DashboardError>({
     queryKey: ['dashboard'],
     queryFn: getDashboardData,
+    enabled,
     // Refetch when data is older than 5 minutes
     staleTime: 5 * 60 * 1000,
   });
 
   // Refetch on navigation focus (when user returns to Dashboard)
   useEffect(() => {
+    if (!enabled) return;
+
     const unsubscribe = navigation.addListener('focus', () => {
       // Only refetch if data is stale
       if (query.isStale) {
@@ -31,7 +34,7 @@ export function useDashboard() {
     });
 
     return unsubscribe;
-  }, [navigation, query]);
+  }, [enabled, navigation, query]);
 
   return {
     data: query.data,
@@ -40,5 +43,6 @@ export function useDashboard() {
     error: query.error,
     refetch: query.refetch,
     isRefetching: query.isRefetching,
+    isStale: query.isStale,
   };
 }

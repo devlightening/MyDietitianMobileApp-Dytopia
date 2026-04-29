@@ -1,2 +1,10 @@
 namespace MyDietitianMobileApp.Domain.Enums;
-public enum ImportIngredientRole { Mandatory, Optional, Substitute, Prohibited }
+
+public enum ImportIngredientRole
+{
+    Mandatory,
+    Optional,
+    Flavoring,
+    Substitute,
+    Prohibited
+}

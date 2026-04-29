@@ -47,12 +47,18 @@ export interface MealItem {
   title: string;
   note?: string;
   orderIndex: number;
+  // Planned recipe nutrition
   calories?: number;
   macros?: MacrosData;
   recipeId?: string;
   recipeName?: string;
   completionStatus: MealCompletionStatus;
+  feedbackKey?: string | null;
   alternativeRecipeId?: string;
+  // Alternative recipe details (populated by server when completionStatus="Alternative")
+  alternativeRecipeName?: string;
+  alternativeCalories?: number;
+  alternativeMacros?: MacrosData;
   isActionableNow?: boolean;
   actionBlockedUntilDate?: string;
   actionBlockedUntilTime?: string;
@@ -155,4 +161,9 @@ export async function alternativeMeal(
 /** DELETE /api/client/meals/{id}/complete — undo completion */
 export async function undoMealCompletion(mealItemId: string): Promise<void> {
   await apiClient.delete(`/api/client/meals/${mealItemId}/complete`);
+}
+
+/** POST /api/client/meals/{id}/feedback */
+export async function saveMealFeedback(mealItemId: string, feedbackKey: string): Promise<void> {
+  await apiClient.post(`/api/client/meals/${mealItemId}/feedback`, { feedbackKey });
 }

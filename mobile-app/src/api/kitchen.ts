@@ -1,7 +1,7 @@
-import apiClient from "./client";
+﻿import apiClient from "./client";
 import type { Ingredient } from '../types/alternative';
 
-// ─── Recipe Match ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Recipe Match â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface MatchedMissingItem {
   ingredient: { id: string; name: string };
@@ -10,7 +10,7 @@ export interface MatchedMissingItem {
 
 export type MatchCategory = "FULL_MATCH" | "SUBSTITUTE_MATCH" | "PARTIAL_MISSING";
 
-/** Server truth for ownership — do not infer from DietitianId alone */
+/** Server truth for ownership â€” do not infer from DietitianId alone */
 export type KitchenSourceType =
   | "LINKED_CLINIC_PRIVATE"
   | "LINKED_CLINIC_PUBLIC"
@@ -65,7 +65,7 @@ export interface RecipeMatchResult {
   sourceDietitianName?: string | null;
   /** True only when the recipe belongs to the client's linked clinic */
   isOwnedByActiveDietitian?: boolean;
-  /** True when recipe is public catalog / other author — not the linked clinic's private pool */
+  /** True when recipe is public catalog / other author â€” not the linked clinic's private pool */
   isPublicFallback?: boolean;
   compatibilityPercent?: number;
   score: number;
@@ -81,6 +81,11 @@ export interface RecipeMatchResult {
   isDietitianRecipe: boolean;
   motivationText: string;
   explanation?: RecipeMatchExplanation;
+  // Nutritional values (present when the recipe has them set)
+  caloriesKcal?: number;
+  proteinGrams?: number;
+  carbsGrams?: number;
+  fatGrams?: number;
 }
 
 export interface RecipeMatchMeta {
@@ -109,7 +114,7 @@ export async function matchKitchen(ingredientIds: string[]): Promise<RecipeMatch
   return res.data;
 }
 
-// ─── Ingredient Packs ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Ingredient Packs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface IngredientPackItem {
   id: string;
@@ -148,7 +153,7 @@ export async function getRecentPantryIngredients(limit = 8): Promise<Ingredient[
   }
 }
 
-// ─── Plan Meal Completion ─────────────────────────────────────────────────────
+// â”€â”€â”€ Plan Meal Completion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function completeMealItem(mealItemId: string): Promise<void> {
   await apiClient.post(`/api/client/meals/${mealItemId}/complete`);
@@ -157,3 +162,4 @@ export async function completeMealItem(mealItemId: string): Promise<void> {
 export async function uncompleteMealItem(mealItemId: string): Promise<void> {
   await apiClient.delete(`/api/client/meals/${mealItemId}/complete`);
 }
+

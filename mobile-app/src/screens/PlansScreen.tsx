@@ -2,7 +2,7 @@
  * AURA CLINICAL OS — Plans Screen
  * Guided daily ritual: sectioned flow, focus refresh, macro chips, next-meal hero
  */
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl, StatusBar, Alert, Modal,
@@ -22,6 +22,7 @@ import { useGamification } from "../queries/useGamification";
 import { buildMotivationSummary, mapGamificationToMotivation, type DashboardMotivation } from "../motivation/streaks";
 import {
   getPlansData, getTodayPlan, completeMeal, skipMeal, undoMealCompletion,
+  saveMealFeedback,
   type ClientPlan, type TodayPlan, type MealItem, type MealType, type MealCompletionStatus,
 } from "../data/plansRepo";
 import AppEmptyState from "../components/ui/AppEmptyState";
@@ -29,6 +30,7 @@ import ProduceBubble from "../components/decor/ProduceBubble";
 import AlternativePickerSheet from "../components/AlternativePickerSheet";
 import AlternativeCompareSheet from "../components/AlternativeCompareSheet";
 import RecipeNutritionPanel from "../components/recipes/RecipeNutritionPanel";
+import { buildWeeklyDigest } from "../features/smartInsights";
 
 /* ── helpers ── */
 function getTodayFormatted(): string {
@@ -162,6 +164,7 @@ export default function PlansScreen({
   const [altPickerMeal, setAltPickerMeal]   = useState<MealItem | null>(null);
   const [altCompareMeal, setAltCompareMeal] = useState<MealItem | null>(null);
   const [planToast, setPlanToast] = useState<{ title: string; body: string } | null>(null);
+  const [mealFeedback, setMealFeedback] = useState<Record<string, string>>({});
 
   const isFirstLoad  = useRef(true);
   const headerStyle  = useFadeRise(0, 16);
@@ -429,15 +432,6 @@ export default function PlansScreen({
     handleViewRecipe(item);
   }, [handleViewRecipe, selectedMeal]);
 
-  /* ── loading state ── */
-  if (loading) {
-    return (
-      <View style={[s.root, s.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
-  }
-
   /* ── derived ── */
   const todayItems   = todayPlan?.items
     ? [...todayPlan.items].sort((a, b) => a.orderIndex - b.orderIndex)
@@ -448,7 +442,61 @@ export default function PlansScreen({
   const doneCount    = doneItems.length;
   const totalCount   = todayItems.length;
   const nextMeal     = pendingItems[0] ?? null;
+  const weeklyDigest = useMemo(() => buildWeeklyDigest({
+    language,
+    plans,
+    todayItems,
+  }), [language, plans, todayItems]);
+
+  useEffect(() => {
+    if (!todayPlan?.items?.length) {
+      setMealFeedback({});
+      return;
+    }
+
+    const seeded = todayPlan.items.reduce<Record<string, string>>((acc, item) => {
+      if (item.feedbackKey) acc[item.id] = item.feedbackKey;
+      return acc;
+    }, {});
+    setMealFeedback(seeded);
+  }, [todayPlan]);
+
+  const handleQuickFeedback = useCallback(async (item: MealItem, feedbackKey: string, label: string) => {
+    const previous = mealFeedback[item.id];
+    setMealFeedback((current) => ({ ...current, [item.id]: feedbackKey }));
+    try {
+      await saveMealFeedback(item.id, feedbackKey);
+      showPlanToast(
+        language === "tr" ? "Değerlendirme kaydedildi" : "Feedback saved",
+        language === "tr"
+          ? `${item.title} için "${label}" notu kaydedildi.`
+          : `"${label}" note was saved for ${item.title}.`,
+      );
+    } catch {
+      setMealFeedback((current) => {
+        const next = { ...current };
+        if (previous) next[item.id] = previous;
+        else delete next[item.id];
+        return next;
+      });
+      Alert.alert(
+        language === "tr" ? "Kayıt başarısız" : "Save failed",
+        language === "tr"
+          ? "Öğün değerlendirmesi şu anda kaydedilemedi. Lütfen tekrar dene."
+          : "The meal feedback could not be saved right now. Please try again.",
+      );
+    }
+  }, [language, mealFeedback, showPlanToast]);
   const toastTop     = (StatusBar.currentHeight ?? 0) + spacing.sm;
+
+  /* ── loading state ── */
+  if (loading) {
+    return (
+      <View style={[s.root, s.centered, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   /* ── render ── */
   return (
@@ -548,6 +596,26 @@ export default function PlansScreen({
             <Ionicons name="chevron-forward" size={18} color={theme.textSub} />
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={[s.shoppingLink, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          onPress={() => (navigation as any).navigate(Routes.App.Pantry)}
+          activeOpacity={0.82}
+        >
+          <View style={[s.shoppingLinkIcon, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Ionicons name="basket-outline" size={16} color={theme.emerald} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.shoppingLinkTitle, { color: theme.text }]}>
+              {language === "tr" ? "Dolabım" : "Pantry"}
+            </Text>
+            <Text style={[s.shoppingLinkSub, { color: theme.textMuted }]}>
+              {language === "tr"
+                ? "Evde olan malzemelerini güncelle, mutfak ekranı hazır başlasın"
+                : "Refresh what is at home so kitchen flows start ready"}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.textSub} />
+        </TouchableOpacity>
         {isPremium && motivation && (
           <MomentumRibbon
             theme={theme}
@@ -587,6 +655,11 @@ export default function PlansScreen({
               <>
                 {/* Daily macro summary */}
               <MacroSummaryBar items={todayItems} theme={theme} language={language} />
+
+                <WeeklyDigestCard
+                  theme={theme}
+                  digest={weeklyDigest}
+                />
 
                 {/* Progress + next meal hero */}
                 <DayProgressCard
@@ -638,8 +711,11 @@ export default function PlansScreen({
                         key={item.id}
                         item={item}
                         index={i}
+                        language={language}
                         theme={theme}
                         isActing={actingOn === item.id}
+                        currentFeedback={mealFeedback[item.id]}
+                        onSelectFeedback={handleQuickFeedback}
                         flipResetKey={flipResetKey}
                         onOpenDetail={() => handleOpenMealDetail(item)}
                         onViewRecipe={() => handleViewRecipe(item)}
@@ -905,6 +981,41 @@ function MacroSummaryBar({
         theme={theme}
         title=""
       />
+    </View>
+  );
+}
+
+function WeeklyDigestCard({
+  theme,
+  digest,
+}: {
+  theme: import("../theme/tokens").Theme;
+  digest: ReturnType<typeof buildWeeklyDigest>;
+}) {
+  const accent =
+    digest.tone === "emerald" ? theme.emerald :
+    digest.tone === "coral" ? theme.accentCoral :
+    theme.primary;
+
+  return (
+    <View style={[s.digestCard, { backgroundColor: theme.surface, borderColor: `${accent}30` }]}>
+      <View style={s.digestHead}>
+        <View style={[s.digestIcon, { backgroundColor: `${accent}14`, borderColor: `${accent}26` }]}>
+          <Ionicons name="pulse-outline" size={16} color={accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.digestTitle, { color: theme.text }]}>{digest.title}</Text>
+          <Text style={[s.digestBody, { color: theme.textSub }]}>{digest.body}</Text>
+        </View>
+      </View>
+      <View style={s.digestStats}>
+        <View style={[s.digestPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <Text style={[s.digestPillValue, { color: accent }]}>{digest.highlight}</Text>
+        </View>
+        <View style={[s.digestPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <Text style={[s.digestPillValue, { color: theme.text }]}>{digest.secondary}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -1231,12 +1342,15 @@ function PendingCard({
    DONE CARD — polished success card with alt flip
 ═══════════════════════════════════════════════════════ */
 function DoneCard({
-  item, index, theme, isActing, onOpenDetail, onViewRecipe, onViewAlternativeRecipe, onUndo, flipResetKey,
+  item, index, language, theme, isActing, currentFeedback, onSelectFeedback, onOpenDetail, onViewRecipe, onViewAlternativeRecipe, onUndo, flipResetKey,
 }: {
   item: MealItem;
   index: number;
+  language: "tr" | "en";
   theme: import("../theme/tokens").Theme;
   isActing: boolean;
+  currentFeedback?: string;
+  onSelectFeedback: (item: MealItem, feedbackKey: string, label: string) => void;
   onOpenDetail: () => void;
   onViewRecipe: () => void;
   onViewAlternativeRecipe: () => void;
@@ -1251,11 +1365,26 @@ function DoneCard({
   const accentColor = isAlt ? theme.accentGold : theme.emerald;
   const statusBorder = `${accentColor}2C`;
   const statusSurface = `${accentColor}12`;
+  const feedbackOptions = language === "tr"
+    ? [
+        { key: "filling", label: "Tok tuttu", icon: "flash-outline" as const },
+        { key: "light", label: "Hafif geldi", icon: "leaf-outline" as const },
+        { key: "again", label: "Tekrar isterim", icon: "heart-outline" as const },
+        { key: "hard", label: "Zor hazırlandı", icon: "time-outline" as const },
+      ]
+    : [
+        { key: "filling", label: "Filling", icon: "flash-outline" as const },
+        { key: "light", label: "Too light", icon: "leaf-outline" as const },
+        { key: "again", label: "Repeat this", icon: "heart-outline" as const },
+        { key: "hard", label: "Hard to prep", icon: "time-outline" as const },
+      ];
   const lastTapRef = useRef(0);
   const isFlippingRef = useRef(false);
   const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackExpandedValue = useRef(new RNAnimated.Value(0)).current;
 
   const [showBack, setShowBack]   = useState(false);
+  const [feedbackExpanded, setFeedbackExpanded] = useState(false);
   const flipScaleX                = useRef(new RNAnimated.Value(1)).current;
   const prevResetKey              = useRef(flipResetKey);
   const contextualTitle = showBack && isAlt
@@ -1335,6 +1464,26 @@ function DoneCard({
     }
     lastTapRef.current = 0;
   }, []);
+
+  useEffect(() => {
+    RNAnimated.timing(feedbackExpandedValue, {
+      toValue: feedbackExpanded ? 1 : 0,
+      duration: feedbackExpanded ? 220 : 170,
+      useNativeDriver: false,
+    }).start();
+  }, [feedbackExpanded, feedbackExpandedValue]);
+
+  const feedbackBodyHeight = feedbackExpandedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 150],
+  });
+
+  const feedbackBodyOpacity = feedbackExpandedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  const selectedFeedbackLabel = feedbackOptions.find((option) => option.key === currentFeedback)?.label;
 
   return (
     <Animated.View style={style}>
@@ -1471,6 +1620,29 @@ function DoneCard({
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[
+                s.doneFeedbackBtn,
+                {
+                  borderColor: currentFeedback ? `${theme.primary}34` : theme.border,
+                  backgroundColor: currentFeedback ? `${theme.primary}12` : theme.surfaceElevated,
+                },
+              ]}
+              onPress={() => setFeedbackExpanded((value) => !value)}
+              activeOpacity={0.72}
+            >
+              <Ionicons
+                name={currentFeedback ? "chatbubble-ellipses-outline" : "sparkles-outline"}
+                size={14}
+                color={currentFeedback ? theme.primary : theme.textMuted}
+              />
+              <Text style={[s.doneFeedbackBtnTxt, { color: currentFeedback ? theme.primary : theme.textSub }]}>
+                {currentFeedback
+                  ? (language === "tr" ? "Notu güncelle" : "Update note")
+                  : (language === "tr" ? "Değerlendir" : "Review")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[s.doneUndoBtn, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
               onPress={onUndo}
               disabled={isActing}
@@ -1486,6 +1658,63 @@ function DoneCard({
               )}
             </TouchableOpacity>
           </View>
+
+          <RNAnimated.View
+            style={[
+              s.doneFeedbackPanelWrap,
+              {
+                height: feedbackBodyHeight,
+                opacity: feedbackBodyOpacity,
+              },
+            ]}
+          >
+            <View style={[s.doneFeedbackPanel, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+              <View style={s.doneFeedbackPanelHeader}>
+                <View>
+                  <Text style={[s.doneFeedbackPanelTitle, { color: theme.text }]}>
+                    {language === "tr" ? "Öğünü değerlendir" : "Rate this meal"}
+                  </Text>
+                  <Text style={[s.doneFeedbackPanelSub, { color: theme.textMuted }]}>
+                    {language === "tr"
+                      ? (selectedFeedbackLabel ? `Seçili not: ${selectedFeedbackLabel}` : "Tek dokunuşla deneyimini işaretle.")
+                      : (selectedFeedbackLabel ? `Selected note: ${selectedFeedbackLabel}` : "Mark your experience in one tap.")}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setFeedbackExpanded(false)}
+                  style={[s.doneFeedbackClose, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  activeOpacity={0.78}
+                >
+                  <Ionicons name="close" size={14} color={theme.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={s.doneFeedbackOptions}>
+                {feedbackOptions.map((option) => {
+                  const active = currentFeedback === option.key;
+                  return (
+                    <TouchableOpacity
+                      key={option.key}
+                      activeOpacity={0.82}
+                      onPress={() => onSelectFeedback(item, option.key, option.label)}
+                      style={[
+                        s.doneFeedbackChip,
+                        {
+                          backgroundColor: active ? `${theme.primary}12` : theme.surface,
+                          borderColor: active ? `${theme.primary}32` : theme.border,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={option.icon} size={14} color={active ? theme.primary : theme.textMuted} />
+                      <Text style={[s.doneFeedbackChipTxt, { color: active ? theme.primary : theme.text }]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </RNAnimated.View>
         </View>
       </RNAnimated.View>
     </Animated.View>
@@ -1826,7 +2055,32 @@ const s = StyleSheet.create({
   },
   momentumBadgeValue: { fontSize: 18, fontWeight: "900", letterSpacing: -0.4 },
   momentumBadgeLabel: { fontSize: 9, fontWeight: "700", marginTop: 1 },
-
+  digestCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  digestHead: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+  digestIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  digestTitle: { fontSize: 13.5, fontWeight: "800", marginBottom: 3 },
+  digestBody: { fontSize: 11.5, lineHeight: 17 },
+  digestStats: { flexDirection: "row", gap: 8, marginTop: spacing.sm },
+  digestPill: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  digestPillValue: { fontSize: 11.5, fontWeight: "800", lineHeight: 16 },
   exploreLink:    { marginTop: spacing.md, paddingVertical: spacing.sm },
   exploreLinkTxt: { fontSize: 13, fontWeight: "800" },
 
@@ -2173,11 +2427,53 @@ const s = StyleSheet.create({
     paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
   },
   doneDetailBtnTxt: { fontSize: 13, fontWeight: "800" },
+  doneFeedbackBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
+  },
+  doneFeedbackBtnTxt: { fontSize: 12.5, fontWeight: "800" },
   doneUndoBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     paddingHorizontal: 18, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
   },
   doneUndoBtnTxt: { fontSize: 13, fontWeight: "700" },
+  doneFeedbackPanelWrap: {
+    overflow: "hidden",
+  },
+  doneFeedbackPanel: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    padding: spacing.sm,
+    gap: 10,
+  },
+  doneFeedbackPanelHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  doneFeedbackPanelTitle: { fontSize: 12.5, fontWeight: "800", marginBottom: 2 },
+  doneFeedbackPanelSub: { fontSize: 11.5, lineHeight: 16 },
+  doneFeedbackClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneFeedbackOptions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  doneFeedbackChip: {
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  doneFeedbackChipTxt: { fontSize: 11.5, fontWeight: "700" },
 
   /* ── Skipped card ── */
   skippedCard: {

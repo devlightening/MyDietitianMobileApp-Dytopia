@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Api.Extensions;
+using MyDietitianMobileApp.Api.Features;
 using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Application.Services;
 using MyDietitianMobileApp.Domain.Entities;
@@ -46,11 +47,11 @@ public class DashboardController : ControllerBase
 
             var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == userGuid);
             if (user == null)
-                return Unauthorized(new { message = "Kullanici bulunamadi" });
+                return Unauthorized(new { message = "Kullanıcı bulunamadı" });
 
             var client = await _appDb.Clients.FindAsync(user.LinkedClientId);
             if (client == null)
-                return NotFound(new { message = "Client kaydi bulunamadi" });
+                return NotFound(new { message = "Danışan kaydı bulunamadı" });
 
             var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userGuid);
             var isPremium = premiumStatus.IsPremium;
@@ -60,10 +61,44 @@ public class DashboardController : ControllerBase
                 premiumStatus.ActiveDietitianId);
 
             string? clinicName = null;
+            DashboardCoachTaskDTO? coachTask = null;
+            string? dietitianNote = null;
+
             if (isPremium && premiumStatus.ActiveDietitianId.HasValue)
             {
                 var dietitian = await _appDb.Dietitians.FindAsync(premiumStatus.ActiveDietitianId.Value);
                 clinicName = dietitian?.ClinicName ?? dietitian?.FullName;
+
+                var recentNotes = await _appDb.DietitianNotes
+                    .AsNoTracking()
+                    .Where(n =>
+                        n.ClientId == client.Id &&
+                        n.DietitianId == premiumStatus.ActiveDietitianId.Value)
+                    .OrderByDescending(n => n.CreatedAtUtc)
+                    .Take(24)
+                    .ToListAsync();
+
+                foreach (var note in recentNotes)
+                {
+                    if (coachTask == null && CoachTaskCodec.TryParse(note.Text, out var task) && task != null)
+                    {
+                        coachTask = new DashboardCoachTaskDTO
+                        {
+                            ActionKey = task.ActionKey,
+                            Title = task.Title,
+                            Body = task.Body,
+                            Cta = task.Cta,
+                        };
+                    }
+
+                    if (dietitianNote == null && !CoachTaskCodec.TryParse(note.Text, out _))
+                    {
+                        dietitianNote = note.Text;
+                    }
+
+                    if (coachTask != null && dietitianNote != null)
+                        break;
+                }
             }
 
             var today = DateTime.UtcNow.Date;
@@ -80,6 +115,8 @@ public class DashboardController : ControllerBase
                 CompliancePercent = 0,
                 TodayStatus = gamification.StreakAtRisk ? "needs-attention" : "on-track",
                 ClinicName = clinicName,
+                DietitianNote = dietitianNote,
+                CoachTask = coachTask,
                 Motivation = MapMotivation(gamification),
                 Summary = new DashboardSummaryDTO
                 {
@@ -95,6 +132,8 @@ public class DashboardController : ControllerBase
             {
                 dashboard.ClinicName = null;
                 dashboard.NextMeal = null;
+                dashboard.DietitianNote = null;
+                dashboard.CoachTask = null;
                 return Ok(dashboard);
             }
 
@@ -135,6 +174,7 @@ public class DashboardController : ControllerBase
                 {
                     dashboard.NextMeal = new NextMealDTO
                     {
+                        Kind = "upcoming",
                         MealItemId = nextMealItem.Id,
                         MealType = nextMealItem.MealType.ToString(),
                         Time = nextMealItem.Time.ToString(@"hh\:mm"),
@@ -147,9 +187,10 @@ public class DashboardController : ControllerBase
                 {
                     dashboard.NextMeal = new NextMealDTO
                     {
+                        Kind = "all-complete",
                         Time = string.Empty,
-                        Title = "Tum ogunler tamamlandi",
-                        Note = "Harika bir gun gecirdiniz"
+                        Title = "Tüm öğünler tamamlandı",
+                        Note = "Harika bir gün geçirdin."
                     };
                 }
 
@@ -164,9 +205,10 @@ public class DashboardController : ControllerBase
             {
                 dashboard.NextMeal = new NextMealDTO
                 {
+                    Kind = "no-plan",
                     Time = string.Empty,
-                    Title = "Bugun icin plan yok",
-                    Note = "Diyetisyeninizle iletisime gecin"
+                    Title = "Bugün için plan görünmüyor",
+                    Note = "Diyetisyeninle iletişime geçebilirsin."
                 };
                 dashboard.TodayStatus = "needs-attention";
             }
@@ -176,7 +218,7 @@ public class DashboardController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get dashboard data for user");
-            return StatusCode(500, new { message = "Dashboard verisi alinamadi" });
+            return StatusCode(500, new { message = "Dashboard verisi alınamadı" });
         }
     }
 

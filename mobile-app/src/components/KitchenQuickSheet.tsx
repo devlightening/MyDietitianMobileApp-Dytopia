@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions } from "react-native";
+﻿import React, { useEffect, useMemo, useRef } from "react";
+import { Animated, Dimensions, Modal, PanResponder, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { radii, spacing } from "../theme/tokens";
 import { useTheme } from "../context/ThemeContext";
 import IngredientSearch from "./IngredientSearch";
@@ -7,6 +7,9 @@ import IngredientChip from "./IngredientChip";
 import type { Ingredient } from "../types/alternative";
 
 const { height: H } = Dimensions.get("window");
+const SHEET_H = H * 0.72;
+const DISMISS_THRESHOLD = 90;
+const DISMISS_VEL = 0.5;
 
 export default function KitchenQuickSheet({
   visible,
@@ -22,17 +25,69 @@ export default function KitchenQuickSheet({
   onGoKitchen: () => void;
 }) {
   const { theme } = useTheme();
-  const y = useRef(new Animated.Value(H)).current;
+
+  // Single animated value for Y offset (0 = fully visible)
+  const translateY = useRef(new Animated.Value(SHEET_H)).current;
+  // Drag delta â€” only active during gesture
+  const dragOffset = useRef(new Animated.Value(0)).current;
+  // Combined: stable ref so it doesn't recreate on every render
+  const combinedY = useRef(Animated.add(translateY, dragOffset)).current;
+
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
-    Animated.spring(y, {
-      toValue: visible ? 0 : H,
-      useNativeDriver: true,
-      damping: 18,
-      stiffness: 160,
-      mass: 0.9,
-    }).start();
-  }, [visible, y]);
+    if (visible) {
+      dragOffset.setValue(0);
+      translateY.setValue(SHEET_H);
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 180,
+        mass: 0.85,
+      }).start();
+    } else {
+      Animated.timing(translateY, { toValue: SHEET_H, duration: 220, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+
+  function dismiss() {
+    dragOffset.setValue(0);
+    Animated.timing(translateY, { toValue: SHEET_H, duration: 200, useNativeDriver: true }).start(() => {
+      onCloseRef.current();
+    });
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        gs.dy > 4 && Math.abs(gs.dy) > Math.abs(gs.dx) * 0.8,
+      onPanResponderMove: (_, gs) => {
+        // Only allow dragging down
+        if (gs.dy > 0) {
+          dragOffset.setValue(gs.dy);
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > DISMISS_THRESHOLD || gs.vy > DISMISS_VEL) {
+          dismiss();
+        } else {
+          // Snap back
+          Animated.spring(dragOffset, {
+            toValue: 0,
+            damping: 16,
+            stiffness: 200,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragOffset, { toValue: 0, damping: 16, stiffness: 200, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   const chips = useMemo(() => selectedIngredients, [selectedIngredients]);
 
@@ -44,32 +99,54 @@ export default function KitchenQuickSheet({
     onChangeSelected(chips.filter((x) => x.id !== id));
   }
 
+  // Backdrop opacity tied to translateY
+  const backdropOpacity = translateY.interpolate({
+    inputRange: [0, SHEET_H],
+    outputRange: [0.38, 0],
+    extrapolate: 'clamp',
+  });
+
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View style={s.backdrop}>
-        <TouchableOpacity style={s.backdropTap} activeOpacity={1} onPress={onClose} />
+    <Modal visible={visible} transparent animationType="none" onRequestClose={dismiss}>
+      <View style={s.root}>
+        {/* Dimmed backdrop */}
+        <Animated.View style={[s.backdrop, { opacity: backdropOpacity }]} />
+        <TouchableOpacity style={s.backdropTap} activeOpacity={1} onPress={dismiss} />
 
-        <Animated.View style={[
-          s.sheet,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.border,
-            transform: [{ translateY: y }],
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.12,
-            shadowRadius: 20,
-            elevation: 16,
-          },
-        ]}>
-          <View style={[s.handle, { backgroundColor: theme.border }]} />
-
-          <View style={s.header}>
-            <Text style={[s.title, { color: theme.text }]}>Hızlı Mutfak</Text>
-            <Text style={[s.sub, { color: theme.textMuted }]}>Malzeme seç · mutfağa git</Text>
+        <Animated.View
+          style={[
+            s.sheet,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              transform: [{ translateY: combinedY }],
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: -6 },
+              shadowOpacity: 0.14,
+              shadowRadius: 24,
+              elevation: 20,
+            },
+          ]}
+        >
+          {/* Full-width drag handle area */}
+          <View {...panResponder.panHandlers} style={s.handleArea}>
+            <View style={[s.handle, { backgroundColor: theme.border }]} />
+            <View style={[s.headerRow]}>
+              <View>
+                <Text style={[s.title, { color: theme.text }]}>Hızlı Mutfak</Text>
+                <Text style={[s.sub, { color: theme.textMuted }]}>Malzeme seç · mutfağa git</Text>
+              </View>
+              <TouchableOpacity
+                style={[s.closeBtn, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+                onPress={dismiss}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.closeTxt, { color: theme.textMuted }]}>âœ•</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* zIndex wrapper — dropdown must float above chips/actions below */}
+          {/* zIndex wrapper â€” dropdown must float above chips/actions below */}
           <View style={s.searchWrapper}>
             <IngredientSearch onSelect={add} />
           </View>
@@ -83,20 +160,13 @@ export default function KitchenQuickSheet({
             )}
           </View>
 
-          <View style={s.actions}>
-            <TouchableOpacity
-              style={[s.secondaryBtn, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
-              onPress={onClose}
-            >
-              <Text style={[s.secondaryText, { color: theme.textSub }]}>Kapat</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.primaryBtn, { backgroundColor: theme.primaryLight }]}
-              onPress={onGoKitchen}
-            >
-              <Text style={[s.primaryText, { color: theme.primary }]}>🍳 Mutfağa Git</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[s.primaryBtn, { backgroundColor: theme.primaryLight }]}
+            onPress={onGoKitchen}
+            activeOpacity={0.85}
+          >
+            <Text style={[s.primaryText, { color: theme.primary }]}>ğŸ³ Mutfağa Git</Text>
+          </TouchableOpacity>
         </Animated.View>
       </View>
     </Modal>
@@ -104,48 +174,62 @@ export default function KitchenQuickSheet({
 }
 
 const s = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
-  backdropTap: { flex: 1 },
+  root: { flex: 1, justifyContent: "flex-end" },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
+  },
+  backdropTap: { ...StyleSheet.absoluteFillObject },
 
   sheet: {
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl + 8,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+  },
+
+  // Large drag handle zone â€” 60pt tall for easy grip
+  handleArea: {
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 10,
   },
   handle: {
     alignSelf: "center",
-    width: 54,
+    width: 48,
     height: 5,
     borderRadius: 3,
-    marginBottom: spacing.md,
   },
-  header: { marginBottom: spacing.md },
-  title: { fontSize: 16, fontWeight: "900" },
-  sub: { marginTop: 6, fontSize: 12, fontWeight: "700" },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  title: { fontSize: 17, fontWeight: "900" },
+  sub: { marginTop: 3, fontSize: 12, fontWeight: "700" },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16, borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
+  },
+  closeTxt: { fontSize: 13, fontWeight: "800" },
 
   searchWrapper: {
     zIndex: 100,
     elevation: 10,
   },
 
-  chipsRow: { marginTop: spacing.md, flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  chipsRow: { marginTop: spacing.md, flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, minHeight: 32 },
   empty: { fontSize: 12, fontWeight: "700" },
 
-  actions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
-  secondaryBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  secondaryText: { fontWeight: "900", fontSize: 14 },
   primaryBtn: {
-    flex: 1,
+    marginTop: spacing.lg,
     borderRadius: radii.lg,
-    paddingVertical: 14,
+    paddingVertical: 16,
     alignItems: "center",
   },
-  primaryText: { fontWeight: "900", fontSize: 14 },
+  primaryText: { fontWeight: "900", fontSize: 15 },
 });
+

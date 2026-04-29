@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import AppCard from '../ui/AppCard';
 import { radii, spacing, type Theme } from '../../theme/tokens';
@@ -16,13 +16,13 @@ interface Props {
 }
 
 function getMealEmoji(title?: string): string {
-  if (!title) return '🍽️';
+  if (!title) return 'ğŸ½ï¸';
   const lower = title.toLowerCase();
-  if (lower.includes('kahvaltı')) return '🌅';
-  if (lower.includes('öğle') || lower.includes('öğün')) return '☀️';
-  if (lower.includes('akşam')) return '🌙';
-  if (lower.includes('ara') || lower.includes('atıştırma')) return '🥜';
-  return '🍽️';
+  if (lower.includes('kahvaltı')) return 'ğŸŒ…';
+  if (lower.includes('öğle') || lower.includes('öğün')) return 'â˜€ï¸';
+  if (lower.includes('akşam')) return 'ğŸŒ™';
+  if (lower.includes('ara') || lower.includes('atıştırma')) return 'ğŸ¥œ';
+  return 'ğŸ½ï¸';
 }
 
 export default function NextMealCard({ nextMeal, theme, onPress }: Props) {
@@ -53,7 +53,7 @@ export default function NextMealCard({ nextMeal, theme, onPress }: Props) {
           onPress={onPress}
           activeOpacity={0.7}
         >
-          <Text style={[s.detailBtnTxt, { color: theme.primary }]}>Detay →</Text>
+          <Text style={[s.detailBtnTxt, { color: theme.primary }]}>Detay â†’</Text>
         </TouchableOpacity>
       </View>
     </AppCard>
@@ -97,3 +97,4 @@ const s = StyleSheet.create({
   },
   detailBtnTxt: { fontSize: 12, fontWeight: '800' },
 });
+

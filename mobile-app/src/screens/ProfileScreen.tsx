@@ -838,6 +838,7 @@ function QuickAccessGrid({
   onNotifications,
   onGoals,
   onShopping,
+  onPantry,
 }: {
   theme: Theme;
   language: Language;
@@ -845,20 +846,23 @@ function QuickAccessGrid({
   onNotifications: () => void;
   onGoals: () => void;
   onShopping: () => void;
+  onPantry: () => void;
 }) {
   const items = language === "tr"
-    ? [
-        { key: "measurements", icon: "analytics-outline" as const, label: "Ölçümler", sub: "Takibini gör", color: theme.accentCyan, onPress: onMeasurements },
-        { key: "notifications", icon: "notifications-outline" as const, label: "Bildirimler", sub: "Ritmi yönet", color: theme.accentGold, onPress: onNotifications },
-        { key: "goals", icon: "options-outline" as const, label: "Hedefler", sub: "Akışı şekillendir", color: theme.primary, onPress: onGoals },
-        { key: "shopping", icon: "cart-outline" as const, label: "Alışveriş", sub: "Eksikleri topla", color: theme.emerald, onPress: onShopping },
-      ]
-    : [
-        { key: "measurements", icon: "analytics-outline" as const, label: "Measurements", sub: "Track progress", color: theme.accentCyan, onPress: onMeasurements },
-        { key: "notifications", icon: "notifications-outline" as const, label: "Notifications", sub: "Manage rhythm", color: theme.accentGold, onPress: onNotifications },
-        { key: "goals", icon: "options-outline" as const, label: "Goals", sub: "Shape your flow", color: theme.primary, onPress: onGoals },
-        { key: "shopping", icon: "cart-outline" as const, label: "Shopping", sub: "Collect missing items", color: theme.emerald, onPress: onShopping },
-      ];
+      ? [
+          { key: "measurements", icon: "analytics-outline" as const, label: "Ölçümler", sub: "Takibini gör", color: theme.accentCyan, onPress: onMeasurements },
+          { key: "notifications", icon: "notifications-outline" as const, label: "Bildirimler", sub: "Ritmi yönet", color: theme.accentGold, onPress: onNotifications },
+          { key: "goals", icon: "options-outline" as const, label: "Hedefler", sub: "Akışı şekillendir", color: theme.primary, onPress: onGoals },
+          { key: "shopping", icon: "cart-outline" as const, label: "Alışveriş", sub: "Eksikleri topla", color: theme.emerald, onPress: onShopping },
+          { key: "pantry", icon: "basket-outline" as const, label: "Dolabım", sub: "Mutfağı hazırla", color: theme.primaryDark, onPress: onPantry },
+        ]
+      : [
+          { key: "measurements", icon: "analytics-outline" as const, label: "Measurements", sub: "Track progress", color: theme.accentCyan, onPress: onMeasurements },
+          { key: "notifications", icon: "notifications-outline" as const, label: "Notifications", sub: "Manage rhythm", color: theme.accentGold, onPress: onNotifications },
+          { key: "goals", icon: "options-outline" as const, label: "Goals", sub: "Shape your flow", color: theme.primary, onPress: onGoals },
+          { key: "shopping", icon: "cart-outline" as const, label: "Shopping", sub: "Collect missing items", color: theme.emerald, onPress: onShopping },
+          { key: "pantry", icon: "basket-outline" as const, label: "Pantry", sub: "Prep your kitchen", color: theme.primaryDark, onPress: onPantry },
+        ];
 
   return (
     <View style={ps.quickGrid}>
@@ -1151,6 +1155,7 @@ export default function ProfileScreen() {
             onNotifications={() => (navigation as any).navigate(Routes.App.ProfileNotifications)}
             onGoals={() => (navigation as any).navigate(Routes.App.GoalPreferences)}
             onShopping={() => (navigation as any).navigate(Routes.App.ShoppingList)}
+            onPantry={() => (navigation as any).navigate(Routes.App.Pantry)}
           />
         </Animated.View>
 

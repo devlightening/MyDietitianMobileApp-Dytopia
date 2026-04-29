@@ -1,0 +1,8 @@
+﻿Id,Name,IsMandatory,IsProhibited,CanonicalName,Aliases,IsActive,IsCondiment
+0173f8d6-05b2-5952-bb09-fccc1a500d89,Falafel,False,False,Falafel,"[""Falafel""]",True,False
+4d44a678-ec34-5d87-b5c4-817921244eb9,Pak Choi,False,False,Pak Choi,"[""Pak Choi"", ""pak-choi"", ""pakchoi"", ""bok choy"", ""bok-choy"", ""bokchoy""]",True,False
+f93c7579-d517-5a79-bf55-7c3f7ee65171,Baby Mısır,False,False,Baby Mısır,"[""Baby Mısır"", ""baby-misir"", ""babymisir"", ""baby-mısır"", ""babymısır"", ""baby misir"", ""baby corn"", ""baby-corn"", ""babycorn""]",True,False
+1415e2c7-3286-58d5-9418-42a897f542be,Mango,False,False,Mango,"[""Mango""]",True,False
+c3a89af4-997f-51f5-ab99-d0d3bf7f6aa7,Pirinç Eriştesi,False,False,Pirinç Eriştesi,"[""Pirinç Eriştesi"", ""pirinc-eristesi"", ""pirinceristesi"", ""pirinç-eriştesi"", ""pirinçeriştesi"", ""pirinc eristesi"", ""rice noodles"", ""rice-noodles"", ""ricenoodles"", ""rice noodle"", ""rice-noodle"", ""ricenoodle""]",True,False
+03ec5b5b-05ea-53c8-a233-914d6cce7fe5,Basmati Pirinç,False,False,Basmati Pirinç,"[""Basmati Pirinç"", ""basmati-pirinc"", ""basmatipirinc"", ""basmati-pirinç"", ""basmatipirinç"", ""basmati pirinc"", ""basmati rice"", ""basmati-rice"", ""basmatirice""]",True,False
+7cd0503c-53d1-5009-9942-d44afe9720f3,Tam Tahıllı Tortilla,False,False,Tam Tahıllı Tortilla,"[""Tam Tahıllı Tortilla"", ""tam-tahilli-tortilla"", ""tamtahillitortilla"", ""tam-tahıllı-tortilla"", ""tamtahıllıtortilla"", ""tam tahilli tortilla"", ""whole grain tortilla"", ""whole-grain-tortilla"", ""wholegraintortilla"", ""whole wheat tortilla"", ""whole-wheat-tortilla"", ""wholewheattortilla""]",True,False

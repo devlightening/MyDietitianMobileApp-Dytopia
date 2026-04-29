@@ -1,6 +1,6 @@
-// src/i18n/tr.ts — Türkçe çeviriler
+﻿// src/i18n/tr.ts â€” Türkçe çeviriler
 export const tr = {
-  // ── Tab bar ────────────────────────────────────────────────────────────────
+  // â”€â”€ Tab bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   tabs: {
     dashboard: 'Ana Sayfa',
     plans:     'Planım',
@@ -9,7 +9,7 @@ export const tr = {
     profile:   'Profil',
   },
 
-  // ── Common ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Common â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   common: {
     loading:      'Yükleniyor...',
     error:        'Bir hata oluştu',
@@ -32,7 +32,7 @@ export const tr = {
     settings:     'Ayarlar',
   },
 
-  // ── Greeting ───────────────────────────────────────────────────────────────
+  // â”€â”€ Greeting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   greeting: {
     night:     'İyi Geceler',
     morning:   'Günaydın',
@@ -41,7 +41,7 @@ export const tr = {
     evening:   'İyi Akşamlar',
   },
 
-  // ── Welcome ────────────────────────────────────────────────────────────────
+  // â”€â”€ Welcome â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   welcome: {
     tagline:     'Klinik kalitesinde kişisel beslenme',
     signUp:      'Ücretsiz Başla',
@@ -54,7 +54,7 @@ export const tr = {
     feature3:    'İlerleme',
   },
 
-  // ── Auth ───────────────────────────────────────────────────────────────────
+  // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   auth: {
     loginTitle:         'Tekrar Hoş Geldiniz',
     loginSubtitle:      'Hesabınıza giriş yapın',
@@ -78,7 +78,7 @@ export const tr = {
     registerFailed:     'Kayıt başarısız',
   },
 
-  // ── Dashboard ──────────────────────────────────────────────────────────────
+  // â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   dashboard: {
     title:             'Ana Sayfa',
     freePlan:          'Ücretsiz Plan',
@@ -88,7 +88,7 @@ export const tr = {
     complianceGood:    'Devam Et',
     complianceFair:    'Hedefine Bak',
     compliancePoor:    'Başla',
-    activateKey:       'Access Key ile Aktifleştir',
+    activateKey:       'Erişim Anahtarı ile Aktifleştir',
     clinicDefault:     'Kliniğim',
     greetingDefault:   'Hoş Geldin',
 
@@ -119,18 +119,18 @@ export const tr = {
 
     // Free user
     freeTitle:        'Premium\'a Geç',
-    freeDesc:         'Diyetisyeninizden access key alarak kişisel plan ve takip özelliklerine erişin.',
+    freeDesc:         'Diyetisyeninizden erişim anahtarı alarak kişisel plan ve takip özelliklerine erişin.',
     userId:           'KULLANICI ID',
     userIdHint:       'Bu ID\'yi diyetisyeninizle paylaşın',
   },
 
-  // ── Plans ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   plans: {
     title:            'Planım',
     noPlan:           'Henüz bir planınız yok',
     noPlanDesc:       'Diyetisyeninizden aldığınız kodla kişisel planınıza ulaşabilirsiniz.',
-    noPlanBtn:        '🔑 Premium Kodu Gir',
-    exploreRecipes:   '🍳 Tarifleri Keşfet →',
+    noPlanBtn:        'Premium Kodu Gir',
+    exploreRecipes:   'Tarifleri Keşfet →',
     todayEmpty:       'Bugün için plan yok',
     todayEmptyDesc:   'Diyetisyeniniz size özel bir plan hazırladığında burada görünecek.',
     progress:         'Bugünkü İlerleme',
@@ -155,7 +155,7 @@ export const tr = {
     snack:            'Atıştırmalık',
   },
 
-  // ── Kitchen ────────────────────────────────────────────────────────────────
+  // â”€â”€ Kitchen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   kitchen: {
     title:            'Mutfak',
     subtitle:         'Elindeki malzemeleri seç, sana tarif bulalım',
@@ -169,7 +169,7 @@ export const tr = {
     ingredients:      'Malzemeler',
   },
 
-  // ── Profile ────────────────────────────────────────────────────────────────
+  // â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   profile: {
     title:            'Profil',
     subtitle:         'Hesabınızı yönetin',
@@ -188,7 +188,7 @@ export const tr = {
     languageTR:       'Türkçe',
     languageEN:       'English',
     version:          'Sürüm',
-    activatePremium:  '✨ Premium\'a Geç',
+    activatePremium:  'Premium\'a Geç',
     logout:           'Çıkış Yap',
     logoutConfirm:    'Çıkış yapmak istediğinizden emin misiniz?',
     userId:           'Kullanıcı ID',
@@ -196,30 +196,30 @@ export const tr = {
     premiumExpiry:    'Premium bitiş',
   },
 
-  // ── Premium Activation ─────────────────────────────────────────────────────
+  // â”€â”€ Premium Activation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   premium: {
     title:            'Premium Aktivasyon',
     subtitle:         'Diyetisyeninizden aldığınız kodu girin',
-    placeholder:      'Access Key (örn: ABC-123)',
+    placeholder:      'Erişim Anahtarı (örn: ABC-123)',
     activate:         'Aktifleştir',
     activating:       'Aktifleştiriliyor...',
-    success:          'Premium aktif! 🎉',
+    success:          'Premium aktif!',
     successDesc:      'diyetisyeninizle bağlandınız.',
     error:            'Geçersiz kod',
     freeBenefits:     [
-      '🥗 Genel tarifler ve tarif motoru',
-      '📏 Ölçüm takibi (bel, kalça, göğüs)',
+      'Genel tarifler ve tarif motoru',
+      'Ölçüm takibi (bel, kalça, göğüs)',
     ],
     premiumBenefits:  [
-      '📋 Kişisel diyet planları',
-      '📊 Öğün takibi ve uyum skorları',
-      '🔄 Alternatif öğün önerileri',
-      '📈 İlerleme ve streak takibi',
-      '💬 Diyetisyen notları',
+      'Kişisel diyet planları',
+      'Öğün takibi ve uyum skorları',
+      'Alternatif öğün önerileri',
+      'İlerleme ve seri takibi',
+      'Diyetisyen notları',
     ],
   },
 
-  // ── Measurements ───────────────────────────────────────────────────────────
+  // â”€â”€ Measurements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   measurements: {
     title:      'Ölçümlerim',
     subtitle:   'Düzenli ölçüm planını daha iyi şekillendirir.',
@@ -239,7 +239,7 @@ export const tr = {
     hint:       'Bel, kalça veya göğüs ölçümünüzü giriniz.',
   },
 
-  // ── Errors & Empty ─────────────────────────────────────────────────────────
+  // â”€â”€ Errors & Empty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   errors: {
     networkError:   'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.',
     unauthorized:   'Oturum süreniz doldu. Lütfen tekrar giriş yapın.',
@@ -255,3 +255,4 @@ type DeepStringMap<T> = T extends string
     : { [K in keyof T]: DeepStringMap<T[K]> };
 
 export type Translations = DeepStringMap<typeof tr>;
+

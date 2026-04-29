@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, Animated, Linking, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import {
@@ -31,7 +31,9 @@ import GoalPreferencesScreen from "../screens/GoalPreferencesScreen";
 import PrivacyScreen from "../screens/PrivacyScreen";
 import RateAppScreen from "../screens/RateAppScreen";
 import IngredientScanScreen from "../screens/IngredientScanScreen";
+import ReceiptScanScreen from "../screens/ReceiptScanScreen";
 import BarcodeScanScreen from "../screens/BarcodeScanScreen";
+import PantryScreen from "../screens/PantryScreen";
 import TodayScreen from "../screens/TodayScreen";
 import HydrationScreen from "../screens/HydrationScreen";
 import WeeklySummaryScreen from "../screens/WeeklySummaryScreen";
@@ -64,7 +66,7 @@ function Splash() {
       <Animated.View style={[s.splashContent, { opacity, transform: [{ scale }] }]}>
         <View style={[s.splashLogo, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '40' }]}>
           <View style={[s.splashLogoBg, { backgroundColor: theme.primary }]} />
-          <Text style={s.splashEmoji}>🥗</Text>
+          <Text style={s.splashEmoji}>ğŸ¥—</Text>
         </View>
         <Text style={[s.splashTitle, { color: theme.text }]}>MyDietitian</Text>
         <Text style={[s.splashSub, { color: theme.textMuted }]}>Sağlıklı yaşam rehberin</Text>
@@ -169,7 +171,7 @@ function AppNavigator() {
     >
       <Root.Navigator screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}>
         {!isAuthenticated ? (
-          /* ── Unauthenticated: Auth stack ─────────────────────────── */
+          /* â”€â”€ Unauthenticated: Auth stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
           <Root.Screen name="Auth">
             {() =>
               ready ? (
@@ -190,7 +192,7 @@ function AppNavigator() {
             }
           </Root.Screen>
         ) : !isPremium ? (
-          /* ── Authenticated, Free user: FreeHome stack ────────────── */
+          /* â”€â”€ Authenticated, Free user: FreeHome stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
           <Root.Screen name="Free">
             {() =>
               ready ? (
@@ -208,7 +210,7 @@ function AppNavigator() {
             }
           </Root.Screen>
         ) : (
-          /* ── Authenticated, Premium: Full App stack ──────────────── */
+          /* â”€â”€ Authenticated, Premium: Full App stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
           <Root.Screen name="App">
             {() =>
               ready ? (
@@ -242,9 +244,19 @@ function AppNavigator() {
                     options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: modalDuration }}
                   />
                   <Root.Screen
+                    name={Routes.App.ReceiptScan}
+                    component={ReceiptScanScreen}
+                    options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: modalDuration }}
+                  />
+                  <Root.Screen
                     name={Routes.App.BarcodeScan}
                     component={BarcodeScanScreen}
                     options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: modalDuration }}
+                  />
+                  <Root.Screen
+                    name={Routes.App.Pantry}
+                    component={PantryScreen}
+                    options={{ animation: 'fade_from_bottom', animationDuration: modalDuration }}
                   />
                   <Root.Screen name={Routes.App.WeeklySummary} component={WeeklySummaryScreen} options={{ animation: 'fade_from_bottom', animationDuration: modalDuration }} />
                   <Root.Screen name={Routes.App.MealLog} component={MealLogScreen} options={{ animation: 'fade_from_bottom', animationDuration: modalDuration }} />
@@ -294,3 +306,4 @@ const s = StyleSheet.create({
   splashSub: { fontSize: 14, fontWeight: "600" },
   splashSpinner: { position: "absolute", bottom: 60 },
 });
+

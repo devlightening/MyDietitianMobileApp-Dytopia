@@ -82,7 +82,7 @@ export default function GoalPreferencesScreen() {
         back: "Geri",
         eyebrow: "HEDEF AYARI",
         title: "Hedef Tercihleri",
-        subtitle: "Pantry, hatırlatıcılar ve mutfak önerileri ritmine göre şekillensin.",
+        subtitle: "Kilerin, hatırlatıcıların ve mutfak önerilerin ritmine göre şekillensin.",
         save: "Tercihleri kaydet",
         saved: "Tercihler kaydedildi",
         primaryGoal: "Ana hedef",
@@ -119,9 +119,9 @@ export default function GoalPreferencesScreen() {
     try {
       const next = await updateClientPreferences(preferences);
       setPreferences(next);
-      Alert.alert("OK", copy.saved);
+      Alert.alert(language === "tr" ? "Tamam" : "OK", copy.saved);
     } catch {
-      Alert.alert("Error", language === "tr" ? "Tercihler kaydedilemedi." : "Could not save preferences.");
+      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Tercihler kaydedilemedi." : "Could not save preferences.");
     } finally {
       setSaving(false);
     }

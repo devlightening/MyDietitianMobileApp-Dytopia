@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -38,6 +38,12 @@ const SLIDES = [
     accent: '#f59e0b',
     title: 'İlerleni Takip Et',
     subtitle: 'Kilo, bel ve ölçümlerini gir. Haftalık grafiklerle değişimini izle, motivasyonunu koru.',
+  },
+  {
+    icon: 'checkmark-circle-outline' as const,
+    accent: '#8b5cf6',
+    title: 'İlk Adımı Bugün At',
+    subtitle: 'Her tamamlanan öğün bir rozet, her bardak su bir adım. Başarın küçük alışkanlıklardan doğar â€” bugün başla!',
   },
 ];
 
@@ -176,3 +182,4 @@ const s = StyleSheet.create({
   skipBtn: { alignItems: 'center', paddingVertical: spacing.sm },
   skipTxt: { fontSize: 14, fontWeight: '700' },
 });
+

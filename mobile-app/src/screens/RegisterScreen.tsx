@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -111,7 +111,7 @@ export default function RegisterScreen() {
                 <Ionicons name="leaf" size={28} color={theme.primaryDark} />
               </View>
               <View style={[s.heroBadge, { backgroundColor: theme.surfaceElevated }]}>
-                <Text style={[s.heroBadgeText, { color: theme.emerald }]}>Start fresh</Text>
+                <Text style={[s.heroBadgeText, { color: theme.emerald }]}>Taze bir başlangıç</Text>
               </View>
             </View>
 
@@ -362,3 +362,4 @@ const s = StyleSheet.create({
   linkTxt: { fontSize: 14 },
   linkBold: { fontWeight: '700' },
 });
+

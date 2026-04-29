@@ -7,6 +7,8 @@ export interface CareTimelineItem {
   text: string;
   createdAtUtc: string;
   isRead: boolean;
+  replyToId?: string | null;
+  replyToSnippet?: string | null;
 }
 
 export interface CareDietitianInfo {
@@ -39,8 +41,16 @@ export async function getCareThread(): Promise<CareThreadResponse> {
   };
 }
 
-export async function sendCareMessage(text: string): Promise<CareTimelineItem> {
-  const res = await apiClient.post<{ item: CareTimelineItem }>("/api/client/messages", { text });
+export async function sendCareMessage(
+  text: string,
+  replyToId?: string | null,
+  replyToSnippet?: string | null,
+): Promise<CareTimelineItem> {
+  const res = await apiClient.post<{ item: CareTimelineItem }>("/api/client/messages", {
+    text,
+    replyToId: replyToId ?? null,
+    replyToSnippet: replyToSnippet ?? null,
+  });
   return res.data.item;
 }
 

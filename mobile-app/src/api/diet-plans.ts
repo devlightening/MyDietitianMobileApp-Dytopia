@@ -1,4 +1,4 @@
-import apiClient from './client';
+﻿import apiClient from './client';
 import type { TodayPlan } from '../types/diet-plan';
 import axios from 'axios';
 
@@ -10,10 +10,10 @@ export interface PlanError {
 /**
  * Get today's diet plan (Premium only)
  * Defensive guard: Prevents free users from calling premium endpoint
- * 🔥 Double guard: enabled check in useQuery + this client-side guard
+ * ğŸ”¥ Double guard: enabled check in useQuery + this client-side guard
  */
 export async function getTodayPlan(user?: { isPremium?: boolean }): Promise<TodayPlan> {
-  // 🔥 Defensive guard: Free users should never call this endpoint
+  // ğŸ”¥ Defensive guard: Free users should never call this endpoint
   // isPremium must be explicitly true, undefined/false means FREE
   if (user?.isPremium !== true) {
     const error = new Error('Bu özellik premium üyelik gerektirir') as any;
@@ -38,3 +38,4 @@ export async function getTodayPlan(user?: { isPremium?: boolean }): Promise<Toda
     throw error;
   }
 }
+

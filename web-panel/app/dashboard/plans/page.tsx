@@ -119,6 +119,23 @@ interface AddMealForm {
 
 type NutritionFieldKey = 'calories' | 'proteinGrams' | 'carbsGrams' | 'fatGrams'
 
+function normalizeDecimalInput(value: string): string {
+  const cleaned = value.replace(',', '.').replace(/[^\d.]/g, '')
+  const parts = cleaned.split('.')
+  if (parts.length <= 1) return cleaned
+  return `${parts[0]}.${parts.slice(1).join('')}`
+}
+
+function formatNumericField(value: unknown, kind: 'integer' | 'decimal'): string {
+  if (value == null || value === '') return ''
+  const normalized = normalizeDecimalInput(String(value).trim())
+  if (!normalized) return ''
+  const numeric = Number(normalized)
+  if (!Number.isFinite(numeric)) return ''
+  if (kind === 'integer') return String(Math.round(numeric))
+  return Number(numeric.toFixed(2)).toString()
+}
+
 function AddMealModal({
   planId,
   planDate,
@@ -173,7 +190,12 @@ function AddMealModal({
   })
 
   const set = (key: keyof AddMealForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const nextValue = e.target.value
+    const nextValue =
+      key === 'calories'
+        ? formatNumericField(e.target.value, 'integer')
+        : key === 'proteinGrams' || key === 'carbsGrams' || key === 'fatGrams'
+          ? formatNumericField(e.target.value, 'decimal')
+          : e.target.value
     setForm(f => ({ ...f, [key]: nextValue }))
     if (key === 'calories' || key === 'proteinGrams' || key === 'carbsGrams' || key === 'fatGrams') {
       setNutritionTouched((prev) => ({ ...prev, [key]: true }))
@@ -184,10 +206,10 @@ function AddMealModal({
   const applyRecipeNutrition = (recipe: Recipe) => {
     setForm((prev) => ({
       ...prev,
-      calories: recipe.caloriesKcal != null ? String(recipe.caloriesKcal) : '',
-      proteinGrams: recipe.proteinGrams != null ? String(recipe.proteinGrams) : '',
-      carbsGrams: recipe.carbsGrams != null ? String(recipe.carbsGrams) : '',
-      fatGrams: recipe.fatGrams != null ? String(recipe.fatGrams) : '',
+      calories: formatNumericField(recipe.caloriesKcal, 'integer'),
+      proteinGrams: formatNumericField(recipe.proteinGrams, 'decimal'),
+      carbsGrams: formatNumericField(recipe.carbsGrams, 'decimal'),
+      fatGrams: formatNumericField(recipe.fatGrams, 'decimal'),
     }))
     setNutritionTouched({
       calories: false,
@@ -205,10 +227,10 @@ function AddMealModal({
         mealType:     data.mealType,
         title:        data.title.trim(),
         note:         data.note.trim() || null,
-        calories:     data.calories     ? parseInt(data.calories)       : null,
-        proteinGrams: data.proteinGrams ? parseFloat(data.proteinGrams) : null,
-        carbsGrams:   data.carbsGrams   ? parseFloat(data.carbsGrams)   : null,
-        fatGrams:     data.fatGrams     ? parseFloat(data.fatGrams)     : null,
+        calories:     data.calories     ? parseInt(normalizeDecimalInput(data.calories), 10)       : null,
+        proteinGrams: data.proteinGrams ? parseFloat(normalizeDecimalInput(data.proteinGrams)) : null,
+        carbsGrams:   data.carbsGrams   ? parseFloat(normalizeDecimalInput(data.carbsGrams))   : null,
+        fatGrams:     data.fatGrams     ? parseFloat(normalizeDecimalInput(data.fatGrams))     : null,
         recipeId:     data.recipeId     ?? null,
       }
       if (existingItem) {
@@ -239,7 +261,7 @@ function AddMealModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-2xl border border-border shadow-2xl w-full max-w-md z-10 overflow-hidden">
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl overflow-visible">
 
         {/* Colored top accent */}
         <div className={cn('h-1 w-full', cfg.dot)} />
@@ -268,7 +290,7 @@ function AddMealModal({
             <p className="text-sm font-semibold text-foreground">Kaydedildi!</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <form onSubmit={handleSubmit} className="max-h-[80vh] overflow-y-auto px-6 py-5 space-y-4 overscroll-contain">
 
             {/* Time + MealType */}
             <div className="grid grid-cols-2 gap-4">
@@ -366,7 +388,7 @@ function AddMealModal({
                     <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
                   )}
                   {recipeDropdownOpen && recipeSearch.length >= 2 && recipeSearchResults && (
-                    <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                    <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-card shadow-lg overscroll-contain">
                       {recipeSearchResults.items.length === 0 ? (
                         <p className="px-3 py-2.5 text-xs text-muted-foreground">Eşleşen tarif bulunamadı</p>
                       ) : (
@@ -420,9 +442,8 @@ function AddMealModal({
                       {label} <span className="font-normal normal-case">({unit})</span>
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      step={key === 'calories' ? '1' : '0.1'}
+                      type="text"
+                      inputMode={key === 'calories' ? 'numeric' : 'decimal'}
                       value={form[key]}
                       onChange={set(key)}
                       placeholder={placeholder}

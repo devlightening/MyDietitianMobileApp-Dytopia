@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator } from "react-native";
 import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
@@ -14,9 +14,102 @@ import { dur } from "../hooks/useAuraMotion";
 import type { RecipeMatchResult } from "../api/kitchen";
 import { getRecipePlanContext, type RecipePlanContext } from "../api/alternative";
 import ProduceBubble from "../components/decor/ProduceBubble";
+import RecipeNutritionPanel from "../components/recipes/RecipeNutritionPanel";
 import { buildWhySuggested, formatCompatibilityPercent, getMatchTierLabel } from "../utils/recipeMatchPresentation";
 
 type ScreenRoute = RouteProp<{ params: { result: RecipeMatchResult } }, "params">;
+
+// â”€â”€ Nutrition table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function NutritionTable({
+  caloriesKcal, proteinGrams, carbsGrams, fatGrams, accent, theme,
+}: {
+  caloriesKcal?: number | null;
+  proteinGrams?: number | null;
+  carbsGrams?: number | null;
+  fatGrams?: number | null;
+  accent: string;
+  theme: any;
+}) {
+  const items = [
+    { label: "Kalori",        value: caloriesKcal != null ? `${caloriesKcal}` : null, unit: "kcal", color: theme.macroCalorie ?? accent },
+    { label: "Protein",       value: proteinGrams  != null ? `${proteinGrams}`  : null, unit: "g",    color: theme.macroProtein ?? theme.emerald },
+    { label: "Karb",          value: carbsGrams    != null ? `${carbsGrams}`    : null, unit: "g",    color: theme.macroCarb    ?? theme.accentGold },
+    { label: "Yağ",           value: fatGrams      != null ? `${fatGrams}`      : null, unit: "g",    color: theme.macroFat     ?? theme.accentCoral },
+  ].filter(i => i.value !== null);
+
+  if (items.length === 0) return null;
+
+  // Total for progress bar calculation (protein+carbs+fat in grams)
+  const totalGrams = (proteinGrams ?? 0) + (carbsGrams ?? 0) + (fatGrams ?? 0);
+
+  return (
+    <View style={nt.container}>
+      {/* Main macro row */}
+      <View style={nt.row}>
+        {items.map(item => (
+          <View key={item.label} style={[nt.cell, { backgroundColor: `${item.color}0C`, borderColor: `${item.color}20` }]}>
+            <Text style={[nt.cellValue, { color: item.color }]}>
+              {item.value}<Text style={[nt.cellUnit, { color: item.color + "CC" }]}>{item.unit}</Text>
+            </Text>
+            <Text style={[nt.cellLabel, { color: theme.textMuted }]}>{item.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Macro bar (protein/carbs/fat proportions) */}
+      {totalGrams > 0 && (
+        <View style={nt.barWrap}>
+          {proteinGrams != null && proteinGrams > 0 && (
+            <View style={[nt.barSegment, { flex: proteinGrams / totalGrams, backgroundColor: theme.macroProtein ?? theme.emerald }]} />
+          )}
+          {carbsGrams != null && carbsGrams > 0 && (
+            <View style={[nt.barSegment, { flex: carbsGrams / totalGrams, backgroundColor: theme.macroCarb ?? theme.accentGold }]} />
+          )}
+          {fatGrams != null && fatGrams > 0 && (
+            <View style={[nt.barSegment, { flex: fatGrams / totalGrams, backgroundColor: theme.macroFat ?? theme.accentCoral }]} />
+          )}
+        </View>
+      )}
+
+      {/* Bar legend */}
+      {totalGrams > 0 && (
+        <View style={nt.legendRow}>
+          {proteinGrams != null && <LegendDot label="Protein" color={theme.macroProtein ?? theme.emerald} theme={theme} />}
+          {carbsGrams  != null && <LegendDot label="Karb"    color={theme.macroCarb    ?? theme.accentGold} theme={theme} />}
+          {fatGrams    != null && <LegendDot label="Yağ"     color={theme.macroFat     ?? theme.accentCoral} theme={theme} />}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function LegendDot({ label, color, theme }: { label: string; color: string; theme: any }) {
+  return (
+    <View style={nt.legendItem}>
+      <View style={[nt.legendDot, { backgroundColor: color }]} />
+      <Text style={[nt.legendLabel, { color: theme.textMuted }]}>{label}</Text>
+    </View>
+  );
+}
+
+const nt = StyleSheet.create({
+  container: { gap: 10 },
+  row: { flexDirection: "row", gap: 8 },
+  cell: {
+    flex: 1, borderRadius: 10, borderWidth: 1,
+    paddingVertical: 10, alignItems: "center", gap: 3,
+  },
+  cellValue: { fontSize: 18, fontWeight: "900" },
+  cellUnit: { fontSize: 11, fontWeight: "700" },
+  cellLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4 },
+  barWrap: { flexDirection: "row", height: 7, borderRadius: 4, overflow: "hidden", gap: 2 },
+  barSegment: { borderRadius: 4 },
+  legendRow: { flexDirection: "row", gap: 14, justifyContent: "center" },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendLabel: { fontSize: 11, fontWeight: "700" },
+});
 
 function Pill({
   label,
@@ -66,14 +159,23 @@ export default function RecipeDetailScreen() {
     setIsFavorite(!isFavorite);
   }
 
-  // Plan-mode hydration: when result only has recipeId (navigated from Plans screen),
-  // fetch full recipe details via plan-context endpoint.
+  // Hydrate recipe details when navigation payload is partial.
   const [planCtx, setPlanCtx] = useState<RecipePlanContext | null>(null);
   const [planCtxLoading, setPlanCtxLoading] = useState(false);
   const isPlanMode = !!result.recipeId && !result.explanation && (!result.steps || result.steps.length === 0);
+  const needsRecipeHydration = !!result.recipeId && (
+    !result.description?.trim() ||
+    !result.steps?.length ||
+    (
+      result.caloriesKcal == null &&
+      result.proteinGrams == null &&
+      result.carbsGrams == null &&
+      result.fatGrams == null
+    )
+  );
 
   useEffect(() => {
-    if (!isPlanMode || !result.recipeId) return;
+    if (!needsRecipeHydration || !result.recipeId) return;
     let active = true;
     setPlanCtxLoading(true);
     getRecipePlanContext(result.recipeId)
@@ -81,7 +183,7 @@ export default function RecipeDetailScreen() {
       .catch(() => {})
       .finally(() => { if (active) setPlanCtxLoading(false); });
     return () => { active = false; };
-  }, [isPlanMode, result.recipeId]);
+  }, [needsRecipeHydration, result.recipeId]);
 
   const copy = language === "en" ? {
     back: "Recipe Results",
@@ -139,6 +241,10 @@ export default function RecipeDetailScreen() {
   const displayName = (isPlanMode && planCtx ? planCtx.recipeName : null) ?? result.name;
   const displayDescription = (isPlanMode && planCtx ? planCtx.description : null) ?? result.description;
   const displaySteps: string[] = (isPlanMode && planCtx ? planCtx.steps : null) ?? result.steps ?? [];
+  const displayCaloriesKcal = planCtx?.caloriesKcal ?? result.caloriesKcal;
+  const displayProteinGrams = planCtx?.proteinGrams ?? result.proteinGrams;
+  const displayCarbsGrams = planCtx?.carbsGrams ?? result.carbsGrams;
+  const displayFatGrams = planCtx?.fatGrams ?? result.fatGrams;
   const planMatchedMandatory = planCtx?.ingredients.mandatory.map(i => ({ id: i.id, name: i.name })) ?? [];
   const planMatchedOptional = planCtx?.ingredients.optional.map(i => ({ id: i.id, name: i.name })) ?? [];
 
@@ -377,6 +483,21 @@ export default function RecipeDetailScreen() {
           </Animated.View>
         )}
 
+        {/* Nutrition section */}
+        {(displayCaloriesKcal != null || displayProteinGrams != null || displayCarbsGrams != null || displayFatGrams != null) && (
+          <Animated.View entering={FadeInDown.delay(160).duration(dur.base)} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <RecipeNutritionPanel
+              caloriesKcal={displayCaloriesKcal}
+              proteinGrams={displayProteinGrams}
+              carbsGrams={displayCarbsGrams}
+              fatGrams={displayFatGrams}
+              accent={accent}
+              theme={theme}
+              title={language === "en" ? "Nutrition" : "Besin Değerleri"}
+            />
+          </Animated.View>
+        )}
+
         <Animated.View entering={FadeInDown.delay(180).duration(dur.base)} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[s.cardLabel, { color: theme.textMuted }]}>{copy.steps}</Text>
           {displaySteps.length ? (
@@ -576,3 +697,4 @@ const s = StyleSheet.create({
   noStepsTitle: { fontSize: 13.5, lineHeight: 19, fontWeight: "700", textAlign: "center", marginTop: 8, marginBottom: 6 },
   noStepsSub: { fontSize: 12, lineHeight: 18, textAlign: "center" },
 });
+

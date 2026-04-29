@@ -46,7 +46,7 @@ export default function KitchenStreakRail({
           <View style={s.heroTop}>
             <View style={s.heroTextBlock}>
               <Text style={[s.eyebrow, { color: theme.emerald }]}>
-                {language === "tr" ? "AI SERI" : "AI STREAK"}
+                {language === "tr" ? "AI SERİ" : "AI STREAK"}
               </Text>
               <Text style={[s.title, { color: theme.text }]} numberOfLines={1}>
                 {summaryCopy.title}

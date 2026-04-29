@@ -20,11 +20,19 @@ import { addIngredientsToShoppingList } from "../api/shopping-list";
 import { matchKitchen, type RecipeMatchResult } from "../api/kitchen";
 import { useGamification } from "../queries/useGamification";
 import RecipeCard, { type MatchType } from "../components/recipes/RecipeCard";
+import RecipeSearchStage from "../components/kitchen/RecipeSearchStage";
 import { Routes } from "../navigation/routes";
-import { buildWhySuggested, formatCompatibilityPercent } from "../utils/recipeMatchPresentation";
+import {
+  buildWhySuggested,
+  formatCompatibilityPercent,
+  getScoreColor,
+  normalizeCompatibilityPercent,
+} from "../utils/recipeMatchPresentation";
+import { prioritizeRecipeMatches, summarizeRecipePriority } from "../features/smartInsights";
 
 type ScreenRoute = RouteProp<{ params: { ingredientIds: string[]; ingredientNames: string[] } }, "params">;
 type TabKey = "all" | "full" | "partial" | "clinic";
+const SEARCH_STAGE_MIN_MS = 3800;
 
 /** Clinic UI only when backend marks ownership of the linked clinic — never infer from DietitianId alone */
 const isOwnedByLinkedClinic = (recipe: RecipeMatchResult) =>
@@ -64,6 +72,7 @@ export default function KitchenResultScreen() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("all");
   const [addingToList, setAddingToList] = useState(false);
+  const [loadingPhase, setLoadingPhase] = useState(0);
 
   const copy = language === "en"
     ? {
@@ -86,11 +95,15 @@ export default function KitchenResultScreen() {
         fullSub: "Ready to cook now",
         partialSub: "Needs one or two additions",
         addMissing: "Add missing ingredients to list",
+        refreshPantry: "Refresh pantry",
         added: "Missing ingredients added to your shopping list.",
         streakLabel: "Rhythm update",
         streakSafe: "Today's kitchen action is feeding your streak.",
         streakRisk: "Your streak still needs a stronger action today.",
         streakCount: "day streak",
+        readyNow: "Ready now",
+        almostReady: "1-2 away",
+        needsShopping: "Needs list",
       }
     : {
         back: "Mutfak",
@@ -112,24 +125,43 @@ export default function KitchenResultScreen() {
         fullSub: "Hemen hazırlanabilir",
         partialSub: "Bir iki ekleme gerekiyor",
         addMissing: "Eksikleri listeye ekle",
+        refreshPantry: "Dolabımı Güncelle",
         added: "Eksik malzemeler alışveriş listene eklendi.",
         streakLabel: "Ritim güncellemesi",
         streakSafe: "Bugünkü mutfak aksiyonu serini besliyor.",
         streakRisk: "Seriyi korumak için bugün biraz daha aksiyon gerekiyor.",
         streakCount: "günlük seri",
+        readyNow: "Hazır şimdi",
+        almostReady: "1-2 eksik",
+        needsShopping: "Listeye düşen",
       };
 
   useEffect(() => {
     void load();
   }, []);
 
+  useEffect(() => {
+    if (!loading) return;
+
+    setLoadingPhase(0);
+    const phaseTimer = setInterval(() => {
+      setLoadingPhase((prev) => Math.min(prev + 1, 2));
+    }, 1320);
+
+    return () => clearInterval(phaseTimer);
+  }, [loading]);
+
   async function load() {
     setLoading(true);
+    setLoadingPhase(0);
     setError(null);
+    const introDelay = new Promise((resolve) => setTimeout(resolve, SEARCH_STAGE_MIN_MS));
     try {
       const res = await matchKitchen(ingredientIds);
-      setResults(res.results ?? []);
+      await introDelay;
+      setResults(prioritizeRecipeMatches(res.results ?? []));
     } catch (e: any) {
+      await introDelay;
       setError(e?.response?.data?.detail || e?.response?.data?.message || copy.empty);
     } finally {
       setLoading(false);
@@ -140,10 +172,11 @@ export default function KitchenResultScreen() {
     const clinic = results.filter((item) => isOwnedByLinkedClinic(item));
     const full = results.filter((item) => !isOwnedByLinkedClinic(item) && isFull(item));
     const partial = results.filter((item) => isPartial(item));
-    const bestClinic = clinic.length > 0
-      ? [...clinic].sort((a, b) => b.score - a.score)[0] ?? null
-      : null;
-    const featured = clinic.find(isFull) ?? full[0] ?? bestClinic ?? partial[0] ?? null;
+
+    // Pick featured by highest compatibilityPercent across ALL results — not by category.
+    const featured = [...results].sort((a, b) =>
+      normalizeCompatibilityPercent(b) - normalizeCompatibilityPercent(a),
+    )[0] ?? null;
 
     return {
       featured,
@@ -152,6 +185,8 @@ export default function KitchenResultScreen() {
       partial: partial.filter((item) => item.recipeId !== featured?.recipeId),
     };
   }, [results]);
+
+  const prioritySummary = useMemo(() => summarizeRecipePriority(results), [results]);
 
   const sections = {
     all: { clinic: grouped.clinic, full: grouped.full, partial: grouped.partial },
@@ -166,6 +201,42 @@ export default function KitchenResultScreen() {
     { key: "partial" as TabKey, label: copy.partial },
     { key: "clinic" as TabKey, label: copy.clinic },
   ];
+
+  if (loading) {
+    return (
+      <View style={[s.root, { backgroundColor: theme.bg }]}>
+        <StatusBar
+          barStyle={isDark ? "light-content" : "dark-content"}
+          backgroundColor="transparent"
+          translucent
+        />
+        <View
+          style={[
+            s.loadingRoot,
+            {
+              paddingTop: insets.top + 12,
+              paddingBottom: Math.max(insets.bottom, 24),
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[s.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            onPress={() => (navigation as any).goBack()}
+          >
+            <Ionicons name="chevron-back" size={15} color={theme.textSub} />
+            <Text style={[s.backTxt, { color: theme.textSub }]}>{copy.back}</Text>
+          </TouchableOpacity>
+
+          <RecipeSearchStage
+            theme={theme}
+            ingredientNames={ingredientNames}
+            language={language}
+            phase={loadingPhase}
+          />
+        </View>
+      </View>
+    );
+  }
 
   async function handleAddMissingToList() {
     const missingIds = grouped.featured?.missing?.map((item) => item.ingredient.id) ?? [];
@@ -230,13 +301,21 @@ export default function KitchenResultScreen() {
           <Text style={[s.meta, { color: theme.emerald }]}>
             {ingredientNames.length} {copy.ingredients}
           </Text>
-        </View>
-
-        {loading && (
-          <View style={[s.stateCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <ActivityIndicator size="large" color={theme.primary} />
+          <View style={s.priorityRow}>
+            <View style={[s.priorityPill, { backgroundColor: `${theme.emerald}12`, borderColor: `${theme.emerald}24` }]}>
+              <Text style={[s.priorityValue, { color: theme.emerald }]}>{prioritySummary.readyNow}</Text>
+              <Text style={[s.priorityLabel, { color: theme.textMuted }]}>{copy.readyNow}</Text>
+            </View>
+            <View style={[s.priorityPill, { backgroundColor: `${theme.primary}12`, borderColor: `${theme.primary}24` }]}>
+              <Text style={[s.priorityValue, { color: theme.primary }]}>{prioritySummary.almostReady}</Text>
+              <Text style={[s.priorityLabel, { color: theme.textMuted }]}>{copy.almostReady}</Text>
+            </View>
+            <View style={[s.priorityPill, { backgroundColor: `${theme.accentGold}12`, borderColor: `${theme.accentGold}24` }]}>
+              <Text style={[s.priorityValue, { color: theme.accentGold }]}>{prioritySummary.needsShopping}</Text>
+              <Text style={[s.priorityLabel, { color: theme.textMuted }]}>{copy.needsShopping}</Text>
+            </View>
           </View>
-        )}
+        </View>
 
         {!loading && !!error && (
           <View style={[s.stateCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -257,14 +336,17 @@ export default function KitchenResultScreen() {
           </View>
         )}
 
-        {!loading && !error && grouped.featured && (
+        {!loading && !error && grouped.featured && (() => {
+          const featuredPct = normalizeCompatibilityPercent(grouped.featured);
+          const featuredColor = getScoreColor(featuredPct);
+          return (
           <Animated.View entering={FadeInDown.duration(260)} style={s.featureWrap}>
             <View style={s.featureHead}>
-              <View style={[s.featureBadge, { backgroundColor: `${theme.emerald}12`, borderColor: `${theme.emerald}22` }]}>
-                <Text style={[s.featureBadgeTxt, { color: theme.emerald }]}>{copy.feature}</Text>
+              <View style={[s.featureBadge, { backgroundColor: `${featuredColor}12`, borderColor: `${featuredColor}22` }]}>
+                <Text style={[s.featureBadgeTxt, { color: featuredColor }]}>{copy.feature}</Text>
               </View>
-              <View style={[s.featureScore, { borderColor: `${theme.emerald}26`, backgroundColor: `${theme.emerald}10` }]}>
-                <Text style={[s.featureScoreTxt, { color: theme.emerald }]}>{formatCompatibilityPercent(grouped.featured)}</Text>
+              <View style={[s.featureScore, { borderColor: `${featuredColor}30`, backgroundColor: `${featuredColor}12` }]}>
+                <Text style={[s.featureScoreTxt, { color: featuredColor }]}>{formatCompatibilityPercent(grouped.featured)}</Text>
               </View>
             </View>
             <Text style={[s.featureTitle, { color: theme.text }]}>{copy.featureTitle}</Text>
@@ -323,23 +405,33 @@ export default function KitchenResultScreen() {
               </View>
             )}
             {!!grouped.featured.missing?.length && (
-              <TouchableOpacity
-                style={[s.listBtn, { backgroundColor: theme.primary }]}
-                onPress={() => void handleAddMissingToList()}
-                disabled={addingToList}
-              >
-                {addingToList ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons name="cart-outline" size={15} color="#FFFFFF" />
-                    <Text style={s.listBtnTxt}>{copy.addMissing}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <View style={s.featureActionRow}>
+                <TouchableOpacity
+                  style={[s.listBtn, { backgroundColor: theme.primary, flex: 1 }]}
+                  onPress={() => void handleAddMissingToList()}
+                  disabled={addingToList}
+                >
+                  {addingToList ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="cart-outline" size={15} color="#FFFFFF" />
+                      <Text style={s.listBtnTxt}>{copy.addMissing}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.secondaryActionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  onPress={() => (navigation as any).navigate(Routes.App.Pantry)}
+                >
+                  <Ionicons name="basket-outline" size={15} color={theme.text} />
+                  <Text style={[s.secondaryActionTxt, { color: theme.text }]}>{copy.refreshPantry}</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </Animated.View>
-        )}
+          );
+        })()}
 
         {!loading && !error && results.length > 1 && (
           <ScrollView
@@ -408,6 +500,10 @@ export default function KitchenResultScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
+  loadingRoot: {
+    flex: 1,
+    paddingHorizontal: spacing.base,
+  },
   scroll: { paddingHorizontal: spacing.base },
   backBtn: {
     alignSelf: "flex-start",
@@ -428,6 +524,16 @@ const s = StyleSheet.create({
   ingChip: { borderWidth: 1, borderRadius: radii.full, paddingHorizontal: 11, paddingVertical: 7 },
   ingChipTxt: { fontSize: 11, fontWeight: "700" },
   meta: { fontSize: 12, fontWeight: "900" },
+  priorityRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  priorityPill: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  priorityValue: { fontSize: 16, fontWeight: "900", marginBottom: 2 },
+  priorityLabel: { fontSize: 10.5, fontWeight: "700", lineHeight: 14 },
   stateCard: { borderWidth: 1, borderRadius: radii.xxl, padding: 22, alignItems: "center", marginBottom: spacing.md },
   stateTitle: { fontSize: 15, fontWeight: "800", textAlign: "center" },
   stateSub: { fontSize: 12.5, lineHeight: 18, marginTop: 6, textAlign: "center" },
@@ -477,6 +583,19 @@ const s = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  featureActionRow: { flexDirection: "row", gap: 10, marginTop: spacing.sm },
+  secondaryActionBtn: {
+    marginTop: spacing.sm,
+    minHeight: 50,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  secondaryActionTxt: { fontSize: 12.5, fontWeight: "800" },
   listBtnTxt: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
   tabBar: {
     flexDirection: "row",
@@ -503,5 +622,3 @@ const s = StyleSheet.create({
   bottomBtn: { borderWidth: 1, borderRadius: radii.xl, paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
   bottomBtnTxt: { fontSize: 13, fontWeight: "700" },
 });
-
-

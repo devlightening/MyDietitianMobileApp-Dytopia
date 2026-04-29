@@ -10,12 +10,23 @@ public class AnalyzeIngredientImageCommand : IRequest<AnalyzeIngredientImageResu
 {
     public string Base64Image { get; }
     public string MediaType { get; }
+    public VisionScanKind ScanKind { get; }
 
-    public AnalyzeIngredientImageCommand(string base64Image, string mediaType)
+    public AnalyzeIngredientImageCommand(
+        string base64Image,
+        string mediaType,
+        VisionScanKind scanKind = VisionScanKind.Ingredient)
     {
         Base64Image = base64Image;
         MediaType = mediaType;
+        ScanKind = scanKind;
     }
+}
+
+public enum VisionScanKind
+{
+    Ingredient = 0,
+    Receipt = 1,
 }
 
 /// <summary>

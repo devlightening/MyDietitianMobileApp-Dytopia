@@ -1,3 +1,6 @@
+import { enableScreens } from 'react-native-screens';
+enableScreens(true);
+
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
 import { QueryClientProvider } from "@tanstack/react-query";

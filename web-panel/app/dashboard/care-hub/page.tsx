@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BellRing, CalendarClock, FileText, Reply, Send, UserCircle2 } from 'lucide-react';
+import { BellRing, CalendarClock, FileText, Reply, Send, UserCircle2, X } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -14,6 +14,7 @@ import {
   sendClientCareReply,
   type CareTimelineItem,
 } from '@/lib/api/clients';
+import { useCareSignalR } from '@/hooks/useCareSignalR';
 
 function formatDateTime(value?: string | null) {
   if (!value) return 'Plan yok';
@@ -72,8 +73,35 @@ export default function CareHubPage() {
     [selectedClientId, summary],
   );
 
+  const taskTemplates = useMemo(() => ([
+    {
+      key: 'pantry',
+      label: 'Dolap görevi',
+      text: '[TASK|PANTRY|Dolabını Tazele|Dolabı Aç] Dolabındaki ürünleri güncelle ve akşam için bir tarif seç.',
+    },
+    {
+      key: 'hydration',
+      label: 'Su görevi',
+      text: '[TASK|HYDRATION|Su Ritmini Koru|Suya Git] Bugün su hedefini kapatmak için birkaç bardak daha ekle.',
+    },
+    {
+      key: 'shopping',
+      label: 'Alışveriş görevi',
+      text: '[TASK|SHOPPING|Eksikleri Kapat|Listeyi Aç] Eksik malzemelerini kontrol edip alışveriş listesini toparla.',
+    },
+  ]), []);
+
+  // Real-time: invalidate queries whenever SignalR fires care.thread.updated
+  const handleSignalRUpdate = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['care-hub-summary'] });
+    void queryClient.invalidateQueries({ queryKey: ['client-care', selectedClientId] });
+  }, [queryClient, selectedClientId]);
+
+  useCareSignalR(handleSignalRUpdate, true);
+
   const replyMutation = useMutation({
-    mutationFn: (payload: { clientId: string; text: string }) => sendClientCareReply(payload.clientId, payload.text),
+    mutationFn: (payload: { clientId: string; text: string; replyToId?: string | null; replyToSnippet?: string | null }) =>
+      sendClientCareReply(payload.clientId, payload.text, payload.replyToId, payload.replyToSnippet),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['care-hub-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['client-care', selectedClientId] });
@@ -106,7 +134,12 @@ export default function CareHubPage() {
     if (!text || !selectedClientId) return;
 
     if (composeMode === 'reply') {
-      await replyMutation.mutateAsync({ clientId: selectedClientId, text });
+      await replyMutation.mutateAsync({
+        clientId: selectedClientId,
+        text,
+        replyToId: replyTarget?.id ?? null,
+        replyToSnippet: replyTarget?.text ?? null,
+      });
       return;
     }
 
@@ -270,16 +303,16 @@ export default function CareHubPage() {
                   </div>
                   <button
                     onClick={() => setReplyTarget(null)}
-                    className="text-xs font-semibold text-muted-foreground"
+                    className="rounded-full p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
                   >
-                    Temizle
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            <div className="space-y-3 rounded-2xl border border-border bg-[var(--surface-glass)] p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="space-y-3 rounded-2xl border border-border bg-[var(--surface-glass)] p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 {composeMode === 'reply' ? (
                   <>
                     <Reply className="h-4 w-4 text-primary" />
@@ -291,8 +324,22 @@ export default function CareHubPage() {
                     Klinik not ekle
                   </>
                 )}
-              </div>
-              <textarea
+                </div>
+                {composeMode === 'note' ? (
+                  <div className="flex flex-wrap gap-2">
+                    {taskTemplates.map((template) => (
+                      <button
+                        key={template.key}
+                        type="button"
+                        onClick={() => setDraft(template.text)}
+                        className="rounded-full border border-border bg-[var(--surface-raised)] px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-primary/30 hover:bg-primary/5"
+                      >
+                        {template.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={4}
@@ -391,7 +438,7 @@ export default function CareHubPage() {
                               <Reply className="h-5 w-5 text-primary" />
                             )}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-semibold text-foreground">
                                 {isInbound ? 'Danışan' : 'Diyetisyen'}
@@ -400,18 +447,22 @@ export default function CareHubPage() {
                                 {badgeLabel}
                               </span>
                             </div>
+                            {/* Reply quote */}
+                            {item.replyToSnippet ? (
+                              <div className="mt-2 rounded-xl border-l-4 border-primary/60 bg-primary/6 px-3 py-2">
+                                <p className="line-clamp-2 text-xs text-muted-foreground">{item.replyToSnippet}</p>
+                              </div>
+                            ) : null}
                             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground/90">
                               {item.text}
                             </p>
-                            {isInbound && (
-                              <button
-                                onClick={() => handleReplyTo(item)}
-                                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary"
-                              >
-                                <Reply className="h-3.5 w-3.5" />
-                                Bu mesaja yanıt ver
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleReplyTo(item)}
+                              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary opacity-60 hover:opacity-100 transition-opacity"
+                            >
+                              <Reply className="h-3.5 w-3.5" />
+                              Yanıtla
+                            </button>
                           </div>
                         </div>
                         <div className="min-w-[108px] text-right text-xs text-muted-foreground">

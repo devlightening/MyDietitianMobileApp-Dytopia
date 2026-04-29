@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { radii, spacing } from "../theme/tokens";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface Measurement {
   id: string;
@@ -37,7 +37,7 @@ interface Measurement {
   isClinicallyVerified: boolean;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("tr-TR", {
@@ -60,20 +60,20 @@ function sourceBadge(sourceType: string): string {
   }
 }
 
-// ── Screen ────────────────────────────────────────────────────────────────────
+// â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function ProfileMeasurementsScreen() {
   const nav = useNavigation();
   const { theme, isDark } = useTheme();
 
-  // ── State: view ────────────────────────────────────────────────────────────
+  // â”€â”€ State: view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [tab, setTab] = useState<"quick" | "clinical">("quick");
   const [fetching, setFetching] = useState(true);
   const [loading, setLoading] = useState(false);
   const [latest, setLatest] = useState<Measurement | null>(null);
   const [history, setHistory] = useState<Measurement[]>([]);
 
-  // ── State: form ────────────────────────────────────────────────────────────
+  // â”€â”€ State: form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [bodyFat, setBodyFat] = useState("");
@@ -84,7 +84,7 @@ export default function ProfileMeasurementsScreen() {
   const [chestCm, setChestCm] = useState("");
   const [notes, setNotes] = useState("");
 
-  // ── Data loading ───────────────────────────────────────────────────────────
+  // â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const loadData = useCallback(async () => {
     try {
@@ -105,7 +105,7 @@ export default function ProfileMeasurementsScreen() {
       }
       setHistory(historyRes.data?.measurements ?? []);
     } catch {
-      // no prior measurements — that's fine
+      // no prior measurements â€” that's fine
     } finally {
       setFetching(false);
     }
@@ -113,7 +113,7 @@ export default function ProfileMeasurementsScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async function handleSubmit() {
     const w   = parseFloat(weightKg) || null;
@@ -134,11 +134,11 @@ export default function ProfileMeasurementsScreen() {
     const inRange = (v: number | null, min: number, max: number) =>
       v === null || (v >= min && v <= max);
 
-    if (!inRange(w, 10, 500)) return Alert.alert("Geçersiz", "Kilo 10–500 kg arasında olmalı.");
-    if (!inRange(h, 50, 300)) return Alert.alert("Geçersiz", "Boy 50–300 cm arasında olmalı.");
-    if (!inRange(bf, 0, 70))  return Alert.alert("Geçersiz", "Yağ oranı 0–70% arasında olmalı.");
+    if (!inRange(w, 10, 500)) return Alert.alert("Geçersiz", "Kilo 10-500 kg arasında olmalı.");
+    if (!inRange(h, 50, 300)) return Alert.alert("Geçersiz", "Boy 50-300 cm arasında olmalı.");
+    if (!inRange(bf, 0, 70))  return Alert.alert("Geçersiz", "Yağ oranı 0-70% arasında olmalı.");
     if (!inRange(wst, 30, 300) || !inRange(hip, 30, 300) || !inRange(ch, 30, 300))
-      return Alert.alert("Geçersiz", "Çevre ölçümleri 30–300 cm arasında olmalı.");
+      return Alert.alert("Geçersiz", "Çevre ölçümleri 30-300 cm arasında olmalı.");
 
     setLoading(true);
     try {
@@ -163,7 +163,7 @@ export default function ProfileMeasurementsScreen() {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (fetching) {
     return (
@@ -182,7 +182,7 @@ export default function ProfileMeasurementsScreen() {
 
         {/* Header */}
         <TouchableOpacity onPress={() => (nav as any).goBack()} style={s.backRow}>
-          <Text style={[s.backText, { color: theme.primary }]}>← Geri</Text>
+          <Text style={[s.backText, { color: theme.primary }]}>â† Geri</Text>
         </TouchableOpacity>
         <Text style={[s.title, { color: theme.text }]}>Ölçümlerim</Text>
         <Text style={[s.sub, { color: theme.textSub }]}>
@@ -303,8 +303,8 @@ export default function ProfileMeasurementsScreen() {
             <>
               <MeasurementField label="Boy (cm)" value={heightCm} onChange={setHeightCm} placeholder="Örn: 170" theme={theme} />
               <MeasurementField label="Yağ oranı (%)" value={bodyFat} onChange={setBodyFat} placeholder="Örn: 22.0" theme={theme} />
-              <MeasurementField label="Kas oranı (%) — opsiyonel" value={musclePercent} onChange={setMusclePercent} placeholder="Örn: 35.0" theme={theme} />
-              <MeasurementField label="Su oranı (%) — opsiyonel" value={waterPercent} onChange={setWaterPercent} placeholder="Örn: 55.0" theme={theme} />
+              <MeasurementField label="Kas oranı (%) â€” opsiyonel" value={musclePercent} onChange={setMusclePercent} placeholder="Örn: 35.0" theme={theme} />
+              <MeasurementField label="Su oranı (%) â€” opsiyonel" value={waterPercent} onChange={setWaterPercent} placeholder="Örn: 55.0" theme={theme} />
             </>
           )}
 
@@ -390,7 +390,7 @@ export default function ProfileMeasurementsScreen() {
   );
 }
 
-// ── WeightChart ───────────────────────────────────────────────────────────────
+// â”€â”€ WeightChart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function WeightChart({ history, theme }: { history: Measurement[]; theme: any }) {
   const points = history.filter(m => m.weightKg != null).slice(0, 8).reverse();
@@ -424,7 +424,7 @@ function WeightChart({ history, theme }: { history: Measurement[]; theme: any })
         })}
       </View>
       <Text style={[chartS.range, { color: theme.textMuted }]}>
-        {min.toFixed(1)} – {max.toFixed(1)} kg arası {points.length} ölçüm
+        {min.toFixed(1)} - {max.toFixed(1)} kg arası {points.length} ölçüm
       </Text>
     </View>
   );
@@ -440,7 +440,7 @@ const chartS = StyleSheet.create({
   range: { fontSize: 11, fontWeight: "600", marginTop: spacing.sm, textAlign: "center" },
 });
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function MetricBox({ value, unit, label, delta: d, color }: {
   value: string; unit: string; label: string; delta?: string | null; color: string;
@@ -484,7 +484,7 @@ function MeasurementField({ label, value, onChange, placeholder, theme }: {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const s = StyleSheet.create({
   root: { flex: 1 },
@@ -555,3 +555,4 @@ const s = StyleSheet.create({
   historyMetricVal: { fontSize: 13, fontWeight: "800" },
   historyDelta: { fontSize: 11, fontWeight: "800" },
 });
+

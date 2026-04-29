@@ -1,6 +1,43 @@
-import type { RecipeMatchResult } from "../api/kitchen";
+﻿import type { RecipeMatchResult } from "../api/kitchen";
 
 type Lang = "tr" | "en";
+
+/**
+ * Returns a hex color for a 0-100 match percentage.
+ * 100  â†’ emerald  (perfect, all ingredients present)
+ * 85+  â†’ teal-green
+ * 70+  â†’ lime
+ * 55+  â†’ amber
+ * 40+  â†’ orange
+ * 25+  â†’ red
+ * <25  â†’ deep red
+ */
+export function getScoreColor(percent: number): string {
+  if (percent >= 100) return "#10B981"; // emerald-500
+  if (percent >= 85)  return "#34D399"; // emerald-400
+  if (percent >= 70)  return "#84CC16"; // lime-500
+  if (percent >= 55)  return "#EAB308"; // yellow-500
+  if (percent >= 40)  return "#F97316"; // orange-500
+  if (percent >= 25)  return "#EF4444"; // red-500
+  return "#DC2626";                     // red-600
+}
+
+export function getScoreTierLabel(percent: number, lang: Lang): string {
+  if (lang === "tr") {
+    if (percent >= 100) return "TAM UYUM";
+    if (percent >= 85)  return "GÜÇLÜ UYUM";
+    if (percent >= 70)  return "İYİ UYUM";
+    if (percent >= 55)  return "ORTA UYUM";
+  if (percent >= 40)  return "DÜŞÜK UYUM";
+    return "ZAYIF UYUM";
+  }
+  if (percent >= 100) return "PERFECT MATCH";
+  if (percent >= 85)  return "STRONG MATCH";
+  if (percent >= 70)  return "GOOD MATCH";
+  if (percent >= 55)  return "MODERATE";
+  if (percent >= 40)  return "LOW MATCH";
+  return "WEAK MATCH";
+}
 
 export function normalizeRecipeScorePercent(score?: number | null): number {
   if (typeof score !== "number" || Number.isNaN(score)) return 0;
@@ -109,3 +146,4 @@ export function buildWhySuggested(result: RecipeMatchResult, lang: Lang): {
 
   return { summaryLine, paragraph, facts };
 }
+

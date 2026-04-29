@@ -1,5 +1,5 @@
-/**
- * AURA CLINICAL OS — Free Home Screen
+﻿/**
+ * AURA CLINICAL OS â€” Free Home Screen
  * Yeni tasarım: dinamik selamlama, adım rehberi, özellik önizleme, kimlik kartı
  */
 import React from 'react';
@@ -24,18 +24,18 @@ import { Routes } from '../navigation/routes';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import { useFadeRise, useScaleSettle, useStaggerItem } from '../hooks/useAuraMotion';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getGreeting(): { emoji: string; line1: string; line2: string } {
   const h = new Date().getHours();
-  if (h < 6)  return { emoji: '🌙', line1: 'İyi geceler,',        line2: 'Sağlıklı yarınlar seni bekliyor.' };
-  if (h < 12) return { emoji: '☀️', line1: 'Günaydın!',           line2: 'Enerjik bir güne hoş geldin.' };
-  if (h < 14) return { emoji: '🌿', line1: 'İyi öğleler!',        line2: 'Öğle molası, sağlıklı bir seçim.' };
-  if (h < 18) return { emoji: '🍃', line1: 'İyi öğleden sonralar!', line2: 'Akşamı birlikte planlayalım.' };
-  return       { emoji: '🌆', line1: 'İyi akşamlar!',             line2: 'Günü güzel bitiriyorsun.' };
+  if (h < 6)  return { emoji: 'ğŸŒ™', line1: 'İyi geceler,',        line2: 'Sağlıklı yarınlar seni bekliyor.' };
+  if (h < 12) return { emoji: 'â˜€ï¸', line1: 'Günaydın!',           line2: 'Enerjik bir güne hoş geldin.' };
+  if (h < 14) return { emoji: 'ğŸŒ¿', line1: 'İyi öğleler!',        line2: 'Öğle molası, sağlıklı bir seçim.' };
+  if (h < 18) return { emoji: 'ğŸƒ', line1: 'İyi öğleden sonralar!', line2: 'Akşamı birlikte planlayalım.' };
+  return       { emoji: 'ğŸŒ†', line1: 'İyi akşamlar!',             line2: 'Günü güzel bitiriyorsun.' };
 }
 
-// ── Feature preview data ──────────────────────────────────────────────────────
+// â”€â”€ Feature preview data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const FEATURES = [
   {
@@ -64,7 +64,7 @@ const FEATURES = [
   },
 ] as const;
 
-// ── Steps data ────────────────────────────────────────────────────────────────
+// â”€â”€ Steps data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STEPS = [
   { num: '1', label: 'Hesabını oluşturdun', done: true },
@@ -72,7 +72,7 @@ const STEPS = [
   { num: '3', label: 'Premium planını başlat', done: false },
 ] as const;
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function FeatureCard({
   icon, accent, title, desc, index, theme,
@@ -100,7 +100,7 @@ function FeatureCard({
   );
 }
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
+// â”€â”€ Main Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function FreeHomeScreen() {
   const { user, logout, resetAppData } = useAuth();
@@ -151,7 +151,7 @@ export default function FreeHomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
       >
-        {/* ── Header ── */}
+        {/* â”€â”€ Header â”€â”€ */}
         <Animated.View style={[s.header, headerAnim]}>
           <View style={s.headerLeft}>
             <View style={[s.freePill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
@@ -167,9 +167,9 @@ export default function FreeHomeScreen() {
             {__DEV__ && resetAppData && (
               <TouchableOpacity
                 style={[s.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                onPress={() => Alert.alert('Reset (DEV)', 'Devam?', [
+        onPress={() => Alert.alert('Sıfırla (GELİŞTİRME)', 'Devam?', [
                   { text: 'İptal', style: 'cancel' },
-                  { text: 'Reset', style: 'destructive', onPress: () => resetAppData?.() },
+                  { text: 'Sıfırla', style: 'destructive', onPress: () => resetAppData?.() },
                 ])}
                 activeOpacity={0.8}
               >
@@ -186,7 +186,7 @@ export default function FreeHomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Hero CTA card ── */}
+        {/* â”€â”€ Hero CTA card â”€â”€ */}
         <Animated.View style={heroAnim}>
           <View style={[s.heroCard, { backgroundColor: theme.primary }]}>
             {/* Decorative blob inside card */}
@@ -217,7 +217,7 @@ export default function FreeHomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Onboarding stepper ── */}
+        {/* â”€â”€ Onboarding stepper â”€â”€ */}
         <Animated.View style={stepsAnim}>
           <Text style={[s.sectionLabel, { color: theme.textMuted }]}>ADIMLAR</Text>
           <View style={[s.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -248,7 +248,7 @@ export default function FreeHomeScreen() {
                 </Text>
                 {step.done && (
                   <View style={[s.stepDoneBadge, { backgroundColor: `${theme.emerald}14` }]}>
-                    <Text style={[s.stepDoneText, { color: theme.emerald }]}>✓ Tamam</Text>
+                    <Text style={[s.stepDoneText, { color: theme.emerald }]}>âœ“ Tamam</Text>
                   </View>
                 )}
                 {!step.done && i === 1 && (
@@ -265,7 +265,7 @@ export default function FreeHomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Identity card ── */}
+        {/* â”€â”€ Identity card â”€â”€ */}
         {user?.publicUserId && (
           <Animated.View style={idAnim}>
             <View style={[s.idCard, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
@@ -305,7 +305,7 @@ export default function FreeHomeScreen() {
           </Animated.View>
         )}
 
-        {/* ── Feature preview ── */}
+        {/* â”€â”€ Feature preview â”€â”€ */}
         <Animated.View style={featuresAnim}>
           <Text style={[s.sectionLabel, { color: theme.textMuted }]}>PREMIUM İLE AÇILIR</Text>
           <View style={s.featureGrid}>
@@ -323,7 +323,7 @@ export default function FreeHomeScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Premium benefits list ── */}
+        {/* â”€â”€ Premium benefits list â”€â”€ */}
         <View style={[s.benefitsBox, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
           <View style={s.benefitsHeader}>
             <Ionicons name="ribbon-outline" size={18} color={theme.primary} />
@@ -350,7 +350,7 @@ export default function FreeHomeScreen() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const s = StyleSheet.create({
   root: { flex: 1 },
@@ -537,3 +537,4 @@ const s = StyleSheet.create({
 
   bottomPad: { height: 20 },
 });
+

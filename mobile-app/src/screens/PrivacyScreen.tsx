@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
@@ -13,7 +13,7 @@ export default function PrivacyScreen() {
 
   const copy = language === "tr"
     ? {
-        back: "← Geri",
+        back: "â† Geri",
         title: "Gizlilik",
         subtitle: "Verilerinin uygulama içinde nasıl kullanıldığını açık şekilde gör.",
         items: [
@@ -36,7 +36,7 @@ export default function PrivacyScreen() {
         ],
       }
     : {
-        back: "← Back",
+        back: "â† Back",
         title: "Privacy",
         subtitle: "See clearly how your data is used inside the app.",
         items: [
@@ -126,3 +126,4 @@ const s = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: "900", marginBottom: 8 },
   cardBody: { fontSize: 13, fontWeight: "600", lineHeight: 20 },
 });
+

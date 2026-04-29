@@ -147,7 +147,15 @@
       "Bash(vercel env:*)",
       "Bash(vercel redeploy:*)",
       "Bash(vercel inspect:*)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(npx expo *)",
+      "Bash(git check-ignore *)",
+      "Bash(PGPASSWORD=postgres psql *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(xargs basename *)",
+      "PowerShell(docker exec mydietitian-postgres *)"
     ]
   }
 }

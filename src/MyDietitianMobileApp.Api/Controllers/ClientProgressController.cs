@@ -107,6 +107,8 @@ public class ClientProgressController : ControllerBase
         var tracking = await _appDb.ClientDailyTrackings
             .FirstOrDefaultAsync(t => t.ClientId == clientId && t.Date == today);
 
+        var previousWaterGlasses = tracking?.WaterGlasses ?? 0;
+
         if (tracking == null)
         {
             tracking = new ClientDailyTracking(clientId, today);
@@ -116,7 +118,10 @@ public class ClientProgressController : ControllerBase
         tracking.Update(request.WaterGlasses, request.Steps, request.Notes);
         await _appDb.SaveChangesAsync();
         var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId);
-        if (request.WaterGlasses >= 8)
+        var hitHydrationGoal = request.WaterGlasses >= ClientGamificationService.HydrationGoalGlasses;
+        var hitHydrationGoalBefore = previousWaterGlasses >= ClientGamificationService.HydrationGoalGlasses;
+
+        if (hitHydrationGoal && !hitHydrationGoalBefore)
         {
             await _gamificationService.TrackEventAsync(
                 clientId,

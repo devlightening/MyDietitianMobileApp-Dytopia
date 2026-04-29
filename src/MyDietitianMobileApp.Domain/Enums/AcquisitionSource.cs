@@ -8,4 +8,5 @@ public enum AcquisitionSource
     Text = 0,
     Barcode = 1,
     Vision = 2,
+    Receipt = 3,
 }

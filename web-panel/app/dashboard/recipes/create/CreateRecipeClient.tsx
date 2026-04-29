@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/Button';
+import { AlertCircle, ChefHat, Loader2, Plus, X } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
-import { Plus, X, Lock, Globe, Loader2, AlertCircle, ChefHat } from 'lucide-react';
 import { IngredientAutocomplete, IngredientOption } from '@/components/ingredients/IngredientAutocomplete';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -20,33 +19,43 @@ interface RecipeIngredient {
 
 type IngredientRole = 'mandatory' | 'optional' | 'flavoring' | 'prohibited';
 
+interface CreateRecipePayload {
+  name: string;
+  description: string;
+  isPublic: boolean;
+  mandatoryIngredients: string[];
+  optionalIngredients: string[];
+  flavoringIngredients: string[];
+  prohibitions: string[];
+}
+
 const ROLE_CONFIG: Record<IngredientRole, { label: string; className: string; nextRole: IngredientRole }> = {
   mandatory: {
     label: 'Zorunlu',
-    className: 'bg-action/10 text-action border border-action/20 hover:bg-action/20',
+    className: 'border border-action/20 bg-action/10 text-action hover:bg-action/20',
     nextRole: 'optional',
   },
   optional: {
-    label: 'İsteğe Bağlı',
-    className: 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20',
+    label: 'Opsiyonel',
+    className: 'border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20',
     nextRole: 'flavoring',
   },
   flavoring: {
     label: 'Lezzetlendirici',
-    className: 'bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200/70',
+    className: 'border border-amber-200 bg-amber-100 text-amber-700 hover:bg-amber-200/70',
     nextRole: 'prohibited',
   },
   prohibited: {
     label: 'Yasak',
-    className: 'bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20',
+    className: 'border border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20',
     nextRole: 'mandatory',
   },
 };
 
-function getRole(ing: RecipeIngredient): IngredientRole {
-  if (ing.isProhibited) return 'prohibited';
-  if (ing.isFlavoring) return 'flavoring';
-  if (ing.isMandatory) return 'mandatory';
+function getRole(ingredient: RecipeIngredient): IngredientRole {
+  if (ingredient.isProhibited) return 'prohibited';
+  if (ingredient.isFlavoring) return 'flavoring';
+  if (ingredient.isMandatory) return 'mandatory';
   return 'optional';
 }
 
@@ -58,14 +67,14 @@ function roleToFlags(role: IngredientRole): Pick<RecipeIngredient, 'isMandatory'
   };
 }
 
-interface CreateRecipePayload {
-  name: string;
-  description: string;
-  isPublic: boolean;
-  mandatoryIngredients: string[];
-  optionalIngredients: string[];
-  flavoringIngredients: string[];
-  prohibitions: string[];
+function createEmptyIngredient(): RecipeIngredient {
+  return {
+    ingredientId: '',
+    ingredientName: '',
+    isMandatory: true,
+    isFlavoring: false,
+    isProhibited: false,
+  };
 }
 
 export default function CreateRecipeClient() {
@@ -74,10 +83,7 @@ export default function CreateRecipeClient() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [isPublic, setIsPublic] = useState(false);
-  const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
-    { ingredientId: '', ingredientName: '', isMandatory: true, isFlavoring: false, isProhibited: false },
-  ]);
+  const [ingredients, setIngredients] = useState<RecipeIngredient[]>([createEmptyIngredient()]);
   const [apiError, setApiError] = useState<string | null>(null);
 
   const mutation = useMutation({
@@ -89,201 +95,235 @@ export default function CreateRecipeClient() {
     onError: (error: any) => {
       setApiError(
         error?.response?.data?.message ||
-        error?.response?.data?.detail ||
-        error?.message ||
-        'Tarif oluşturulamadı. Lütfen tekrar deneyin.'
+          error?.response?.data?.detail ||
+          error?.message ||
+          'Tarif oluşturulamadı. Lütfen tekrar deneyin.'
       );
     },
   });
 
-  function handleIngredientSelect(idx: number, ingredient: IngredientOption) {
-    setIngredients(prev => prev.map((ing, i) =>
-      i === idx ? { ...ing, ingredientId: ingredient.id, ingredientName: ingredient.canonicalName } : ing
-    ));
+  function handleIngredientSelect(index: number, ingredient: IngredientOption) {
+    setIngredients((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              ingredientId: ingredient.id,
+              ingredientName: ingredient.canonicalName,
+            }
+          : item
+      )
+    );
   }
 
-  function handleIngredientClear(idx: number) {
-    setIngredients(prev => prev.map((ing, i) =>
-      i === idx ? { ...ing, ingredientId: '', ingredientName: '' } : ing
-    ));
+  function handleIngredientClear(index: number) {
+    setIngredients((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              ingredientId: '',
+              ingredientName: '',
+            }
+          : item
+      )
+    );
   }
 
-  function cycleRole(idx: number) {
-    setIngredients(prev => prev.map((ing, i) => {
-      if (i !== idx) return ing;
-      const role = ROLE_CONFIG[getRole(ing)].nextRole;
-      return { ...ing, ...roleToFlags(role) };
-    }));
+  function cycleRole(index: number) {
+    setIngredients((current) =>
+      current.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        const nextRole = ROLE_CONFIG[getRole(item)].nextRole;
+        return {
+          ...item,
+          ...roleToFlags(nextRole),
+        };
+      })
+    );
   }
 
   function addIngredient() {
-    setIngredients(prev => [...prev, { ingredientId: '', ingredientName: '', isMandatory: true, isFlavoring: false, isProhibited: false }]);
+    setIngredients((current) => [...current, createEmptyIngredient()]);
   }
 
-  function removeIngredient(idx: number) {
-    setIngredients(prev => prev.filter((_, i) => i !== idx));
+  function removeIngredient(index: number) {
+    setIngredients((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setApiError(null);
-    if (!name.trim()) { setApiError('Tarif adı zorunludur.'); return; }
-    if (!description.trim()) { setApiError('Açıklama zorunludur.'); return; }
-    if (ingredients.some(ing => !ing.ingredientId)) {
+
+    if (!name.trim()) {
+      setApiError('Tarif adı zorunludur.');
+      return;
+    }
+
+    if (!description.trim()) {
+      setApiError('Açıklama zorunludur.');
+      return;
+    }
+
+    if (ingredients.some((item) => !item.ingredientId)) {
       setApiError('Tüm malzeme satırlarını doldurun veya boş satırları kaldırın.');
       return;
     }
+
     const mandatoryIngredients = ingredients
-      .filter(ing => ing.isMandatory && !ing.isProhibited).map(ing => ing.ingredientId);
+      .filter((item) => item.isMandatory && !item.isProhibited)
+      .map((item) => item.ingredientId);
     const optionalIngredients = ingredients
-      .filter(ing => !ing.isMandatory && !ing.isFlavoring && !ing.isProhibited).map(ing => ing.ingredientId);
+      .filter((item) => !item.isMandatory && !item.isFlavoring && !item.isProhibited)
+      .map((item) => item.ingredientId);
     const flavoringIngredients = ingredients
-      .filter(ing => ing.isFlavoring && !ing.isProhibited).map(ing => ing.ingredientId);
-    const prohibitions = ingredients
-      .filter(ing => ing.isProhibited).map(ing => ing.ingredientId);
+      .filter((item) => item.isFlavoring && !item.isProhibited)
+      .map((item) => item.ingredientId);
+    const prohibitions = ingredients.filter((item) => item.isProhibited).map((item) => item.ingredientId);
+
     if (mandatoryIngredients.length === 0) {
       setApiError('En az bir zorunlu malzeme eklenmelidir.');
       return;
     }
-    mutation.mutate({ name: name.trim(), description: description.trim(), isPublic, mandatoryIngredients, optionalIngredients, flavoringIngredients, prohibitions });
-  };
 
-  const canSubmit = name.trim() && description.trim() &&
-    ingredients.length > 0 && ingredients.every(ing => ing.ingredientId) && !mutation.isPending;
+    mutation.mutate({
+      name: name.trim(),
+      description: description.trim(),
+      isPublic: false,
+      mandatoryIngredients,
+      optionalIngredients,
+      flavoringIngredients,
+      prohibitions,
+    });
+  }
+
+  const canSubmit =
+    name.trim().length > 0 &&
+    description.trim().length > 0 &&
+    ingredients.length > 0 &&
+    ingredients.every((item) => item.ingredientId) &&
+    !mutation.isPending;
 
   return (
-    <div className="space-y-8 fade-in max-w-3xl">
-      {/* Header */}
+    <div className="max-w-3xl space-y-8 fade-in">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl kpi-forest flex items-center justify-center">
-          <ChefHat className="w-6 h-6" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl kpi-forest">
+          <ChefHat className="h-6 w-6" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Yeni Tarif</h1>
-          <p className="text-sm text-muted-foreground">Özel tarif kütüphanenize ekleyin</p>
+          <p className="text-sm text-muted-foreground">Klinik tarif kütüphanenize yeni bir tarif ekleyin.</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Info Card */}
-        <Card className="p-6 space-y-5">
+        <Card className="space-y-5 p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Temel Bilgiler</h2>
 
-          {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Tarif Adı</label>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">Tarif Adı</label>
             <input
               type="text"
               value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="ör. Yoğurtlu Avokado Salatası"
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Örn. Yoğurtlu avokado salatası"
               className={cn(
-                'w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm',
-                'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow placeholder:text-muted-foreground'
+                'w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm',
+                'placeholder:text-muted-foreground transition-shadow focus:outline-none focus:ring-2 focus:ring-ring/40'
               )}
               required
             />
           </div>
 
-          {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Açıklama</label>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">Açıklama</label>
             <textarea
               value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Tarif hakkında kısa bir açıklama..."
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Tarif hakkında kısa bir açıklama yazın."
               rows={3}
               className={cn(
-                'w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm resize-none',
-                'focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow placeholder:text-muted-foreground'
+                'w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 text-sm',
+                'placeholder:text-muted-foreground transition-shadow focus:outline-none focus:ring-2 focus:ring-ring/40'
               )}
               required
             />
           </div>
 
-          {/* Visibility Toggle */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Görünürlük</label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsPublic(false)}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all',
-                  !isPublic
-                    ? 'bg-action text-action-foreground border-action shadow-sm'
-                    : 'bg-card text-muted-foreground border-border hover:border-action/30'
-                )}
-              >
-                <Lock className="w-4 h-4" />
-                Özel (İmzalı Tarif)
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsPublic(true)}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all',
-                  isPublic
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                    : 'bg-card text-muted-foreground border-border hover:border-primary/30'
-                )}
-              >
-                <Globe className="w-4 h-4" />
-                Herkese Açık
-              </button>
+            <label className="mb-2 block text-sm font-medium text-foreground">Görünürlük</label>
+            <div className="rounded-2xl border border-action/15 bg-action/5 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-action" />
+                <p className="text-sm font-semibold text-foreground">Klinik-özel tarif</p>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Bu panelden oluşturulan tarifler yalnızca sizin klinik hesabınızda görünür ve diğer
+                diyetisyenlerin tarif listesine dahil edilmez.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              {isPublic
-                ? 'Diğer diyetisyenler bu tarifi görebilir'
-                : 'Bu tarif sadece size ve danışanlarınıza özeldir'}
-            </p>
           </div>
         </Card>
 
-        {/* Ingredients Card */}
-        <Card className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        <Card className="space-y-4 p-6">
+          <div className="flex items-center justify-between gap-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Malzemeler</h2>
-            <p className="text-xs text-muted-foreground">Role tıklayarak değiştir: Zorunlu → Opsiyonel → Lezzetlendirici → Yasak</p>
+            <p className="text-xs text-muted-foreground">
+              Role tıklayarak sırayla değiştirin: Zorunlu -&gt; Opsiyonel -&gt; Lezzetlendirici -&gt; Yasak
+            </p>
           </div>
 
           <div className="space-y-3">
-            {ingredients.map((ing, idx) => {
-              const role = getRole(ing);
+            {ingredients.map((ingredient, index) => {
+              const role = getRole(ingredient);
               const roleConfig = ROLE_CONFIG[role];
+
               return (
                 <div
-                  key={idx}
-                  className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 transition-colors"
+                  key={index}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3.5 transition-colors hover:bg-muted/30"
                 >
                   <div className="flex-1">
                     <IngredientAutocomplete
-                      value={ing.ingredientId ? { id: ing.ingredientId, canonicalName: ing.ingredientName } : null}
-                      onSelect={(ingredient) => handleIngredientSelect(idx, ingredient)}
-                      onClear={() => handleIngredientClear(idx)}
+                      value={
+                        ingredient.ingredientId
+                          ? {
+                              id: ingredient.ingredientId,
+                              canonicalName: ingredient.ingredientName,
+                            }
+                          : null
+                      }
+                      onSelect={(selectedIngredient) => handleIngredientSelect(index, selectedIngredient)}
+                      onClear={() => handleIngredientClear(index)}
                       placeholder="Malzeme adı ara..."
                     />
                   </div>
+
                   <button
                     type="button"
-                    onClick={() => cycleRole(idx)}
+                    onClick={() => cycleRole(index)}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors',
+                      'whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
                       roleConfig.className
                     )}
-                    title="Rolü değiştir"
+                    title="Malzeme rolünü değiştir"
                   >
                     {roleConfig.label}
                   </button>
-                  {ingredients.length > 1 && (
+
+                  {ingredients.length > 1 ? (
                     <button
                       type="button"
-                      onClick={() => removeIngredient(idx)}
-                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => removeIngredient(index)}
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      title="Satırı kaldır"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="h-4 w-4" />
                     </button>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
@@ -292,43 +332,48 @@ export default function CreateRecipeClient() {
           <button
             type="button"
             onClick={addIngredient}
-            className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors py-1"
+            className="flex items-center gap-2 py-1 text-sm font-medium text-primary transition-colors hover:text-primary/80"
           >
-            <Plus className="w-4 h-4" />
-            Malzeme Ekle
+            <Plus className="h-4 w-4" />
+            Malzeme ekle
           </button>
         </Card>
 
-        {/* Error Display */}
-        {apiError && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-destructive/8 border border-destructive/20 text-sm text-destructive">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        {apiError ? (
+          <div className="flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/8 p-4 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>{apiError}</span>
           </div>
-        )}
+        ) : null}
 
-        {/* Actions */}
         <div className="flex gap-3">
           <button
             type="submit"
             disabled={!canSubmit}
             className={cn(
-              'flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all',
+              'flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all',
               canSubmit
-                ? 'bg-action text-action-foreground hover:opacity-90 active:scale-[0.98] shadow-md hover:shadow-lg'
-                : 'bg-muted text-muted-foreground cursor-not-allowed'
+                ? 'bg-action text-action-foreground shadow-md hover:opacity-90 hover:shadow-lg active:scale-[0.98]'
+                : 'cursor-not-allowed bg-muted text-muted-foreground'
             )}
           >
             {mutation.isPending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Kaydediliyor...</>
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Kaydediliyor...
+              </>
             ) : (
-              <><ChefHat className="w-4 h-4" /> Tarifi Kaydet</>
+              <>
+                <ChefHat className="h-4 w-4" />
+                Tarifi kaydet
+              </>
             )}
           </button>
+
           <button
             type="button"
             onClick={() => router.back()}
-            className="px-6 py-3 rounded-xl text-sm font-medium border border-border text-muted-foreground hover:bg-muted/50 transition-colors"
+            className="rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
           >
             İptal
           </button>

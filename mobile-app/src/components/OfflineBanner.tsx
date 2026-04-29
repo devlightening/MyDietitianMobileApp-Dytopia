@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, AppState, StyleSheet, Text } from 'react-native';
 
 async function checkOnline(): Promise<boolean> {
@@ -59,3 +59,4 @@ const s = StyleSheet.create({
   },
   txt: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });
+

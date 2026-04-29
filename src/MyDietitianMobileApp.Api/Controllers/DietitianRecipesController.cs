@@ -49,6 +49,7 @@ public class DietitianRecipesController : ControllerBase
         pageSize = pageSize < 1 ? 20 : Math.Min(pageSize, 200);
 
         var recipes = await LoadAccessibleRecipesAsync(dietitianId.Value, source, status, visibility, q);
+        var ingredientBuckets = await BuildRecipeIngredientBucketsMapAsync(recipes);
         if (!string.IsNullOrWhiteSpace(tag))
         {
             recipes = recipes
@@ -70,7 +71,8 @@ public class DietitianRecipesController : ControllerBase
                 dietitianId.Value,
                 favoriteIds.Contains(recipe.Id),
                 analyticsMap.GetValueOrDefault(recipe.Id) ?? RecipeAnalyticsAggregate.Empty(recipe.Id),
-                activePlanCounts.GetValueOrDefault(recipe.Id)))
+                activePlanCounts.GetValueOrDefault(recipe.Id),
+                ingredientBuckets.GetValueOrDefault(recipe.Id) ?? RecipeIngredientBuckets.FromRecipe(recipe)))
             .OrderByDescending(item => item.IsFavorited)
             .ThenBy(item => item.IsArchived)
             .ThenByDescending(item => item.AnalyticsPreview.PreferenceScore)
@@ -99,7 +101,8 @@ public class DietitianRecipesController : ControllerBase
         if (!dietitianId.HasValue)
             return Forbid();
 
-        var recipes = await LoadAccessibleRecipesAsync(dietitianId.Value, "all", "all", null, null);
+        var recipes = await LoadAccessibleRecipesAsync(dietitianId.Value, "clinic", "all", null, null);
+        var ingredientBuckets = await BuildRecipeIngredientBucketsMapAsync(recipes);
         var favoriteIds = await GetFavoriteRecipeIdsAsync(dietitianId.Value);
         var analyticsMap = await BuildRecipeAnalyticsMapAsync(
             dietitianId.Value,
@@ -113,7 +116,8 @@ public class DietitianRecipesController : ControllerBase
                 dietitianId.Value,
                 favoriteIds.Contains(recipe.Id),
                 analyticsMap.GetValueOrDefault(recipe.Id) ?? RecipeAnalyticsAggregate.Empty(recipe.Id),
-                activePlanCounts.GetValueOrDefault(recipe.Id)))
+                activePlanCounts.GetValueOrDefault(recipe.Id),
+                ingredientBuckets.GetValueOrDefault(recipe.Id) ?? RecipeIngredientBuckets.FromRecipe(recipe)))
             .ToList();
 
         var activeItems = items.Where(item => !item.IsArchived).ToList();
@@ -156,7 +160,7 @@ public class DietitianRecipesController : ControllerBase
         if (!dietitianId.HasValue)
             return Forbid();
 
-        var recipes = await LoadAccessibleRecipesAsync(dietitianId.Value, "all", "active", null, null);
+        var recipes = await LoadAccessibleRecipesAsync(dietitianId.Value, "clinic", "active", null, null);
         var analyticsMap = await BuildRecipeAnalyticsMapAsync(
             dietitianId.Value,
             recipes.Select(recipe => recipe.Id).ToHashSet(),
@@ -198,7 +202,7 @@ public class DietitianRecipesController : ControllerBase
             analyticsMap.GetValueOrDefault(recipe.Id) ?? RecipeAnalyticsAggregate.Empty(recipe.Id),
             activePlanCounts.GetValueOrDefault(recipe.Id),
             deleteMode,
-            await GetFlavoringIngredientsAsync(recipe.Id)));
+            (await BuildRecipeIngredientBucketsMapAsync(new[] { recipe })).GetValueOrDefault(recipe.Id) ?? RecipeIngredientBuckets.FromRecipe(recipe)));
     }
 
     [HttpGet("slug/{slug}")]
@@ -227,7 +231,7 @@ public class DietitianRecipesController : ControllerBase
             analyticsMap.GetValueOrDefault(recipe.Id) ?? RecipeAnalyticsAggregate.Empty(recipe.Id),
             activePlanCounts.GetValueOrDefault(recipe.Id),
             deleteMode,
-            await GetFlavoringIngredientsAsync(recipe.Id)));
+            (await BuildRecipeIngredientBucketsMapAsync(new[] { recipe })).GetValueOrDefault(recipe.Id) ?? RecipeIngredientBuckets.FromRecipe(recipe)));
     }
 
     [HttpGet("{id:guid}/analytics")]
@@ -276,7 +280,7 @@ public class DietitianRecipesController : ControllerBase
         if (!ingredientMapResult.Success)
             return BadRequest(new { message = ingredientMapResult.ErrorMessage });
 
-        var recipe = new Recipe(Guid.NewGuid(), dietitianId.Value, request.Name.Trim(), request.Description?.Trim() ?? string.Empty, request.IsPublic);
+        var recipe = new Recipe(Guid.NewGuid(), dietitianId.Value, request.Name.Trim(), request.Description?.Trim() ?? string.Empty, false);
         ApplyRecipeMetadata(recipe, request);
 
         _appDb.Recipes.Add(recipe);
@@ -292,7 +296,7 @@ public class DietitianRecipesController : ControllerBase
             RecipeAnalyticsAggregate.Empty(recipe.Id),
             0,
             RecipeDeleteMode.Delete,
-            await GetFlavoringIngredientsAsync(recipe.Id)));
+            (await BuildRecipeIngredientBucketsMapAsync(new[] { recipe })).GetValueOrDefault(recipe.Id) ?? RecipeIngredientBuckets.FromRecipe(recipe)));
     }
 
     [HttpPut("{id:guid}")]
@@ -321,7 +325,7 @@ public class DietitianRecipesController : ControllerBase
 
         recipe.UpdateName(request.Name.Trim());
         recipe.UpdateDescription(request.Description?.Trim() ?? string.Empty);
-        recipe.UpdateVisibility(request.IsPublic);
+        recipe.UpdateVisibility(false);
         ApplyRecipeMetadata(recipe, request);
 
         recipe.ClearMandatoryIngredients();
@@ -344,7 +348,7 @@ public class DietitianRecipesController : ControllerBase
             analyticsMap.GetValueOrDefault(recipe.Id) ?? RecipeAnalyticsAggregate.Empty(recipe.Id),
             activePlanCounts.GetValueOrDefault(recipe.Id),
             deleteMode,
-            await GetFlavoringIngredientsAsync(recipe.Id)));
+            (await BuildRecipeIngredientBucketsMapAsync(new[] { recipe })).GetValueOrDefault(recipe.Id) ?? RecipeIngredientBuckets.FromRecipe(recipe)));
     }
 
     [HttpDelete("{id:guid}")]
@@ -459,7 +463,7 @@ public class DietitianRecipesController : ControllerBase
         }
 
         var recipePool = await _appDb.Recipes
-            .Where(r => (r.DietitianId == dietitianId || r.IsPublic) &&
+            .Where(r => r.DietitianId == dietitianId &&
                         !r.IsArchived &&
                         !r.IsDemo &&
                         !r.IsDraft &&
@@ -550,13 +554,7 @@ public class DietitianRecipesController : ControllerBase
             .Include(r => r.OptionalIngredients)
             .Include(r => r.ProhibitedIngredients)
             .Where(r => !r.IsDemo && !r.IsDraft && !r.IsHiddenFromProduction)
-            .Where(r => r.DietitianId == dietitianId || r.IsPublic);
-
-        var normalizedSource = source?.Trim().ToLowerInvariant();
-        if (normalizedSource == "clinic")
-            query = query.Where(r => r.DietitianId == dietitianId);
-        else if (normalizedSource == "public")
-            query = query.Where(r => r.IsPublic && r.DietitianId != dietitianId);
+            .Where(r => r.DietitianId == dietitianId);
 
         var normalizedStatus = status?.Trim().ToLowerInvariant();
         if (normalizedStatus == "archived")
@@ -598,7 +596,7 @@ public class DietitianRecipesController : ControllerBase
                 !r.IsDemo &&
                 !r.IsDraft &&
                 !r.IsHiddenFromProduction &&
-                (r.DietitianId == dietitianId || r.IsPublic));
+                r.DietitianId == dietitianId);
     }
 
     private async Task<Recipe?> LoadRecipeBySlugAsync(Guid dietitianId, string recipeSlug)
@@ -613,7 +611,7 @@ public class DietitianRecipesController : ControllerBase
                 !r.IsDemo &&
                 !r.IsDraft &&
                 !r.IsHiddenFromProduction &&
-                (r.DietitianId == dietitianId || r.IsPublic));
+                r.DietitianId == dietitianId);
     }
 
     private async Task<HashSet<Guid>> GetFavoriteRecipeIdsAsync(Guid dietitianId)
@@ -712,12 +710,14 @@ public class DietitianRecipesController : ControllerBase
     private async Task SyncExplicitRecipeIngredientsAsync(Guid recipeId, SaveRecipeRequest request)
     {
         foreach (var ingredientId in request.MandatoryIngredients.Distinct())
-            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, "Mandatory"));
+            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.MandatoryRole));
 
         foreach (var ingredientId in (request.OptionalIngredients ?? Enumerable.Empty<Guid>()).Distinct())
-            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, "Optional"));
+            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.OptionalRole));
         foreach (var ingredientId in (request.FlavoringIngredients ?? Enumerable.Empty<Guid>()).Distinct())
             _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.FlavoringRole));
+        foreach (var ingredientId in (request.Prohibitions ?? Enumerable.Empty<Guid>()).Distinct())
+            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.ProhibitedRole));
 
         await Task.CompletedTask;
     }
@@ -733,22 +733,37 @@ public class DietitianRecipesController : ControllerBase
         await SyncExplicitRecipeIngredientsAsync(recipeId, request);
     }
 
-    private async Task<List<RecipeIngredientDto>> GetFlavoringIngredientsAsync(Guid recipeId)
+    private async Task<Dictionary<Guid, RecipeIngredientBuckets>> BuildRecipeIngredientBucketsMapAsync(IEnumerable<Recipe> recipes)
     {
+        var recipeList = recipes.ToList();
+        if (recipeList.Count == 0)
+            return new Dictionary<Guid, RecipeIngredientBuckets>();
+
+        var recipeIds = recipeList.Select(recipe => recipe.Id).ToHashSet();
+
         var rows = await _appDb.RecipeIngredients
             .AsNoTracking()
-            .Where(item => item.RecipeId == recipeId && item.Role == RecipeIngredient.FlavoringRole)
+            .Where(item => recipeIds.Contains(item.RecipeId))
             .Join(
                 _appDb.Ingredients.AsNoTracking(),
                 item => item.IngredientId,
                 ingredient => ingredient.Id,
-                (item, ingredient) => new { ingredient.Id, ingredient.CanonicalName })
-            .OrderBy(item => item.CanonicalName)
+                (item, ingredient) => new RecipeIngredientRow(item.RecipeId, ingredient.Id, ingredient.CanonicalName, item.Role))
             .ToListAsync();
 
-        return rows
-            .Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName))
-            .ToList();
+        var rowsByRecipe = rows
+            .GroupBy(row => row.RecipeId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var result = new Dictionary<Guid, RecipeIngredientBuckets>();
+        foreach (var recipe in recipeList)
+        {
+            result[recipe.Id] = rowsByRecipe.TryGetValue(recipe.Id, out var explicitRows) && explicitRows.Count > 0
+                ? RecipeIngredientBuckets.FromExplicitRows(explicitRows)
+                : RecipeIngredientBuckets.FromRecipe(recipe);
+        }
+
+        return result;
     }
 
     private async Task<Dictionary<Guid, int>> GetActivePlanCountsAsync(Guid dietitianId, IReadOnlyCollection<Guid> recipeIds)
@@ -1063,10 +1078,9 @@ public class DietitianRecipesController : ControllerBase
         Guid dietitianId,
         bool isFavorited,
         RecipeAnalyticsAggregate analytics,
-        int activePlanCount)
+        int activePlanCount,
+        RecipeIngredientBuckets ingredientBuckets)
     {
-        var sourceType = recipe.DietitianId == dietitianId ? "clinic" : "general";
-
         return new RecipeListItemDto(
             Id: recipe.Id,
             Name: recipe.Name,
@@ -1075,10 +1089,10 @@ public class DietitianRecipesController : ControllerBase
             IsPublic: recipe.IsPublic,
             IsArchived: recipe.IsArchived,
             IsFavorited: isFavorited,
-            SourceType: sourceType,
-            MandatoryIngredientCount: recipe.MandatoryIngredients.Count,
-            OptionalIngredientCount: recipe.OptionalIngredients.Count,
-            ProhibitedIngredientCount: recipe.ProhibitedIngredients.Count,
+            SourceType: "clinic",
+            MandatoryIngredientCount: ingredientBuckets.MandatoryIngredients.Count,
+            OptionalIngredientCount: ingredientBuckets.OptionalIngredients.Count,
+            ProhibitedIngredientCount: ingredientBuckets.ProhibitedIngredients.Count,
             PrepTimeMinutes: recipe.PrepTimeMinutes,
             CookTimeMinutes: recipe.CookTimeMinutes,
             Servings: recipe.Servings,
@@ -1108,10 +1122,8 @@ public class DietitianRecipesController : ControllerBase
         RecipeAnalyticsAggregate analytics,
         int activePlanCount,
         RecipeDeleteMode deleteMode,
-        List<RecipeIngredientDto>? flavoringIngredients = null)
+        RecipeIngredientBuckets ingredientBuckets)
     {
-        var isOwnedByClinic = recipe.DietitianId == dietitianId;
-
         return new RecipeDetailDto(
             Id: recipe.Id,
             Name: recipe.Name,
@@ -1120,7 +1132,7 @@ public class DietitianRecipesController : ControllerBase
             IsPublic: recipe.IsPublic,
             IsArchived: recipe.IsArchived,
             IsFavorited: isFavorited,
-            SourceType: isOwnedByClinic ? "clinic" : "general",
+            SourceType: "clinic",
             Tags: recipe.Tags.ToList(),
             Steps: recipe.Steps.ToList(),
             PrepTimeMinutes: recipe.PrepTimeMinutes,
@@ -1130,13 +1142,13 @@ public class DietitianRecipesController : ControllerBase
             ProteinGrams: recipe.ProteinGrams,
             CarbsGrams: recipe.CarbsGrams,
             FatGrams: recipe.FatGrams,
-            MandatoryIngredients: recipe.MandatoryIngredients.OrderBy(item => item.CanonicalName).Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName)).ToList(),
-            OptionalIngredients: recipe.OptionalIngredients.OrderBy(item => item.CanonicalName).Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName)).ToList(),
-            FlavoringIngredients: flavoringIngredients ?? new List<RecipeIngredientDto>(),
-            ProhibitedIngredients: recipe.ProhibitedIngredients.OrderBy(item => item.CanonicalName).Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName)).ToList(),
-            CanEdit: isOwnedByClinic,
-            CanDelete: isOwnedByClinic,
-            CanArchive: isOwnedByClinic,
+            MandatoryIngredients: ingredientBuckets.MandatoryIngredients,
+            OptionalIngredients: ingredientBuckets.OptionalIngredients,
+            FlavoringIngredients: ingredientBuckets.FlavoringIngredients,
+            ProhibitedIngredients: ingredientBuckets.ProhibitedIngredients,
+            CanEdit: true,
+            CanDelete: true,
+            CanArchive: true,
             DeleteMode: deleteMode == RecipeDeleteMode.Archive ? "archive" : "delete",
             IsActiveInPlans: activePlanCount > 0,
             AnalyticsPreview: new RecipeAnalyticsPreviewDto(
@@ -1195,6 +1207,65 @@ public class DietitianRecipesController : ControllerBase
     {
         Delete,
         Archive
+    }
+
+    private sealed record RecipeIngredientRow(Guid RecipeId, Guid IngredientId, string IngredientName, string Role);
+
+    private sealed record RecipeIngredientBuckets(
+        List<RecipeIngredientDto> MandatoryIngredients,
+        List<RecipeIngredientDto> OptionalIngredients,
+        List<RecipeIngredientDto> FlavoringIngredients,
+        List<RecipeIngredientDto> ProhibitedIngredients)
+    {
+        public static RecipeIngredientBuckets FromExplicitRows(IEnumerable<RecipeIngredientRow> rows)
+        {
+            var distinctRows = rows
+                .GroupBy(row => new { row.Role, row.IngredientId })
+                .Select(group => group.First())
+                .OrderBy(row => row.IngredientName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            return new RecipeIngredientBuckets(
+                MandatoryIngredients: MapRows(distinctRows, RecipeIngredient.MandatoryRole),
+                OptionalIngredients: MapRows(distinctRows, RecipeIngredient.OptionalRole),
+                FlavoringIngredients: MapRows(distinctRows, RecipeIngredient.FlavoringRole),
+                ProhibitedIngredients: MapRows(distinctRows, RecipeIngredient.ProhibitedRole));
+        }
+
+        public static RecipeIngredientBuckets FromRecipe(Recipe recipe)
+        {
+            var fallbackFlavoring = recipe.OptionalIngredients
+                .Where(item => item.IsCondiment)
+                .OrderBy(item => item.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                .Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName))
+                .ToList();
+
+            var fallbackOptional = recipe.OptionalIngredients
+                .Where(item => !item.IsCondiment)
+                .OrderBy(item => item.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                .Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName))
+                .ToList();
+
+            return new RecipeIngredientBuckets(
+                MandatoryIngredients: recipe.MandatoryIngredients
+                    .OrderBy(item => item.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName))
+                    .ToList(),
+                OptionalIngredients: fallbackOptional,
+                FlavoringIngredients: fallbackFlavoring,
+                ProhibitedIngredients: recipe.ProhibitedIngredients
+                    .OrderBy(item => item.CanonicalName, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(item => new RecipeIngredientDto(item.Id, item.CanonicalName))
+                    .ToList());
+        }
+
+        private static List<RecipeIngredientDto> MapRows(IEnumerable<RecipeIngredientRow> rows, string role)
+        {
+            return rows
+                .Where(row => string.Equals(row.Role, role, StringComparison.OrdinalIgnoreCase))
+                .Select(row => new RecipeIngredientDto(row.IngredientId, row.IngredientName))
+                .ToList();
+        }
     }
 }
 

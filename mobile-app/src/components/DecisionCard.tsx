@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { AlternativeRecipe } from '../types/alternative';
 import { radii, spacing } from '../theme/tokens';
@@ -17,7 +17,7 @@ export default function DecisionCard({ canCookOriginal, explanation, alternative
   if (canCookOriginal) {
     return (
       <View style={[s.card, { backgroundColor: theme.success + '18', borderColor: theme.success + '50' }]}>
-        <Text style={s.emoji}>🎉</Text>
+        <Text style={s.emoji}>ğŸ‰</Text>
         <Text style={[s.title, { color: theme.text }]}>Harika!</Text>
         <Text style={[s.message, { color: theme.textSub }]}>{explanation}</Text>
         <Text style={[s.recipeName, { color: theme.primary }]}>{originalRecipeName}</Text>
@@ -29,7 +29,7 @@ export default function DecisionCard({ canCookOriginal, explanation, alternative
   if (alternativeRecipe) {
     return (
       <View style={[s.card, { backgroundColor: theme.warning + '15', borderColor: theme.warning + '50' }]}>
-        <Text style={s.emoji}>⚠️</Text>
+        <Text style={s.emoji}>âš ï¸</Text>
         <Text style={[s.title, { color: theme.text }]}>Dikkat!</Text>
         <Text style={[s.message, { color: theme.textSub }]}>{explanation}</Text>
         <View style={[s.divider, { backgroundColor: theme.borderLight }]} />
@@ -44,7 +44,7 @@ export default function DecisionCard({ canCookOriginal, explanation, alternative
 
   return (
     <View style={[s.card, { backgroundColor: theme.error + '15', borderColor: theme.error + '50' }]}>
-      <Text style={s.emoji}>😕</Text>
+      <Text style={s.emoji}>ğŸ˜•</Text>
       <Text style={[s.title, { color: theme.text }]}>Üzgünüz</Text>
       <Text style={[s.message, { color: theme.textSub }]}>{explanation}</Text>
       <Text style={[s.subtitle, { color: theme.textMuted }]}>Diyetisyeninle iletişime geçmeni öneririz</Text>
@@ -64,3 +64,4 @@ const s = StyleSheet.create({
   alternativeRecipe: { fontSize: 18, fontWeight: '900', marginBottom: spacing.sm },
   matchText: { fontSize: 13 },
 });
+

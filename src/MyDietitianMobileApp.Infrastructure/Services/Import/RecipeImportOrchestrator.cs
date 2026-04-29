@@ -167,6 +167,9 @@ public class RecipeImportOrchestrator
                             matchResult.CanonicalName!,
                             matchResult.MatchType,
                             matchResult.Confidence);
+                        // Resolved but parser-flagged uncertain → still needs human eye.
+                        if (ingredientCandidate.NeedsReview)
+                            unresolvedCount++;
                     }
                     else if (matchResult.MatchType == ImportIngredientMatchType.Ambiguous)
                     {
@@ -188,9 +191,6 @@ public class RecipeImportOrchestrator
                             true,
                             MergeIssueCodes(ingredientCandidate.IssueCodes, matchResult.IssueCode));
                     }
-
-                    if (ingredientCandidate.NeedsReview && !sessionIngredient.IsResolved)
-                        unresolvedCount++;
 
                     _db.RecipeImportSessionIngredients.Add(sessionIngredient);
                     ingredientIdByCompositeKey[$"{candidate.DisplayOrder}:{ingredientCandidate.DisplayOrder}"] = sessionIngredient.Id;
@@ -304,7 +304,10 @@ public class RecipeImportOrchestrator
         var unresolvedCount = sessionRecipes
             .Where(recipe => !recipe.IsSkipped)
             .SelectMany(recipe => recipe.Ingredients)
-            .Count(ingredient => !ingredient.IsResolved && ingredient.Role != ImportIngredientRole.Optional);
+            .Count(ingredient =>
+                !ingredient.IsResolved &&
+                ingredient.Role is not ImportIngredientRole.Optional &&
+                ingredient.Role is not ImportIngredientRole.Flavoring);
 
         session.SetSummary(sessionRecipes.Count(recipe => !recipe.IsSkipped), unresolvedCount);
         session.SetStatus(unresolvedCount == 0 ? ImportSessionStatus.ReadyToConfirm : ImportSessionStatus.NeedsReview);
@@ -365,6 +368,10 @@ public class RecipeImportOrchestrator
                     .Where(ingredient => ingredient.Role == ImportIngredientRole.Optional)
                     .Select(ingredient => ingredient.MatchedIngredientId!.Value)
                     .ToList();
+                var flavoring = resolvedIngredients
+                    .Where(ingredient => ingredient.Role == ImportIngredientRole.Flavoring)
+                    .Select(ingredient => ingredient.MatchedIngredientId!.Value)
+                    .ToList();
                 var prohibited = resolvedIngredients
                     .Where(ingredient => ingredient.Role == ImportIngredientRole.Prohibited)
                     .Select(ingredient => ingredient.MatchedIngredientId!.Value)
@@ -393,7 +400,14 @@ public class RecipeImportOrchestrator
                     existingRecipe.ClearMandatoryIngredients();
                     existingRecipe.ClearOptionalIngredients();
                     existingRecipe.ClearProhibitedIngredients();
-                    await AddIngredientsToRecipe(existingRecipe, mandatory, optional, prohibited, cancellationToken);
+                    await ReplaceExplicitRecipeIngredientsAsync(
+                        existingRecipe.Id,
+                        mandatory,
+                        optional,
+                        flavoring,
+                        prohibited,
+                        cancellationToken);
+                    await AddIngredientsToRecipe(existingRecipe, mandatory, optional, flavoring, prohibited, cancellationToken);
                     updated++;
                     names.Add(sessionRecipe.NormalizedTitle);
                     continue;
@@ -410,7 +424,8 @@ public class RecipeImportOrchestrator
                 ApplyMetadata(recipe, sessionRecipe);
                 _db.Recipes.Add(recipe);
                 await _db.SaveChangesAsync(cancellationToken);
-                await AddIngredientsToRecipe(recipe, mandatory, optional, prohibited, cancellationToken);
+                await SyncExplicitRecipeIngredientsAsync(recipe.Id, mandatory, optional, flavoring, prohibited, cancellationToken);
+                await AddIngredientsToRecipe(recipe, mandatory, optional, flavoring, prohibited, cancellationToken);
                 created++;
                 names.Add(sessionRecipe.NormalizedTitle);
             }
@@ -516,10 +531,11 @@ public class RecipeImportOrchestrator
         Recipe recipe,
         List<Guid> mandatory,
         List<Guid> optional,
+        List<Guid> flavoring,
         List<Guid> prohibited,
         CancellationToken cancellationToken)
     {
-        var allIds = mandatory.Concat(optional).Concat(prohibited).Distinct().ToList();
+        var allIds = mandatory.Concat(optional).Concat(flavoring).Concat(prohibited).Distinct().ToList();
         if (allIds.Count == 0)
             return;
 
@@ -536,10 +552,55 @@ public class RecipeImportOrchestrator
             if (ingredientMap.TryGetValue(ingredientId, out var ingredient))
                 recipe.AddOptionalIngredient(ingredient);
 
+        // Keep flavoring ingredients in the optional shadow relation for legacy consumers.
+        foreach (var ingredientId in flavoring)
+            if (ingredientMap.TryGetValue(ingredientId, out var ingredient))
+                recipe.AddOptionalIngredient(ingredient);
+
         foreach (var ingredientId in prohibited)
             if (ingredientMap.TryGetValue(ingredientId, out var ingredient))
                 recipe.AddProhibitedIngredient(ingredient);
 
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SyncExplicitRecipeIngredientsAsync(
+        Guid recipeId,
+        IEnumerable<Guid> mandatory,
+        IEnumerable<Guid> optional,
+        IEnumerable<Guid> flavoring,
+        IEnumerable<Guid> prohibited,
+        CancellationToken cancellationToken)
+    {
+        foreach (var ingredientId in mandatory.Distinct())
+            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.MandatoryRole));
+
+        foreach (var ingredientId in optional.Distinct())
+            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.OptionalRole));
+
+        foreach (var ingredientId in flavoring.Distinct())
+            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.FlavoringRole));
+
+        foreach (var ingredientId in prohibited.Distinct())
+            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.ProhibitedRole));
+
+        await Task.CompletedTask;
+    }
+
+    private async Task ReplaceExplicitRecipeIngredientsAsync(
+        Guid recipeId,
+        IEnumerable<Guid> mandatory,
+        IEnumerable<Guid> optional,
+        IEnumerable<Guid> flavoring,
+        IEnumerable<Guid> prohibited,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _db.RecipeIngredients
+            .Where(item => item.RecipeId == recipeId)
+            .ToListAsync(cancellationToken);
+        if (existing.Count > 0)
+            _db.RecipeIngredients.RemoveRange(existing);
+
+        await SyncExplicitRecipeIngredientsAsync(recipeId, mandatory, optional, flavoring, prohibited, cancellationToken);
     }
 }

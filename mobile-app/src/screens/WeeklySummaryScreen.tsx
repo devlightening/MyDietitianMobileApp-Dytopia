@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+﻿import React, { useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, StatusBar, RefreshControl, ActivityIndicator,
@@ -347,3 +347,4 @@ const s = StyleSheet.create({
   emptyCard: { borderRadius: radii.xl, borderWidth: 1, padding: spacing.xxl ?? 32, alignItems: 'center', gap: spacing.sm },
   emptyTxt: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });
+

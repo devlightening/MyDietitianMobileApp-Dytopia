@@ -19,6 +19,11 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${api}/api/:path*`,
       },
+      // Forward SignalR hub (HTTP negotiate + WebSocket upgrade)
+      {
+        source: '/hubs/:path*',
+        destination: `${api}/hubs/:path*`,
+      },
     ]
   },
 

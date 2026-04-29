@@ -45,17 +45,17 @@ const ICON_MAP: Record<ActivityFeedItem['type'], LucideIcon> = {
 };
 
 const COLOR_MAP: Record<ActivityFeedItem['type'], { bg: string; color: string }> = {
-  client_linked:      { bg: 'rgba(71, 185, 114, 0.12)',  color: 'var(--brand-emerald)' },
-  login:              { bg: 'rgba(71, 185, 114, 0.12)',  color: 'var(--brand-emerald)' },
-  meal_logged:        { bg: 'rgba(87, 184, 199, 0.12)',  color: 'var(--brand-accent)'  },
+  client_linked:      { bg: 'var(--brand-primary-soft)', color: 'var(--brand-emerald)' },
+  login:              { bg: 'var(--brand-primary-soft)', color: 'var(--brand-emerald)' },
+  meal_logged:        { bg: 'var(--brand-accent-soft)',  color: 'var(--brand-accent)'  },
   meal_alternative:   { bg: 'rgba(227, 196, 93, 0.12)', color: '#b99426'               },
   meal_skipped:       { bg: 'rgba(229, 126, 107, 0.10)', color: 'var(--brand-coral)'   },
-  kitchen_used:       { bg: 'rgba(87, 184, 199, 0.12)',  color: 'var(--brand-accent)'  },
-  water_goal_hit:     { bg: 'rgba(87, 184, 199, 0.16)',  color: 'var(--brand-accent)'  },
+  kitchen_used:       { bg: 'var(--brand-accent-soft)',  color: 'var(--brand-accent)'  },
+  water_goal_hit:     { bg: 'var(--preview-accent-soft)', color: 'var(--brand-accent)'  },
   measurement_logged: { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426'               },
   weight_update:      { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426'               },
   plan_assigned:      { bg: 'rgba(122, 141, 214, 0.12)', color: '#6f82d8'              },
-  compliance:         { bg: 'rgba(71, 185, 114, 0.12)',  color: 'var(--brand-emerald)' },
+  compliance:         { bg: 'var(--brand-primary-soft)', color: 'var(--brand-emerald)' },
   badge_unlocked:     { bg: 'rgba(227, 196, 93, 0.14)', color: '#b99426'               },
   streak_milestone:   { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)'  },
   streak_at_risk:     { bg: 'rgba(229, 126, 107, 0.12)', color: 'var(--brand-coral)'  },
@@ -72,7 +72,7 @@ const BADGE_VISUALS: Record<string, BadgeVisual> = {
   protein_focus: {
     label: 'Protein Canavarı',
     Icon: Dumbbell,
-    bg: 'rgba(71, 185, 114, 0.12)',
+    bg: 'var(--brand-primary-soft)',
     color: 'var(--brand-emerald)',
   },
   veggie_focus: {
@@ -84,13 +84,13 @@ const BADGE_VISUALS: Record<string, BadgeVisual> = {
   kitchen_spark: {
     label: 'Mutfak Kıvılcımı',
     Icon: ChefHat,
-    bg: 'rgba(87, 184, 199, 0.12)',
+    bg: 'var(--brand-accent-soft)',
     color: 'var(--brand-accent)',
   },
   water_keeper: {
     label: 'Su Koruyucusu',
     Icon: Droplets,
-    bg: 'rgba(87, 184, 199, 0.12)',
+    bg: 'var(--brand-accent-soft)',
     color: 'var(--brand-accent)',
   },
   flex_saver: {
@@ -102,7 +102,7 @@ const BADGE_VISUALS: Record<string, BadgeVisual> = {
   plan_keeper: {
     label: 'Plan Koruyucu',
     Icon: CalendarCheck,
-    bg: 'rgba(71, 185, 114, 0.12)',
+    bg: 'var(--brand-primary-soft)',
     color: 'var(--brand-emerald)',
   },
   streak_3: {
@@ -114,13 +114,13 @@ const BADGE_VISUALS: Record<string, BadgeVisual> = {
   perfect_day: {
     label: 'Mükemmel Uyum',
     Icon: Gift,
-    bg: 'rgba(87, 184, 199, 0.12)',
+    bg: 'var(--brand-accent-soft)',
     color: 'var(--brand-accent)',
   },
   streak_7: {
     label: 'Haftalık Seri',
     Icon: CalendarCheck,
-    bg: 'rgba(71, 185, 114, 0.12)',
+    bg: 'var(--brand-primary-soft)',
     color: 'var(--brand-emerald)',
   },
   streak_14: {

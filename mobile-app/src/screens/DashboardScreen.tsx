@@ -1,13 +1,17 @@
-/**
- * AURA CLINICAL OS — Daily Ritual Hub
+﻿/**
+ * AURA CLINICAL OS ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ Daily Ritual Hub
  * Redesigned: actionable cards, real data, clear hierarchy
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   ActivityIndicator, RefreshControl, StatusBar, Alert,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withSpring, withTiming, withSequence, withRepeat, withDelay,
+  cancelAnimation, runOnUI,
+} from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -20,20 +24,33 @@ import { useGamification } from '../queries/useGamification';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFadeRise, useStaggerItem, useHeroEntrance, useHaloBreathe, useShimmerBand, useFloating } from '../hooks/useAuraMotion';
 import api from '../api/client';
-import { updateTodayTracking } from '../api/progress';
+import { getTodayTracking, updateTodayTracking } from '../api/progress';
+import { getPantry } from '../api/pantry';
+import { getShoppingList, type ShoppingListSummary } from '../api/shopping-list';
 import ProduceBubble from '../components/decor/ProduceBubble';
+import BadgeDetailSheet from '../components/gamification/BadgeDetailSheet';
 import { refreshWidgetsFromApp } from '../widgets/services/widgetSyncService';
 import * as Haptics from 'expo-haptics';
 import {
+  type BadgeCollectionItem,
   type DashboardMotivation,
+  buildBadgeCollection,
   buildMotivationSummary,
-  getBadgeMeta,
   getHighlightAchievements,
+  getMotivationSpotlight,
   getToneColor,
   mapGamificationToMotivation,
 } from '../motivation/streaks';
 import { getPlansData, type ClientPlan } from '../data/plansRepo';
+import type { DashboardDTO } from '../data/dashboardRepo';
 import { useQuery } from '@tanstack/react-query';
+import {
+  buildRescueMission,
+  buildTodayPanelItems,
+  type RescueMission,
+  type TodayPanelItem,
+} from '../features/smartInsights';
+import { runCoachTaskAction } from '../features/coachTasks';
 
 interface Measurement {
   waistCm: number | null;
@@ -62,6 +79,41 @@ function getComplianceLabel(pct: number, d: ComplianceKeys): string {
 }
 
 const noop = () => {};
+const WATER_GOAL = 10;
+const WATER_GLASS_ML = 200;
+const WATER_MAX_GLASSES = 50;
+const EMPTY_SHOPPING_SUMMARY: ShoppingListSummary = { total: 0, checkedCount: 0, activeCount: 0 };
+
+type ContinueCardModel = {
+  eyebrow: string;
+  title: string;
+  body: string;
+  cta: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  accent: string;
+  onPress: () => void;
+};
+
+type DashboardCoachTask = NonNullable<DashboardDTO['coachTask']>;
+
+type DashboardNextMealState = 'upcoming' | 'all-complete' | 'no-plan' | 'none';
+
+function getDashboardNextMealState(nextMeal?: {
+  kind?: string;
+  mealItemId?: string | null;
+  title?: string | null;
+} | null): DashboardNextMealState {
+  if (!nextMeal) return 'none';
+  if (nextMeal.kind === 'all-complete') return 'all-complete';
+  if (nextMeal.kind === 'no-plan') return 'no-plan';
+  if (nextMeal.kind === 'upcoming') return 'upcoming';
+  if (nextMeal.mealItemId) return 'upcoming';
+
+  const title = (nextMeal.title ?? '').toLocaleLowerCase('tr-TR');
+  if (title.includes('tamamlandı')) return 'all-complete';
+  if (title.includes('plan') && (title.includes('yok') || title.includes('görünmüyor'))) return 'no-plan';
+  return 'none';
+}
 
 function DayHeaderBand({
   theme,
@@ -188,21 +240,23 @@ export default function DashboardScreen({
   onPressPlans,
   onPressKitchen,
   onPressMessages,
+  isActive = true,
 }: {
   onPressPlans?: () => void;
   onPressKitchen?: () => void;
   onPressMessages?: () => void;
+  isActive?: boolean;
 } = {}) {
   const { user } = useAuth();
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { t, language } = useTranslation();
-  const { data, isLoading, refetch, isRefetching } = useDashboard();
+  const { data, isLoading, refetch, isRefetching, isStale } = useDashboard(isActive);
   const { data: gamification } = useGamification();
   const { data: plansData } = useQuery({
     queryKey: ['client-plans'],
     queryFn: getPlansData,
-    enabled: user?.isPremium ?? false,
+    enabled: (user?.isPremium ?? false) && isActive,
     staleTime: 2 * 60 * 1000,
   });
   const activePlan = plansData?.plans.find(p => p.isActive) ?? null;
@@ -210,32 +264,100 @@ export default function DashboardScreen({
   const compliancePercent = data?.compliancePercent ?? 0;
   const todayStatus       = data?.todayStatus ?? 'on-track';
   const nextMeal          = data?.nextMeal;
+  const nextMealState     = getDashboardNextMealState(nextMeal);
+  const upcomingNextMeal  = nextMealState === 'upcoming' ? nextMeal : undefined;
   const summary           = data?.summary;
   const motivation        = mapGamificationToMotivation(gamification) ?? data?.motivation;
-  const streakValue       = gamification?.currentStreak ?? summary?.streak ?? 0;
-  const [localWater, setLocalWater] = useState<number | null>(null);
-  const waterValue = localWater ?? gamification?.today?.waterGlasses ?? summary?.waterGlasses ?? 0;
+  const streakValue = gamification?.currentStreak ?? summary?.streak ?? 0;
+
+  // Water: getTodayTracking() yetkili kaynak ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ her focus'ta taze veri ÃƒÆ’Ã†'Ãƒâ€šÃ‚§ek
+  const [waterGlasses, setWaterGlasses] = useState(0);
+  const [waterBusy, setWaterBusy] = useState(false);
+  const [pantryCount, setPantryCount] = useState(0);
+  const [shoppingSummary, setShoppingSummary] = useState<ShoppingListSummary>(EMPTY_SHOPPING_SUMMARY);
+  const waterBusyRef = useRef(false);
 
   useEffect(() => {
-    const remote = gamification?.today?.waterGlasses ?? summary?.waterGlasses;
-    if (remote != null && localWater === null) setLocalWater(remote);
-  }, [gamification, summary]);
+    if (!isActive) return;
+
+    getTodayTracking()
+      .then(t => setWaterGlasses(Math.max(0, t.waterGlasses)))
+      .catch(() => {});
+  }, [isActive]);
+
+  useEffect(() => {
+    if (!isActive || !isStale || isLoading || isRefetching) return;
+    void refetch();
+  }, [isActive, isLoading, isRefetching, isStale, refetch]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    let active = true;
+    void Promise.allSettled([
+      getPantry(),
+      user?.isPremium ? getShoppingList() : Promise.resolve({ summary: EMPTY_SHOPPING_SUMMARY, items: [] }),
+    ]).then(([pantryResult, shoppingResult]) => {
+      if (!active) return;
+
+      if (pantryResult.status === 'fulfilled') {
+        setPantryCount(pantryResult.value.length);
+      }
+
+      if (shoppingResult.status === 'fulfilled') {
+        setShoppingSummary(shoppingResult.value.summary ?? EMPTY_SHOPPING_SUMMARY);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isActive, user?.isPremium]);
 
   const handleAddWater = useCallback(async () => {
+    if (waterBusyRef.current || waterGlasses >= WATER_MAX_GLASSES) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const next = waterValue + 1;
-    setLocalWater(next);
+    const prev = waterGlasses;
+    const next = prev + 1;
+    waterBusyRef.current = true;
+    setWaterBusy(true);
+    setWaterGlasses(next);
     try {
-      await updateTodayTracking(next);
+      const updated = await updateTodayTracking(next);
+      setWaterGlasses(Math.max(0, updated.waterGlasses));
       void refreshWidgetsFromApp(user?.isPremium ?? false);
     } catch {
-      setLocalWater(waterValue);
+      setWaterGlasses(prev);
+    } finally {
+      waterBusyRef.current = false;
+      setWaterBusy(false);
     }
-  }, [user?.isPremium, waterValue]);
+  }, [user?.isPremium, waterGlasses]);
 
-  const heroStyle    = useHeroEntrance();
-  const actionsStyle = useFadeRise(160, 10);
-  const gridStyle    = useFadeRise(280, 12);
+  const handleRemoveWater = useCallback(async () => {
+    if (waterBusyRef.current || waterGlasses <= 0) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const prev = waterGlasses;
+    const next = prev - 1;
+    waterBusyRef.current = true;
+    setWaterBusy(true);
+    setWaterGlasses(next);
+    try {
+      const updated = await updateTodayTracking(next);
+      setWaterGlasses(Math.max(0, updated.waterGlasses));
+      void refreshWidgetsFromApp(user?.isPremium ?? false);
+    } catch {
+      setWaterGlasses(prev);
+    } finally {
+      waterBusyRef.current = false;
+      setWaterBusy(false);
+    }
+  }, [user?.isPremium, waterGlasses]);
+
+  const heroStyle     = useHeroEntrance();
+  const continueStyle = useFadeRise(220, 12);
+  const actionsStyle  = useFadeRise(160, 10);
+  const gridStyle     = useFadeRise(280, 12);
 
   const handleActivate = useCallback(() => {
     (navigation as any).navigate(Routes.Modal.ActivatePremium);
@@ -244,6 +366,176 @@ export default function DashboardScreen({
   const handleMeasurements = useCallback(() => {
     (navigation as any).navigate(Routes.App.ProfileMeasurements);
   }, [navigation]);
+
+  const handleOpenBadgeVault = useCallback(() => {
+    (navigation as any).navigate(Routes.App.BadgeVault);
+  }, [navigation]);
+
+  const handleOpenWater = useCallback(() => {
+    (navigation as any).navigate(Routes.App.Hydration);
+  }, [navigation]);
+
+  const handleOpenPantry = useCallback(() => {
+    (navigation as any).navigate(Routes.App.Pantry);
+  }, [navigation]);
+
+  const handleOpenShoppingList = useCallback(() => {
+    (navigation as any).navigate(Routes.App.ShoppingList);
+  }, [navigation]);
+
+  const handleCoachTask = useCallback((task?: DashboardCoachTask | null) => {
+    if (!task) return;
+    if (task.actionKey === 'MESSAGES' && onPressMessages) {
+      onPressMessages();
+      return;
+    }
+    void runCoachTaskAction(navigation as any, task.actionKey);
+  }, [navigation, onPressMessages]);
+
+  const todayPanelItems = useMemo<TodayPanelItem[]>(() => buildTodayPanelItems({
+    language,
+    waterGlasses,
+    waterGoal: WATER_GOAL,
+    pantryCount,
+    nextMealTitle: nextMeal?.title ?? nextMeal?.time,
+    nextMealMinutesUntil: nextMeal?.minutesUntil ?? null,
+    motivation,
+  }), [language, motivation, nextMeal?.minutesUntil, nextMeal?.time, nextMeal?.title, pantryCount, waterGlasses]);
+
+  const rescueMission = useMemo<RescueMission>(() => buildRescueMission({
+    language,
+    waterGlasses,
+    waterGoal: WATER_GOAL,
+    pantryCount,
+    shoppingSummary,
+    motivation,
+    nextMealTitle: nextMeal?.title ?? nextMeal?.time,
+  }), [language, motivation, nextMeal?.time, nextMeal?.title, pantryCount, shoppingSummary, waterGlasses]);
+
+  const continueCard: ContinueCardModel = (() => {
+    if (!(user?.isPremium ?? false)) {
+      return {
+        eyebrow: language === 'tr' ? 'Sonraki adım' : 'Next move',
+        title: language === 'tr' ? 'Premium alanını aç ve planını bağla' : 'Unlock premium and connect your plan',
+        body: language === 'tr'
+          ? 'Kişisel plan, seri takibi ve su hedefleri tek akışta burada toplanır.'
+          : 'Your personal plan, streaks, and hydration goals live here once premium is active.',
+        cta: language === 'tr' ? "Premium'u aç" : 'Open premium',
+        icon: 'sparkles-outline',
+        accent: theme.accentGold,
+        onPress: handleActivate,
+      };
+    }
+
+    if (nextMealState === 'upcoming' && nextMeal) {
+      const mealTitle = nextMeal.title ?? nextMeal.time ?? (language === 'tr' ? 'Sıradaki öğün' : 'Next meal');
+      return {
+        eyebrow: language === 'tr' ? 'Şimdi devam et' : 'Continue now',
+        title: language === 'tr' ? `${mealTitle} seni bekliyor` : `${mealTitle} is up next`,
+        body: language === 'tr'
+          ? 'Bugünkü akışını kaybetmeden sıradaki öğününü aç ve planını tamamlamaya devam et.'
+          : "Jump back into today's flow and keep your plan moving with the next meal.",
+        cta: language === 'tr' ? 'Planı aç' : 'Open plan',
+        icon: 'restaurant-outline',
+        accent: theme.primary,
+        onPress: onPressPlans ?? noop,
+      };
+    }
+
+    if (nextMealState === 'all-complete') {
+      return {
+        eyebrow: language === 'tr' ? 'Gün tamamlandı' : 'Day complete',
+        title: language === 'tr' ? 'Bugünün planını tamamladın' : "You completed today's plan",
+        body: language === 'tr'
+          ? 'Tüm öğünlerini tamamladın. İstersen planını gözden geçir ya da su hedefini bitirerek günü güçlü kapat.'
+          : 'All meals are complete. Review your plan or finish your hydration goal to close the day strong.',
+        cta: language === 'tr' ? 'Planımı gör' : 'View my plan',
+        icon: 'checkmark-circle-outline',
+        accent: theme.emerald,
+        onPress: onPressPlans ?? noop,
+      };
+    }
+
+    if (nextMealState === 'no-plan') {
+      return {
+        eyebrow: language === 'tr' ? 'Bugün sakin' : 'Quiet day',
+        title: language === 'tr' ? 'Bugün için plan görünmüyor' : 'No plan is visible for today',
+        body: language === 'tr'
+          ? 'Yeni plan yayınlandığında burada göreceksin. Bu arada tariflere göz atabilir veya alışveriş listesini güncelleyebilirsin.'
+          : 'You will see your next plan here. For now, you can explore recipes or refresh your shopping list.',
+        cta: language === 'tr' ? 'Mutfağı aç' : 'Open kitchen',
+        icon: 'leaf-outline',
+        accent: theme.emerald,
+        onPress: onPressKitchen ?? noop,
+      };
+    }
+
+    if (waterGlasses < WATER_GOAL) {
+      return {
+        eyebrow: language === 'tr' ? 'Ritmi koru' : 'Keep the rhythm',
+        title: language === 'tr' ? 'Su hedefinden geri kalma' : 'Stay on top of hydration',
+        body: language === 'tr'
+          ? `${Math.max(WATER_GOAL - waterGlasses, 0)} bardak daha içersen günlük 2 L hedefini tamamlarsın.`
+          : `${Math.max(WATER_GOAL - waterGlasses, 0)} more glasses gets you to today's 2 L goal.`,
+        cta: language === 'tr' ? 'Su ekranına git' : 'Open hydration',
+        icon: 'water-outline',
+        accent: '#38BDF8',
+        onPress: handleOpenWater,
+      };
+    }
+
+    if (data?.coachTask) {
+      return {
+        eyebrow: language === 'tr' ? 'Bugünün görevi' : "Today's task",
+        title: data.coachTask.title,
+        body: data.coachTask.body,
+        cta: data.coachTask.cta,
+        icon: 'sparkles-outline',
+        accent: theme.emerald,
+        onPress: () => handleCoachTask(data.coachTask),
+      };
+    }
+
+    if (data?.dietitianNote && onPressMessages) {
+      return {
+        eyebrow: language === 'tr' ? 'Yeni not' : 'New note',
+        title: language === 'tr' ? 'Diyetisyeninden gelen notu kontrol et' : 'Check the latest note from your dietitian',
+        body: language === 'tr'
+          ? 'Günün ritmini korumak için mesajlarını gözden geçir ve gereken yanıtı ver.'
+          : 'Review your latest message and reply if anything needs your attention.',
+        cta: language === 'tr' ? 'Mesajları aç' : 'Open messages',
+        icon: 'chatbubble-ellipses-outline',
+        accent: theme.accent,
+        onPress: onPressMessages,
+      };
+    }
+
+    if (activePlan) {
+      return {
+        eyebrow: language === 'tr' ? 'Plan görünümü' : 'Plan view',
+        title: language === 'tr' ? 'Bugünkü akışını kontrol et' : "Review today's flow",
+        body: language === 'tr'
+          ? 'Tamamlanan, bekleyen ve alternatif öğünlerini tek yerden gözden geçir.'
+          : 'See completed, pending, and alternative meals together in one calm timeline.',
+        cta: language === 'tr' ? 'Planımı aç' : 'Open my plan',
+        icon: 'calendar-outline',
+        accent: theme.emerald,
+        onPress: onPressPlans ?? noop,
+      };
+    }
+
+    return {
+      eyebrow: language === 'tr' ? 'Keşfet' : 'Explore',
+      title: language === 'tr' ? 'Mutfağa dön ve yeni bir tarif seç' : 'Head to the kitchen and pick a new recipe',
+      body: language === 'tr'
+        ? 'Bugün için sakin bir tarif turu yap, malzemelerine göre yeni seçenekler keşfet.'
+        : 'Take a calm recipe pass and discover new options based on what you have.',
+      cta: language === 'tr' ? 'Mutfağı aç' : 'Open kitchen',
+      icon: 'leaf-outline',
+      accent: theme.emerald,
+      onPress: onPressKitchen ?? noop,
+    };
+  })();
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -274,7 +566,7 @@ export default function DashboardScreen({
           />
         }
       >
-        {/* ═══════ HERO CAPSULE ═══════ */}
+        {/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ HERO CAPSULE ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */}
         <DayHeaderBand
           theme={theme}
           language={language}
@@ -292,8 +584,15 @@ export default function DashboardScreen({
             onActivate={handleActivate}
           />
         </Animated.View>
+        <Animated.View style={[continueStyle]}>
+          <ContinueJourneyCard
+            theme={theme}
+            language={language}
+            card={continueCard}
+          />
+        </Animated.View>
 
-        {/* ═══════ SMART ACTIONS RAIL ═══════ */}
+        {/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ SMART ACTIONS RAIL ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */}
         <Animated.View style={[actionsStyle]}>
           <SmartActionsRail
             theme={theme}
@@ -303,41 +602,53 @@ export default function DashboardScreen({
             onPressMessages={onPressMessages}
             onPressActivate={handleActivate}
             onPressMeasurements={handleMeasurements}
+            onPressShopping={handleOpenShoppingList}
+            onPressPantry={handleOpenPantry}
+            language={language}
           />
         </Animated.View>
 
-        {/* ═══════ CONTENT GRID ═══════ */}
+        {/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ CONTENT GRID ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */}
         {isLoading ? (
-          <View style={s.loadingWrap}>
-            <ActivityIndicator size="large" color={theme.primary} />
-          </View>
+          <DashboardLoadingState theme={theme} />
         ) : (
           <Animated.View style={[gridStyle]}>
             {user?.isPremium ? (
-              <PremiumGrid
-                theme={theme}
-                compliancePercent={compliancePercent}
-                streak={streakValue}
-                water={waterValue}
+                <PremiumGrid
+                  theme={theme}
+                  compliancePercent={compliancePercent}
+                  streak={streakValue}
+                water={waterGlasses}
+                waterBusy={waterBusy}
+                pantryCount={pantryCount}
+                shoppingSummary={shoppingSummary}
                 motivation={motivation}
-                nextMeal={nextMeal}
+                todayPanelItems={todayPanelItems}
+                rescueMission={rescueMission}
+                nextMeal={upcomingNextMeal}
+                coachTask={data?.coachTask}
                 dietitianNote={data?.dietitianNote}
                 activePlan={activePlan}
                 onPressKitchen={onPressKitchen}
                 onPressPlans={onPressPlans}
-                onPressMessages={onPressMessages}
-                onPressMeasurements={handleMeasurements}
-                onPressWater={handleAddWater}
+                  onPressMessages={onPressMessages}
+                  onPressCoachTask={handleCoachTask}
+                  onPressMeasurements={handleMeasurements}
+                  onPressPantry={handleOpenPantry}
+                  onPressBadgeVault={handleOpenBadgeVault}
+                  onPressWater={handleAddWater}
+                  onRemoveWater={handleRemoveWater}
                 language={language}
               />
             ) : (
               <FreeGrid
                 theme={theme}
-                publicUserId={user?.publicUserId}
-                onPressActivate={handleActivate}
-                onPressKitchen={onPressKitchen}
-                onPressMeasurements={handleMeasurements}
-              />
+                  publicUserId={user?.publicUserId}
+                  onPressActivate={handleActivate}
+                  onPressKitchen={onPressKitchen}
+                  onPressMeasurements={handleMeasurements}
+                  onPressPantry={handleOpenPantry}
+                />
             )}
           </Animated.View>
         )}
@@ -348,9 +659,9 @@ export default function DashboardScreen({
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    HERO CAPSULE
-══════════════════════════════════════════════════════ */
+ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
 function HeroCapsule({
   theme, isPremium, name, clinicName, compliancePercent, todayStatus, onActivate,
 }: {
@@ -451,30 +762,40 @@ function HeroCapsule({
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    SMART ACTIONS RAIL
-══════════════════════════════════════════════════════ */
-function makeActionsPremium(d: { actionPlans: string; actionKitchen: string; actionMeasures: string; actionMessages: string }) {
+ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
+function makeActionsPremium(
+  d: { actionPlans: string; actionKitchen: string; actionMeasures: string; actionMessages: string },
+  language: 'tr' | 'en',
+) {
   return [
     { id: 'plans',    icon: 'calendar-outline'   as const, label: d.actionPlans,    color: '#1FA876' },
     { id: 'kitchen',  icon: 'restaurant-outline' as const, label: d.actionKitchen,  color: '#38BDF8' },
     { id: 'measures', icon: 'body-outline'       as const, label: d.actionMeasures, color: '#F59E0B' },
     { id: 'messages', icon: 'mail-outline'       as const, label: d.actionMessages, color: '#E879F9' },
+    { id: 'shopping', icon: 'cart-outline'       as const, label: language === 'tr' ? 'Alışveriş' : 'Shopping', color: '#34D399' },
+    { id: 'pantry',   icon: 'basket-outline'     as const, label: language === 'tr' ? 'Dolabım' : 'Pantry',     color: '#60A5FA' },
   ];
 }
 
-function makeActionsFree(d: { actionRecipes: string; actionPremium: string; actionMeasures: string; actionCopyId: string }) {
+function makeActionsFree(
+  d: { actionRecipes: string; actionPremium: string; actionMeasures: string; actionCopyId: string },
+  language: 'tr' | 'en',
+) {
   return [
     { id: 'kitchen',  icon: 'restaurant-outline' as const, label: d.actionRecipes,  color: '#1FA876' },
     { id: 'activate', icon: 'key-outline'        as const, label: d.actionPremium,  color: '#F59E0B' },
     { id: 'measures', icon: 'body-outline'       as const, label: d.actionMeasures, color: '#38BDF8' },
     { id: 'share',    icon: 'copy-outline'       as const, label: d.actionCopyId,   color: '#E879F9' },
+    { id: 'shopping', icon: 'cart-outline'       as const, label: language === 'tr' ? 'Alışveriş' : 'Shopping', color: '#34D399' },
+    { id: 'pantry',   icon: 'basket-outline'     as const, label: language === 'tr' ? 'Dolabım' : 'Pantry',     color: '#60A5FA' },
   ];
 }
 
 function SmartActionsRail({
   theme, isPremium, onPressPlans, onPressKitchen, onPressMessages,
-  onPressActivate, onPressMeasurements,
+  onPressActivate, onPressMeasurements, onPressShopping, onPressPantry, language,
 }: {
   theme: import('../theme/tokens').Theme;
   isPremium: boolean;
@@ -483,6 +804,9 @@ function SmartActionsRail({
   onPressMessages?: () => void;
   onPressActivate: () => void;
   onPressMeasurements: () => void;
+  onPressShopping: () => void;
+  onPressPantry: () => void;
+  language: 'tr' | 'en';
 }) {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -495,7 +819,7 @@ function SmartActionsRail({
     }
   }
 
-  const actions = isPremium ? makeActionsPremium(t.dashboard) : makeActionsFree(t.dashboard);
+  const actions = isPremium ? makeActionsPremium(t.dashboard, language) : makeActionsFree(t.dashboard, language);
   const handlers: Record<string, () => void> = {
     plans:    onPressPlans    ?? noop,
     kitchen:  onPressKitchen  ?? noop,
@@ -503,6 +827,8 @@ function SmartActionsRail({
     messages: onPressMessages ?? noop,
     activate: onPressActivate,
     share:    handleShare,
+    shopping: onPressShopping,
+    pantry:   onPressPantry,
   };
 
   return (
@@ -531,7 +857,7 @@ function ActionChip({
 }) {
   const style = useStaggerItem(index, 160, 45);
   return (
-    <Animated.View style={style}>
+    <Animated.View style={[style, s.actionChipSlot]}>
       <TouchableOpacity
         style={[s.actionChip, { backgroundColor: `${color}12`, borderColor: `${color}28` }]}
         onPress={onPress}
@@ -546,43 +872,126 @@ function ActionChip({
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    PREMIUM GRID
-══════════════════════════════════════════════════════ */
+ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
+function ContinueJourneyCard({
+  theme,
+  language,
+  card,
+}: {
+  theme: import('../theme/tokens').Theme;
+  language: 'tr' | 'en';
+  card: ContinueCardModel;
+}) {
+  return (
+    <TouchableOpacity
+      style={[s.continueCard, { backgroundColor: theme.surface, borderColor: `${card.accent}35` }]}
+      onPress={card.onPress}
+      activeOpacity={0.88}
+    >
+      <View style={[s.continueAccent, { backgroundColor: `${card.accent}18` }]} />
+      <View style={s.continueTopRow}>
+        <View style={[s.continueEyebrowPill, { backgroundColor: `${card.accent}16`, borderColor: `${card.accent}30` }]}>
+          <Text style={[s.continueEyebrow, { color: card.accent }]}>{card.eyebrow}</Text>
+        </View>
+        <View style={[s.continueIconWrap, { backgroundColor: `${card.accent}16`, borderColor: `${card.accent}30` }]}>
+          <Ionicons name={card.icon} size={16} color={card.accent} />
+        </View>
+      </View>
+      <Text style={[s.continueTitle, { color: theme.text }]}>{card.title}</Text>
+      <Text style={[s.continueBody, { color: theme.textSub }]}>{card.body}</Text>
+      <View style={s.continueFooter}>
+        <Text style={[s.continueCTA, { color: card.accent }]}>{card.cta}</Text>
+        <View style={[s.continueCTAChip, { backgroundColor: `${card.accent}14`, borderColor: `${card.accent}28` }]}>
+          <Text style={[s.continueCTAChipText, { color: card.accent }]}>
+            {language === 'tr' ? 'Devam et' : 'Keep going'}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function DashboardLoadingState({
+  theme,
+}: {
+  theme: import('../theme/tokens').Theme;
+}) {
+  return (
+    <View style={s.loadingWrap}>
+      <View style={[s.loadingCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+        <View style={[s.loadingBarLg, { backgroundColor: theme.glassEmerald }]} />
+        <View style={[s.loadingBarMd, { backgroundColor: theme.surfaceElevated }]} />
+        <View style={s.loadingRow}>
+          <View style={[s.loadingPill, { backgroundColor: theme.surfaceElevated }]} />
+          <View style={[s.loadingPill, { backgroundColor: theme.surfaceElevated }]} />
+          <View style={[s.loadingPill, { backgroundColor: theme.surfaceElevated }]} />
+        </View>
+      </View>
+      <View style={[s.loadingGridRow, { gap: spacing.sm }]}>
+        <View style={[s.loadingPanel, { backgroundColor: theme.surface, borderColor: theme.border }]} />
+        <View style={[s.loadingPanel, { backgroundColor: theme.surface, borderColor: theme.border }]} />
+      </View>
+    </View>
+  );
+}
+
 function PremiumGrid({
-  theme, compliancePercent, streak, water, motivation, nextMeal, dietitianNote,
-  activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressMeasurements,
-  onPressWater, language,
+  theme, compliancePercent, streak, water, waterBusy, pantryCount, shoppingSummary, motivation, todayPanelItems, rescueMission, nextMeal, coachTask, dietitianNote,
+  activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressCoachTask, onPressMeasurements, onPressPantry, onPressBadgeVault,
+  onPressWater, onRemoveWater, language,
 }: {
   theme: import('../theme/tokens').Theme;
   compliancePercent: number;
   streak: number;
   water: number;
+  waterBusy: boolean;
+  pantryCount: number;
+  shoppingSummary: ShoppingListSummary;
   motivation?: DashboardMotivation;
+  todayPanelItems: TodayPanelItem[];
+  rescueMission: RescueMission;
   nextMeal?: any;
+  coachTask?: DashboardCoachTask;
   dietitianNote?: string;
   activePlan?: ClientPlan | null;
   onPressKitchen?: () => void;
   onPressPlans?: () => void;
   onPressMessages?: () => void;
+  onPressCoachTask?: (task?: DashboardCoachTask | null) => void;
   onPressMeasurements: () => void;
+  onPressPantry: () => void;
+  onPressBadgeVault: () => void;
   onPressWater?: () => void;
+  onRemoveWater?: () => void;
   language: 'tr' | 'en';
 }) {
   let idx = 0;
   return (
     <View style={s.grid}>
+      <TodayPulsePanel
+        theme={theme}
+        pantryCount={pantryCount}
+        shoppingSummary={shoppingSummary}
+        items={todayPanelItems}
+        language={language}
+        index={idx++}
+      />
+
       <StatsShelf
         theme={theme}
         compliancePercent={compliancePercent}
         streak={streak}
         water={water}
+        waterBusy={waterBusy}
         language={language}
         index={idx++}
         onPressWater={onPressWater}
+        onRemoveWater={onRemoveWater}
       />
 
-      {/* Active Plan block — always shown for premium; shows plan if assigned, empty state otherwise */}
+      {/* Active Plan block ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ always shown for premium; shows plan if assigned, empty state otherwise */}
       <ActivePlanBlock
         theme={theme}
         plan={activePlan ?? null}
@@ -596,6 +1005,18 @@ function PremiumGrid({
         motivation={motivation}
         language={language}
         index={idx++}
+        onPressBadgeVault={onPressBadgeVault}
+      />
+
+      <RescueMissionCard
+        theme={theme}
+        mission={rescueMission}
+        language={language}
+        onPressKitchen={onPressKitchen}
+        onPressPantry={onPressPantry}
+        onPressPlans={onPressPlans}
+        onPressWater={onPressWater}
+        index={idx++}
       />
 
       {nextMeal && (
@@ -606,6 +1027,15 @@ function PremiumGrid({
           index={idx++}
         />
       )}
+
+      {coachTask ? (
+        <CoachTaskCard
+          theme={theme}
+          task={coachTask}
+          onPressTask={() => onPressCoachTask?.(coachTask)}
+          index={idx++}
+        />
+      ) : null}
 
       {dietitianNote ? (
         <DietitianNoteCard
@@ -627,11 +1057,160 @@ function PremiumGrid({
         onPress={onPressKitchen}
         index={idx++}
       />
+
+      <PantryEntryCard
+        theme={theme}
+        onPress={onPressPantry}
+        index={idx++}
+      />
     </View>
   );
 }
 
-/* ── Active Plan Block ── */
+function TodayPulsePanel({
+  theme,
+  pantryCount,
+  shoppingSummary,
+  items,
+  language,
+  index,
+}: {
+  theme: import('../theme/tokens').Theme;
+  pantryCount: number;
+  shoppingSummary: ShoppingListSummary;
+  items: TodayPanelItem[];
+  language: 'tr' | 'en';
+  index: number;
+}) {
+  const style = useStaggerItem(index, 300, 60);
+  const toneColor = (tone: TodayPanelItem["tone"]) => {
+    switch (tone) {
+      case 'emerald': return theme.emerald;
+      case 'gold': return theme.accentGold;
+      case 'coral': return theme.accentCoral;
+      case 'cyan': return theme.accentCyan;
+      default: return theme.primary;
+    }
+  };
+
+  return (
+    <Animated.View style={style}>
+      <View style={[s.todayPulseCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+        <View style={s.todayPulseHeader}>
+          <View>
+            <Text style={[s.todayPulseEyebrow, { color: theme.primary }]}>
+              {language === 'tr' ? 'BUGÜN PANELİ' : 'TODAY PANEL'}
+            </Text>
+            <Text style={[s.todayPulseTitle, { color: theme.text }]}>
+              {language === 'tr' ? 'Tek bakışta bugünün resmi' : 'The shape of your day at a glance'}
+            </Text>
+          </View>
+          <View style={[s.todayPulseMeta, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Text style={[s.todayPulseMetaTxt, { color: theme.textMuted }]}>
+              {language === 'tr' ? `${pantryCount} dolap · ${shoppingSummary.activeCount} eksik` : `${pantryCount} pantry · ${shoppingSummary.activeCount} gaps`}
+            </Text>
+          </View>
+        </View>
+
+        <View style={s.todayPulseGrid}>
+          {items.map((item) => {
+            const accent = toneColor(item.tone);
+            return (
+              <View
+                key={item.key}
+                style={[s.todayPulseTile, { backgroundColor: theme.surfaceElevated, borderColor: `${accent}28` }]}
+              >
+                <View style={[s.todayPulseIcon, { backgroundColor: `${accent}14`, borderColor: `${accent}2A` }]}>
+                  <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={16} color={accent} />
+                </View>
+                <Text style={[s.todayPulseValue, { color: theme.text }]}>{item.value}</Text>
+                <Text style={[s.todayPulseTileTitle, { color: theme.text }]}>{item.title}</Text>
+                <Text style={[s.todayPulseTileBody, { color: theme.textMuted }]}>{item.body}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+function RescueMissionCard({
+  theme,
+  mission,
+  language,
+  onPressKitchen,
+  onPressPantry,
+  onPressPlans,
+  onPressWater,
+  index,
+}: {
+  theme: import('../theme/tokens').Theme;
+  mission: RescueMission;
+  language: 'tr' | 'en';
+  onPressKitchen?: () => void;
+  onPressPantry?: () => void;
+  onPressPlans?: () => void;
+  onPressWater?: () => void;
+  index: number;
+}) {
+  const style = useStaggerItem(index, 300, 60);
+  const accent =
+    mission.tone === 'cyan' ? theme.accentCyan :
+    mission.tone === 'gold' ? theme.accentGold :
+    mission.tone === 'coral' ? theme.accentCoral :
+    mission.tone === 'emerald' ? theme.emerald :
+    theme.primary;
+
+  const handlePress = () => {
+    if (mission.icon === 'water-outline') {
+      onPressWater?.();
+      return;
+    }
+    if (mission.icon === 'basket-outline') {
+      onPressPantry?.();
+      return;
+    }
+    if (mission.icon === 'cart-outline') {
+      onPressPlans?.();
+      return;
+    }
+    onPressKitchen?.();
+  };
+
+  return (
+    <Animated.View style={style}>
+      <TouchableOpacity
+        activeOpacity={0.84}
+        onPress={handlePress}
+        style={[s.rescueCard, { backgroundColor: theme.surface, borderColor: `${accent}30` }]}
+      >
+        <View style={[s.rescueAccent, { backgroundColor: `${accent}14` }]} />
+        <View style={s.rescueHeader}>
+          <View style={[s.rescueIcon, { backgroundColor: `${accent}14`, borderColor: `${accent}2A` }]}>
+            <Ionicons name={mission.icon as keyof typeof Ionicons.glyphMap} size={18} color={accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.rescueEyebrow, { color: accent }]}>
+              {language === 'tr' ? 'BUGÜNÜ KURTAR' : 'RESCUE TODAY'}
+            </Text>
+            <Text style={[s.rescueTitle, { color: theme.text }]}>{mission.title}</Text>
+          </View>
+          <View style={[s.rescueProgress, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Text style={[s.rescueProgressTxt, { color: accent }]}>{mission.progressLabel}</Text>
+          </View>
+        </View>
+        <Text style={[s.rescueBody, { color: theme.textSub }]}>{mission.body}</Text>
+        <View style={s.rescueFooter}>
+          <Text style={[s.rescueCTA, { color: accent }]}>{mission.cta}</Text>
+          <Ionicons name="arrow-forward" size={16} color={accent} />
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Active Plan Block ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
 function ActivePlanBlock({
   theme, plan, onPressPlans, language, index,
 }: {
@@ -670,7 +1249,7 @@ function ActivePlanBlock({
             {(plan.startDate || plan.endDate) && (
               <Text style={[s.activePlanDates, { color: theme.textSub }]}>
                 {plan.startDate ? new Date(plan.startDate).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
-                {plan.startDate && plan.endDate ? ' → ' : ''}
+                {plan.startDate && plan.endDate ? ' â†’ ' : ''}
                 {plan.endDate ? new Date(plan.endDate).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
               </Text>
             )}
@@ -719,28 +1298,31 @@ function ActivePlanBlock({
   );
 }
 
-/* ── Stats Shelf ── */
-function StatsShelf({ theme, compliancePercent, streak, water, language, index, onPressWater }: {
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Stats Shelf ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
+function StatsShelf({ theme, compliancePercent, streak, water, waterBusy, language, index, onPressWater, onRemoveWater }: {
   theme: import('../theme/tokens').Theme;
-  compliancePercent: number; streak: number; water: number; language: 'tr' | 'en'; index: number;
+  compliancePercent: number; streak: number; water: number; waterBusy: boolean; language: 'tr' | 'en'; index: number;
   onPressWater?: () => void;
+  onRemoveWater?: () => void;
 }) {
   const style = useStaggerItem(index, 300, 60);
   const { t } = useTranslation();
   return (
     <Animated.View style={[s.statsShelf, { backgroundColor: theme.surface, borderColor: theme.border }, style]}>
-      <StatCell value={`${streak}`}            unit={t.dashboard.days}    label={t.dashboard.streak}   color={theme.accent}     iconName="flame-outline" />
+      <StatCell value={`${streak}`}            unit={t.dashboard.days} label={t.dashboard.streak}                           color={theme.accent}  iconName="flame-outline" />
       <View style={[s.statDivider, { backgroundColor: theme.borderLight }]} />
-      <StatCell value={`${compliancePercent}`} unit="%"                   label={language === 'tr' ? 'Uyum' : 'Adherence'} color={theme.emerald}    iconName="checkmark-circle-outline" />
+      <StatCell value={`${compliancePercent}`} unit="%"                label={language === 'tr' ? 'Uyum' : 'Adherence'}    color={theme.emerald} iconName="checkmark-circle-outline" />
       <View style={[s.statDivider, { backgroundColor: theme.borderLight }]} />
-      <TouchableOpacity onPress={onPressWater} activeOpacity={onPressWater ? 0.7 : 1} style={s.waterCell}>
-        <StatCell value={`${water}`} unit={t.dashboard.glasses} label={t.dashboard.water} color={theme.accentCyan} iconName="water-outline" />
-        {onPressWater && (
-          <View style={[s.waterPlus, { backgroundColor: theme.accentCyan }]}>
-            <Ionicons name="add" size={10} color="#FFF" />
-          </View>
-        )}
-      </TouchableOpacity>
+      <MiniGlass
+        water={water}
+        goal={WATER_GOAL}
+        busy={waterBusy}
+        theme={theme}
+        language={language}
+        label={language === 'tr' ? 'Su' : 'Water'}
+        onAdd={onPressWater}
+        onRemove={onRemoveWater}
+      />
     </Animated.View>
   );
 }
@@ -750,15 +1332,49 @@ function MotivationShelf({
   motivation,
   language,
   index,
+  onPressBadgeVault,
 }: {
   theme: import('../theme/tokens').Theme;
   motivation?: DashboardMotivation;
   language: 'tr' | 'en';
   index: number;
+  onPressBadgeVault: () => void;
 }) {
   const style = useStaggerItem(index, 300, 60);
+  const floatStyle = useFloating(80, 4, 2600);
+  const haloStyle = useHaloBreathe((motivation?.currentStreak ?? 0) > 0);
+  const shimmerStyle = useShimmerBand(true);
   const summary = buildMotivationSummary(motivation, language);
-  const badges = getHighlightAchievements(motivation, language, 3);
+  const allBadges = buildBadgeCollection(motivation, language);
+  const badges = getHighlightAchievements(motivation, language, 4);
+  const spotlight = getMotivationSpotlight(motivation, language);
+  const [selectedBadge, setSelectedBadge] = useState<BadgeCollectionItem | null>(null);
+  const totalBadgeCount = motivation?.totalBadgeCount ?? allBadges.length;
+  const pantryBadge = allBadges.find((item) => item.id === 'pantry_ready');
+  const lockedBadgeCount = Math.max(totalBadgeCount - (motivation?.earnedBadgeCount ?? 0), 0);
+  const statTiles = [
+    {
+      key: 'streak',
+      icon: 'flame-outline' as const,
+      accent: theme.emerald,
+      value: `${motivation?.currentStreak ?? 0}`,
+      label: language === 'tr' ? 'aktif seri' : 'live streak',
+    },
+    {
+      key: 'badges',
+      icon: 'ribbon-outline' as const,
+      accent: theme.accentGold,
+      value: `${motivation?.earnedBadgeCount ?? 0}/${totalBadgeCount}`,
+      label: language === 'tr' ? 'açık rozet' : 'live badges',
+    },
+    {
+      key: 'pantry',
+      icon: 'basket-outline' as const,
+      accent: theme.accentCyan,
+      value: pantryBadge ? pantryBadge.progressLabel : '0/8',
+      label: language === 'tr' ? 'dolap görevi' : 'pantry quest',
+    },
+  ];
 
   return (
     <Animated.View style={style}>
@@ -770,29 +1386,167 @@ function MotivationShelf({
           style={[s.motivationGlow, { backgroundColor: theme.primaryGlow }]}
         />
         <View style={s.motivationTopRow}>
-          <View>
+          <View style={s.motivationTextWrap}>
             <Text style={[s.motivationEyebrow, { color: theme.emerald }]}>
-              {language === 'tr' ? 'SERI ALANI' : 'STREAK LANE'}
+            {language === 'tr' ? 'SERİ ALANI' : 'STREAK LANE'}
             </Text>
             <Text style={[s.motivationTitle, { color: theme.text }]}>{summary.title}</Text>
             <Text style={[s.motivationSubtitle, { color: theme.textSub }]}>{summary.subtitle}</Text>
           </View>
-          <View style={[s.streakBubble, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
-            <Text style={[s.streakBubbleValue, { color: theme.emerald }]}>{motivation?.currentStreak ?? 0}</Text>
-            <Text style={[s.streakBubbleLabel, { color: theme.textMuted }]}>
-              {language === 'tr' ? 'gun' : 'days'}
+          <View style={s.streakBubbleWrap}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                s.streakPulse,
+                {
+                  backgroundColor: `${theme.emerald}12`,
+                  borderColor: `${theme.emerald}26`,
+                },
+                haloStyle,
+              ]}
+            />
+            <Animated.View style={floatStyle}>
+              <Pressable
+                onPress={() => spotlight && setSelectedBadge(spotlight)}
+                style={[s.streakBubble, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}
+              >
+                <Text style={[s.streakBubbleValue, { color: theme.emerald }]}>{motivation?.currentStreak ?? 0}</Text>
+                <Text style={[s.streakBubbleLabel, { color: theme.textMuted }]}>
+                  {language === 'tr' ? 'gün' : 'days'}
+                </Text>
+              </Pressable>
+            </Animated.View>
+          </View>
+        </View>
+
+        <View style={s.motivationMetaRow}>
+          <View style={[s.footerPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Ionicons name="shield-checkmark-outline" size={12} color={theme.emerald} />
+            <Text style={[s.footerPillText, { color: theme.textSub }]}>
+              {language === 'tr'
+                ? `${motivation?.earnedBadgeCount ?? 0}/${totalBadgeCount} rozet açık`
+                : `${motivation?.earnedBadgeCount ?? 0}/${totalBadgeCount} badges live`}
+            </Text>
+          </View>
+          <View style={[s.footerPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Ionicons
+              name={motivation?.streakAtRisk ? 'alert-circle-outline' : 'sparkles-outline'}
+              size={12}
+              color={motivation?.streakAtRisk ? theme.accentCoral : theme.primary}
+            />
+            <Text style={[s.footerPillText, { color: theme.textSub }]}>
+              {motivation?.streakAtRisk
+                ? (language === 'tr' ? 'seri ilgi bekliyor' : 'streak needs attention')
+                : motivation && motivation.nextMilestoneDays > 0
+                  ? (language === 'tr'
+                      ? `${motivation.nextMilestoneDays} gün sonra yeni rozet`
+                      : `${motivation.nextMilestoneDays} days to next badge`)
+                  : (language === 'tr' ? 'ana seri açık' : 'core streak live')}
+            </Text>
+          </View>
+          <View style={[s.footerPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Ionicons name="finger-print-outline" size={12} color={theme.textMuted} />
+            <Text style={[s.footerPillText, { color: theme.textSub }]}>
+              {language === 'tr' ? 'Rozete dokun, kuralı gör' : 'tap a badge to inspect'}
             </Text>
           </View>
         </View>
 
+        <View style={s.motivationStatsStrip}>
+          {statTiles.map((tile) => (
+            <View
+              key={tile.key}
+              style={[s.motivationStatTile, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+            >
+              <View style={[s.motivationStatIcon, { backgroundColor: `${tile.accent}16` }]}>
+                <Ionicons name={tile.icon} size={14} color={tile.accent} />
+              </View>
+              <Text style={[s.motivationStatValue, { color: theme.text }]}>{tile.value}</Text>
+              <Text style={[s.motivationStatLabel, { color: theme.textMuted }]}>{tile.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {spotlight ? (
+          <Pressable
+            onPress={() => setSelectedBadge(spotlight)}
+            style={[
+              s.motivationSpotlight,
+              {
+                backgroundColor: theme.surfaceElevated,
+                borderColor: `${getToneColor(theme, spotlight.tone)}32`,
+              },
+            ]}
+          >
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                s.motivationSpotlightShimmer,
+                { backgroundColor: `${getToneColor(theme, spotlight.tone)}18` },
+                shimmerStyle,
+              ]}
+            />
+            <View style={s.motivationSpotlightHeader}>
+              <View>
+                <Text style={[s.motivationSpotlightEyebrow, { color: theme.textMuted }]}>
+                  {language === 'tr' ? 'ÖNE ÇIKAN' : 'SPOTLIGHT'}
+                </Text>
+                <Text style={[s.motivationSpotlightHeading, { color: theme.text }]}>
+                  {spotlight.unlocked
+                    ? (language === 'tr' ? 'Yeni açılan favori rozet' : 'Freshly unlocked favorite')
+                    : (language === 'tr' ? 'Sıradaki rozet avın' : 'Your next badge hunt')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+            </View>
+
+            <View style={s.motivationSpotlightBody}>
+              <View
+                style={[
+                  s.motivationSpotlightSeal,
+                  {
+                    backgroundColor: `${getToneColor(theme, spotlight.tone)}14`,
+                    borderColor: `${getToneColor(theme, spotlight.tone)}32`,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={spotlight.icon}
+                  size={24}
+                  color={getToneColor(theme, spotlight.tone)}
+                />
+              </View>
+              <View style={s.motivationSpotlightText}>
+                <Text style={[s.motivationSpotlightTitle, { color: theme.text }]}>{spotlight.title}</Text>
+                <Text style={[s.motivationSpotlightCopy, { color: theme.textSub }]} numberOfLines={2}>
+                  {spotlight.unlocked ? spotlight.earnedDetail : spotlight.hint}
+                </Text>
+                <View style={[s.badgeProgressTrack, { backgroundColor: theme.borderLight }]}>
+                  <View
+                    style={[
+                      s.badgeProgressFill,
+                      {
+                        width: `${Math.max(8, Math.round(spotlight.ratio * 100))}%`,
+                        backgroundColor: getToneColor(theme, spotlight.tone),
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[s.motivationSpotlightMeta, { color: theme.textMuted }]}>
+                  {spotlight.progressLabel} | {spotlight.statusLabel}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+        ) : null}
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.badgeRail}>
           {badges.map((badge) => {
-            const meta = getBadgeMeta(badge.id, language);
-            const accent = getToneColor(theme, meta.tone);
-            const ratio = badge.progressTarget > 0 ? badge.progressCurrent / badge.progressTarget : 0;
+            const accent = getToneColor(theme, badge.tone);
             return (
-              <View
+              <Pressable
                 key={badge.id}
+                onPress={() => setSelectedBadge(badge)}
                 style={[
                   s.badgeCard,
                   {
@@ -801,31 +1555,44 @@ function MotivationShelf({
                   },
                 ]}
               >
+                <View style={s.badgeCardTop}>
+                  <View style={[s.badgeStatusPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Text style={[s.badgeStatusTxt, { color: badge.isRecentUnlock ? theme.accentGold : accent }]}>
+                      {badge.isRecentUnlock ? (language === 'tr' ? 'YENİ' : 'NEW') : badge.statusLabel}
+                    </Text>
+                  </View>
+                </View>
                 <View style={[s.badgeSeal, { backgroundColor: `${accent}14`, borderColor: `${accent}30` }]}>
                   <View style={[s.badgeCore, { backgroundColor: theme.surface }]}>
-                    <MaterialCommunityIcons name={meta.icon} size={22} color={accent} />
+                    <MaterialCommunityIcons name={badge.icon} size={22} color={accent} />
                   </View>
                   {badge.unlocked && (
-                    <View style={[s.badgeCheck, { backgroundColor: theme.accentGold }]}>
+                    <View style={[s.badgeCheck, { backgroundColor: accent }]}>
                       <Ionicons name="checkmark" size={10} color="#fff" />
                     </View>
                   )}
                 </View>
                 <Text style={[s.badgeTitle, { color: theme.text }]} numberOfLines={2}>
-                  {meta.title}
+                  {badge.title}
                 </Text>
-                <Text style={[s.badgeSubtitle, { color: theme.textMuted }]} numberOfLines={2}>
-                  {meta.subtitle}
+                <Text style={[s.badgeSubtitle, { color: theme.textMuted }]} numberOfLines={3}>
+                  {badge.unlocked ? badge.flavor : badge.hint}
                 </Text>
                 <View style={[s.badgeProgressTrack, { backgroundColor: theme.borderLight }]}>
                   <View
                     style={[
                       s.badgeProgressFill,
-                      { width: `${Math.max(8, Math.round(ratio * 100))}%`, backgroundColor: accent },
+                      { width: `${Math.max(8, Math.round(badge.ratio * 100))}%`, backgroundColor: accent },
                     ]}
                   />
                 </View>
-              </View>
+                <View style={s.badgeFooter}>
+                  <Text style={[s.badgeFooterText, { color: theme.textSub }]}>{badge.progressLabel}</Text>
+                  <Text style={[s.badgeFooterText, { color: accent }]}>
+                    {language === 'tr' ? 'incele' : 'inspect'}
+                  </Text>
+                </View>
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -840,6 +1607,14 @@ function MotivationShelf({
             </Text>
           </View>
           <View style={[s.footerPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Ionicons name="lock-closed-outline" size={12} color={theme.accentCyan} />
+            <Text style={[s.footerPillText, { color: theme.textSub }]}>
+              {language === 'tr'
+                ? `${lockedBadgeCount} rozet sırada`
+                : `${lockedBadgeCount} badges waiting`}
+            </Text>
+          </View>
+          <View style={[s.footerPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
             <Ionicons name="sparkles-outline" size={12} color={theme.primary} />
             <Text style={[s.footerPillText, { color: theme.textSub }]}>
               {motivation && motivation.nextMilestoneDays > 0
@@ -849,8 +1624,25 @@ function MotivationShelf({
                 : (language === 'tr' ? 'ana seri açık' : 'core streak live')}
             </Text>
           </View>
+          <TouchableOpacity
+            style={[s.motivationCTA, { backgroundColor: theme.primary, shadowColor: theme.primaryGlow }]}
+            onPress={onPressBadgeVault}
+            activeOpacity={0.86}
+          >
+            <Ionicons name="apps-outline" size={13} color="#fff" />
+            <Text style={s.motivationCTAText}>
+              {language === 'tr' ? 'Daha fazlası | tüm rozetler' : 'show more | all badges'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
+      <BadgeDetailSheet
+        visible={Boolean(selectedBadge)}
+        badge={selectedBadge}
+        theme={theme}
+        language={language}
+        onClose={() => setSelectedBadge(null)}
+      />
     </Animated.View>
   );
 }
@@ -869,7 +1661,228 @@ function StatCell({ value, unit, label, color, iconName }: {
   );
 }
 
-/* ── Next Meal Card ── */
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Mini Glass ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
+const MG_W = 48;
+const MG_H = 62;
+
+function MiniGlass({ water, goal, busy, theme, language, label, onAdd, onRemove }: {
+  water: number; goal: number;
+  busy: boolean;
+  theme: import('../theme/tokens').Theme;
+  language: 'tr' | 'en';
+  label: string;
+  onAdd?: () => void;
+  onRemove?: () => void;
+}) {
+  const color = theme.accentCyan;
+  const done  = water >= goal;
+  const overGoal = Math.max(0, water - goal);
+  const pct   = Math.min(1, water / goal);
+  const litersText = `${((water * WATER_GLASS_ML) / 1000).toFixed(1)}L`;
+  const statusText = overGoal > 0
+    ? (language === 'tr' ? `+${overGoal} tasma` : `+${overGoal} spill`)
+    : litersText;
+
+  const fillH      = useSharedValue(pct * MG_H);
+  const glassScale = useSharedValue(1);
+  const waveX      = useSharedValue(0);
+  // 2 damla ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ her taÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸ma anÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±nda yeniden tetiklenir
+  const d1Y = useSharedValue(0); const d1O = useSharedValue(0);
+  const d2Y = useSharedValue(0); const d2O = useSharedValue(0);
+
+  // Su seviyesi deÃƒÆ’Ã¢â‚¬Ãƒâ€¦Ã‚¸iÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸tikÃƒÆ’Ã†'Ãƒâ€šÃ‚§e dolum animasyonu
+  useEffect(() => {
+    fillH.value = withSpring(pct * MG_H, { damping: 20, stiffness: 90 });
+  }, [pct]);
+
+  // SÃƒÆ’Ã†'Ãƒâ€šÃ‚¼rekli dalga
+  useEffect(() => {
+    waveX.value = withRepeat(
+      withSequence(withTiming(4, { duration: 1300 }), withTiming(-4, { duration: 1300 })),
+      -1, true,
+    );
+  }, []);
+
+  // Her taÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸ma basÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±ÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸ÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±nda ÃƒÆ’Ã†'Ãƒâ€šÃ‚§aÃƒÆ’Ã¢â‚¬Ãƒâ€¦Ã‚¸rÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±lÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±r
+  function triggerSpill() {
+    runOnUI(() => {
+      'worklet';
+      cancelAnimation(d1Y); cancelAnimation(d1O);
+      cancelAnimation(d2Y); cancelAnimation(d2O);
+      // Damla 1 ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ sol kenar
+      d1Y.value = 0; d1O.value = 0;
+      d1O.value = withSequence(
+        withTiming(1, { duration: 50 }),
+        withDelay(320, withTiming(0, { duration: 340 })),
+      );
+      d1Y.value = withTiming(46, { duration: 710 });
+      // Damla 2 ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ saÃƒÆ’Ã¢â‚¬Ãƒâ€¦Ã‚¸ kenar, biraz gecikmeli
+      d2Y.value = 0; d2O.value = 0;
+      d2O.value = withDelay(140, withSequence(
+        withTiming(1, { duration: 50 }),
+        withDelay(310, withTiming(0, { duration: 320 })),
+      ));
+      d2Y.value = withDelay(140, withTiming(52, { duration: 750 }));
+    })();
+  }
+
+  const fillStyle  = useAnimatedStyle(() => ({ height: fillH.value }));
+  const waveStyle  = useAnimatedStyle(() => ({ transform: [{ translateX: waveX.value }] }));
+  const glassStyle = useAnimatedStyle(() => ({ transform: [{ scale: glassScale.value }] }));
+  const d1Style    = useAnimatedStyle(() => ({ transform: [{ translateY: d1Y.value }], opacity: d1O.value }));
+  const d2Style    = useAnimatedStyle(() => ({ transform: [{ translateY: d2Y.value }], opacity: d2O.value }));
+
+  function handlePress() {
+    if (busy) return;
+    if (done) {
+      // Dolu ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ artÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±rmaz ama her basÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±ÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸ta taÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸ma gÃƒÆ’Ã†'Ãƒâ€šÃ‚¶ster
+      triggerSpill();
+    }
+    runOnUI(() => {
+      'worklet';
+      cancelAnimation(glassScale);
+      glassScale.value = withSequence(
+        withSpring(0.86, { damping: 4, stiffness: 800 }),
+        withSpring(1.08, { damping: 8, stiffness: 300 }),
+        withSpring(1,    { damping: 15, stiffness: 200 }),
+      );
+    })();
+    onAdd?.();
+  }
+
+  function handleLongPress() {
+    if (busy || water === 0) return;
+    runOnUI(() => {
+      'worklet';
+      cancelAnimation(glassScale);
+      glassScale.value = withSequence(
+        withSpring(0.94, { damping: 8, stiffness: 500 }),
+        withSpring(1,    { damping: 14, stiffness: 250 }),
+      );
+    })();
+    onRemove?.();
+  }
+
+  return (
+    <View style={mg.container}>
+      {/* TaÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸ma damlalarÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚± ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ bardak aÃƒÆ’Ã¢â‚¬Ãƒâ€¦Ã‚¸zÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±ndan aÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸aÃƒÆ’Ã¢â‚¬Ãƒâ€¦Ã‚¸ÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚± dÃƒÆ’Ã†'Ãƒâ€šÃ‚¼ÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸er */}
+      <View style={mg.spillZone} pointerEvents="none">
+        <Animated.View style={[mg.drop, mg.dropLeft, d1Style]}>
+          <View style={[mg.dropDot, { backgroundColor: color }]} />
+        </Animated.View>
+        <Animated.View style={[mg.drop, mg.dropRight, d2Style]}>
+          <View style={[mg.dropDot, { backgroundColor: color, width: 5, height: 6 }]} />
+        </Animated.View>
+      </View>
+
+      {/* Bardak */}
+      <Animated.View style={glassStyle}>
+        <Pressable
+          onPress={handlePress}
+          onLongPress={handleLongPress}
+          delayLongPress={500}
+          disabled={busy}
+          android_ripple={null}
+        >
+          <View style={mg.glassFrame}>
+            <View style={[mg.glassRim, { backgroundColor: `${color}34` }]} />
+            <View style={[mg.glass, {
+            borderColor: done ? color : `${color}50`,
+            backgroundColor: theme.bg,
+          }]}>
+            {/* Su dolumu ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ alttan yukarÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚± */}
+            <View style={[mg.glassShine, { backgroundColor: `${theme.surface}A8` }]} />
+            <Animated.View style={[mg.fill, { backgroundColor: `${color}25` }, fillStyle]}>
+              {/* Dalga yÃƒÆ’Ã†'Ãƒâ€šÃ‚¼zeyi */}
+              <Animated.View style={[mg.wave, { backgroundColor: done ? color : `${color}88` }, waveStyle]} />
+            </Animated.View>
+            {/* Doluluk parÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±ltÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±sÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚± ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ saÃƒÆ’Ã¢â‚¬Ãƒâ€¦Ã‚¸ ÃƒÆ’Ã†'Ãƒâ€šÃ‚¼st kÃƒÆ’Ã†'Ãƒâ€šÃ‚¶ÃƒÆ’Ã¢â‚¬¦Ãƒâ€¦Ã‚¸e */}
+            {done && (
+              <View style={[mg.fullGlow, { backgroundColor: `${color}20` }]} />
+            )}
+            </View>
+          </View>
+        </Pressable>
+      </Animated.View>
+
+      {/* Bardak sayÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚±sÃƒÆ’Ã¢â‚¬Ãƒâ€šÃ‚± rozeti */}
+      <View style={[mg.badge, {
+        backgroundColor: done ? color : `${color}18`,
+        borderColor: done ? `${color}80` : `${color}40`,
+      }]}>
+        <Text style={[mg.badgeTxt, { color: done ? '#fff' : color }]}>{water}</Text>
+      </View>
+
+      {/* Alt etiket */}
+      <Text style={[mg.label, { color: theme.textMuted }]}>{label}</Text>
+      <Text style={[mg.meta, { color: overGoal > 0 ? color : theme.textSub }]}>{statusText}</Text>
+    </View>
+  );
+}
+
+const mg = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', paddingTop: 16, paddingBottom: 2, position: 'relative' },
+
+  spillZone: { position: 'absolute', top: 16, left: 0, right: 0, height: 70, zIndex: 10 },
+  drop:      { position: 'absolute', top: 0, alignItems: 'center' },
+  dropLeft:  { left: '18%' },
+  dropRight: { right: '18%' },
+  dropDot:   { width: 4, height: 5, borderRadius: 3 },
+
+  glassFrame: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  glassRim: {
+    width: MG_W + 10,
+    height: 5,
+    borderRadius: 999,
+    marginBottom: -2,
+    opacity: 0.9,
+  },
+  glass: {
+    width: MG_W,
+    height: MG_H,
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 13,
+    borderBottomRightRadius: 13,
+    overflow: 'hidden',
+  },
+  glassShine: {
+    position: 'absolute',
+    top: 9,
+    right: 7,
+    width: 7,
+    height: 24,
+    borderRadius: 999,
+    opacity: 0.45,
+  },
+  fill:     { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  wave:     { position: 'absolute', top: 0, left: -8, right: -8, height: 2.5, borderRadius: 1.5 },
+  fullGlow: { ...StyleSheet.absoluteFillObject, opacity: 0.6 },
+
+  badge: {
+    position: 'absolute',
+    top: 12,
+    right: 8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    zIndex: 20,
+  },
+  badgeTxt: { fontSize: 8.5, fontWeight: '900' },
+  label:    { fontSize: 9.5, fontWeight: '600', marginTop: 5 },
+  meta:     { fontSize: 8.5, fontWeight: '700', marginTop: 1 },
+});
+
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Next Meal Card ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
 function NextMealCard({ theme, meal, onPressPlans, index }: {
   theme: import('../theme/tokens').Theme;
   meal: any;
@@ -918,7 +1931,48 @@ function NextMealCard({ theme, meal, onPressPlans, index }: {
   );
 }
 
-/* ── Dietitian Note Card ── */
+function CoachTaskCard({
+  theme,
+  task,
+  onPressTask,
+  index,
+}: {
+  theme: import('../theme/tokens').Theme;
+  task: DashboardCoachTask;
+  onPressTask?: () => void;
+  index: number;
+}) {
+  const style = useStaggerItem(index, 300, 60);
+  const { language } = useTranslation();
+
+  return (
+    <Animated.View style={style}>
+      <View style={[s.noteCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+        <View style={s.notePinRow}>
+          <View style={[s.notePinDot, { backgroundColor: theme.emerald }]} />
+          <Text style={[s.notePinLabel, { color: theme.primary }]}>
+            {language === 'tr' ? 'Mini görev' : 'Mini task'}
+          </Text>
+          <Ionicons name="flash-outline" size={11} color={theme.primary} />
+        </View>
+
+        <Text style={[s.noteTaskTitle, { color: theme.text }]}>{task.title}</Text>
+        <Text style={[s.noteText, { color: theme.textSub }]} numberOfLines={3}>{task.body}</Text>
+
+        <TouchableOpacity
+          style={[s.taskCta, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}
+          onPress={onPressTask}
+          activeOpacity={0.82}
+        >
+          <Text style={[s.taskCtaText, { color: theme.primary }]}>{task.cta}</Text>
+          <Ionicons name="arrow-forward" size={12} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}
+
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Dietitian Note Card ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
 function DietitianNoteCard({ theme, note, onPressMessages, index }: {
   theme: import('../theme/tokens').Theme;
   note: string;
@@ -949,7 +2003,7 @@ function DietitianNoteCard({ theme, note, onPressMessages, index }: {
   );
 }
 
-/* ── Latest Measurements Card ── */
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Latest Measurements Card ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
 function LatestMeasurementsCard({ theme, onPressMeasurements, index }: {
   theme: import('../theme/tokens').Theme;
   onPressMeasurements: () => void;
@@ -1032,7 +2086,7 @@ function MeasCell({ label, value, unit, color }: {
   );
 }
 
-/* ── Kitchen Entry Card ── */
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ Kitchen Entry Card ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚Ãƒ¢Ã¢â‚¬Å¡Ã‚¬ */
 function KitchenEntryCard({ theme, onPress, index }: {
   theme: import('../theme/tokens').Theme;
   onPress?: () => void;
@@ -1058,7 +2112,7 @@ function KitchenEntryCard({ theme, onPress, index }: {
           <View style={{ flex: 1 }}>
             <Text style={[s.kitchenCardTitle, { color: theme.text }]}>Mutfak Asistanı</Text>
             <Text style={[s.kitchenCardSub, { color: theme.textMuted }]}>
-              Malzemelerinden tarif öner
+              Malzemelerinden tarif önerir
             </Text>
           </View>
         </View>
@@ -1070,15 +2124,49 @@ function KitchenEntryCard({ theme, onPress, index }: {
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    FREE GRID
-══════════════════════════════════════════════════════ */
-function FreeGrid({ theme, publicUserId, onPressActivate, onPressKitchen, onPressMeasurements }: {
+ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
+function PantryEntryCard({ theme, onPress, index }: {
+  theme: import('../theme/tokens').Theme;
+  onPress?: () => void;
+  index: number;
+}) {
+  const style = useStaggerItem(index, 300, 60);
+  const floatStyle = useFloating(40, 3, 2400);
+  return (
+    <Animated.View style={style}>
+      <TouchableOpacity
+        style={[s.kitchenCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        onPress={onPress}
+        activeOpacity={0.85}
+      >
+        <View style={s.kitchenCardLeft}>
+          <Animated.View style={[s.kitchenOrb, { backgroundColor: `${theme.emerald}14` }, floatStyle]}>
+            <Ionicons name="basket-outline" size={21} color={theme.emerald} />
+          </Animated.View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.kitchenCardTitle, { color: theme.text }]}>Dolabım</Text>
+            <Text style={[s.kitchenCardSub, { color: theme.textMuted }]}>
+              Evdeki malzemeleri düzenle ve hazır tut
+            </Text>
+          </View>
+        </View>
+        <View style={[s.kitchenArrow, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <Ionicons name="arrow-forward" size={14} color={theme.emerald} />
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+function FreeGrid({ theme, publicUserId, onPressActivate, onPressKitchen, onPressMeasurements, onPressPantry }: {
   theme: import('../theme/tokens').Theme;
   publicUserId?: string;
   onPressActivate: () => void;
   onPressKitchen?: () => void;
   onPressMeasurements: () => void;
+  onPressPantry: () => void;
 }) {
   const s0 = useStaggerItem(0, 300, 70);
   const s1 = useStaggerItem(1, 300, 70);
@@ -1097,7 +2185,7 @@ function FreeGrid({ theme, publicUserId, onPressActivate, onPressKitchen, onPres
   return (
     <View style={s.grid}>
 
-      {/* User ID card — share with dietitian */}
+      {/* User ID card ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ share with dietitian */}
       {!!publicUserId && (
         <Animated.View style={s0}>
           <View style={[s.idCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -1175,14 +2263,15 @@ function FreeGrid({ theme, publicUserId, onPressActivate, onPressKitchen, onPres
       {/* Kitchen */}
       <Animated.View style={s3}>
         <KitchenEntryCard theme={theme} onPress={onPressKitchen} index={0} />
+        <PantryEntryCard theme={theme} onPress={onPressPantry} index={1} />
       </Animated.View>
     </View>
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    STYLES
-══════════════════════════════════════════════════════ */
+ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
 const s = StyleSheet.create({
   root:        { flex: 1 },
   produceBubble: {
@@ -1196,7 +2285,43 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
   },
   scroll:      { paddingTop: 68, paddingHorizontal: spacing.base },
-  loadingWrap: { paddingTop: 60, alignItems: 'center' },
+  loadingWrap: { paddingTop: 8, gap: spacing.sm },
+  loadingCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: 16,
+    minHeight: 148,
+  },
+  loadingBarLg: {
+    width: '56%',
+    height: 18,
+    borderRadius: 9,
+    marginBottom: 10,
+  },
+  loadingBarMd: {
+    width: '84%',
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 18,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  loadingPill: {
+    flex: 1,
+    height: 62,
+    borderRadius: radii.lg,
+  },
+  loadingGridRow: {
+    flexDirection: 'row',
+  },
+  loadingPanel: {
+    flex: 1,
+    minHeight: 154,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+  },
   bottomPad:   { height: 138 },
   screenGlowA: {
     position: 'absolute',
@@ -1320,13 +2445,157 @@ const s = StyleSheet.create({
   heroActivateTxt: { color: '#FFF', fontSize: 13, fontWeight: '800' },
 
   /* Smart Actions Rail */
-  actionsRail: { flexDirection: 'row', gap: 8, marginBottom: spacing.md },
+  actionsRail: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md },
+  actionChipSlot: { width: '31.9%' },
   actionChip: {
-    flex: 1, alignItems: 'center', borderRadius: radii.lg, borderWidth: 1,
+    alignItems: 'center', borderRadius: radii.lg, borderWidth: 1,
     paddingVertical: 12, paddingHorizontal: 6, gap: 6,
   },
   actionIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  actionLabel: { fontSize: 9.5, fontWeight: '700', textAlign: 'center' },
+  actionLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
+
+  /* Continue Card */
+  continueCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 7,
+  },
+  continueAccent: {
+    position: 'absolute',
+    top: -22,
+    right: -18,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    opacity: 0.9,
+  },
+  continueTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  continueEyebrowPill: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  continueEyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  continueIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 22,
+    letterSpacing: -0.3,
+    marginBottom: 6,
+    maxWidth: 280,
+  },
+  continueBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 14,
+    maxWidth: 300,
+  },
+  continueFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  continueCTA: {
+    fontSize: 13,
+    fontWeight: '800',
+    flex: 1,
+  },
+  continueCTAChip: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  continueCTAChipText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+
+  todayPulseCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  todayPulseHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, alignItems: 'flex-start' },
+  todayPulseEyebrow: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0.8 },
+  todayPulseTitle: { fontSize: 16, fontWeight: '900', lineHeight: 21, marginTop: 4 },
+  todayPulseMeta: { borderRadius: radii.full, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
+  todayPulseMetaTxt: { fontSize: 10.5, fontWeight: '700' },
+  todayPulseGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  todayPulseTile: { width: '48%', minHeight: 126, borderRadius: radii.lg, borderWidth: 1, padding: 12 },
+  todayPulseIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  todayPulseValue: { fontSize: 15, fontWeight: '900', marginBottom: 2 },
+  todayPulseTileTitle: { fontSize: 11.5, fontWeight: '800', marginBottom: 4 },
+  todayPulseTileBody: { fontSize: 10.5, lineHeight: 15.5, fontWeight: '500' },
+  rescueCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  rescueAccent: {
+    position: 'absolute',
+    top: -26,
+    right: -18,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  rescueHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rescueIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rescueEyebrow: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0.8, marginBottom: 3 },
+  rescueTitle: { fontSize: 16, fontWeight: '900', lineHeight: 21 },
+  rescueProgress: { borderRadius: radii.full, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
+  rescueProgressTxt: { fontSize: 11, fontWeight: '800' },
+  rescueBody: { fontSize: 12.5, lineHeight: 18, marginTop: 12, marginBottom: 12, paddingRight: 18 },
+  rescueFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rescueCTA: { fontSize: 12.5, fontWeight: '900' },
 
   /* Grid */
   grid: { gap: spacing.sm },
@@ -1334,7 +2603,7 @@ const s = StyleSheet.create({
   /* Stats Shelf */
   statsShelf: {
     flexDirection: 'row', borderRadius: radii.xl, borderWidth: 1,
-    paddingVertical: 16, overflow: 'hidden', marginBottom: spacing.sm,
+    paddingVertical: 16, marginBottom: spacing.sm,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
   },
   statCell:    { flex: 1, alignItems: 'center', paddingVertical: 2 },
@@ -1374,6 +2643,7 @@ const s = StyleSheet.create({
     gap: 14,
     marginBottom: 14,
   },
+  motivationTextWrap: { flex: 1, paddingRight: 6 },
   motivationEyebrow: {
     fontSize: 10,
     fontWeight: '900',
@@ -1393,6 +2663,56 @@ const s = StyleSheet.create({
     lineHeight: 18,
     maxWidth: 230,
   },
+  motivationMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  motivationStatsStrip: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  motivationStatTile: {
+    flex: 1,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  motivationStatIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  motivationStatValue: {
+    fontSize: 14,
+    fontWeight: '900',
+    marginBottom: 2,
+  },
+  motivationStatLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  streakBubbleWrap: {
+    minWidth: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakPulse: {
+    position: 'absolute',
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 1,
+  },
   streakBubble: {
     minWidth: 68,
     borderRadius: 24,
@@ -1403,15 +2723,75 @@ const s = StyleSheet.create({
   },
   streakBubbleValue: { fontSize: 24, fontWeight: '900', letterSpacing: -0.6 },
   streakBubbleLabel: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  motivationSpotlight: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: 14,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  motivationSpotlightShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 84,
+    opacity: 0.24,
+  },
+  motivationSpotlightHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  motivationSpotlightEyebrow: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    marginBottom: 2,
+  },
+  motivationSpotlightHeading: {
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  motivationSpotlightBody: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  motivationSpotlightSeal: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  motivationSpotlightText: { flex: 1 },
+  motivationSpotlightTitle: { fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  motivationSpotlightCopy: { fontSize: 11.5, lineHeight: 17, marginBottom: 9 },
+  motivationSpotlightMeta: { fontSize: 10.5, fontWeight: '700', marginTop: 6 },
   badgeRail: { gap: 10, paddingRight: 8 },
   badgeCard: {
-    width: 154,
+    width: 168,
     borderRadius: radii.xl,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 10,
   },
+  badgeCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+  },
+  badgeStatusPill: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badgeStatusTxt: { fontSize: 8.5, fontWeight: '900', letterSpacing: 0.4 },
   badgeSeal: {
     width: 58,
     height: 58,
@@ -1446,11 +2826,19 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   badgeProgressFill: { height: '100%', borderRadius: 3 },
+  badgeFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  badgeFooterText: { fontSize: 10, fontWeight: '800' },
   motivationFooter: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 14,
+    alignItems: 'center',
   },
   footerPill: {
     flexDirection: 'row',
@@ -1462,6 +2850,19 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   footerPillText: { fontSize: 10.5, fontWeight: '700' },
+  motivationCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.full,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  motivationCTAText: { color: '#fff', fontSize: 11.5, fontWeight: '800' },
 
   /* Next Meal Card */
   nextMealCard: {
@@ -1495,7 +2896,10 @@ const s = StyleSheet.create({
   notePinRow:   { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
   notePinDot:   { width: 5, height: 5, borderRadius: 2.5 },
   notePinLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', flex: 1 },
+  noteTaskTitle:{ fontSize: 15, fontWeight: '800', marginBottom: 6 },
   noteText:     { fontSize: 13, fontWeight: '500', lineHeight: 19, marginBottom: 10 },
+  taskCta:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderWidth: 1, borderRadius: radii.full, paddingHorizontal: 12, paddingVertical: 10 },
+  taskCtaText:  { fontSize: 12, fontWeight: '800' },
   noteCtaRow:   { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' },
   noteCtaTxt:   { fontSize: 11, fontWeight: '800' },
 
@@ -1610,3 +3014,5 @@ const s = StyleSheet.create({
   freeTileTitle: { fontSize: 13, fontWeight: '800', marginBottom: 1 },
   freeTileSub:   { fontSize: 11, fontWeight: '500' },
 });
+
+

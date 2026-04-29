@@ -7,6 +7,13 @@ namespace MyDietitianMobileApp.Application.Services;
 
 public class ClientGamificationService : IClientGamificationService
 {
+    public const int HydrationGoalGlasses = 10;
+    private const int HydrationStreakBadgeDays = 3;
+    private static readonly HashSet<string> EphemeralAchievements =
+    [
+        "likir_likir"
+    ];
+
     public static class EventTypes
     {
         public const string AppOpen = "app_open";
@@ -285,6 +292,8 @@ public class ClientGamificationService : IClientGamificationService
                 }
             }
 
+            var completedMeals = doneMeals + alternativeMeals;
+
             var adherenceScore = plannedMeals > 0
                 ? Math.Min(1m, (doneMeals + (alternativeMeals * 0.7m)) / plannedMeals)
                 : 0m;
@@ -295,14 +304,14 @@ public class ClientGamificationService : IClientGamificationService
 
             var kitchenEvents = dayEvents.Count(x => x.EventType == EventTypes.KitchenRecipeGenerated);
             var appOpenEvents = dayEvents.Count(x => x.EventType == EventTypes.AppOpen);
-            var waterGoalHit = (dailyTracking?.WaterGlasses ?? 0) >= 8;
+            var waterGoalHit = (dailyTracking?.WaterGlasses ?? 0) >= HydrationGoalGlasses;
             var measurementLogged = measurementDates.Contains(cursor);
             var careMessageSent = careMessageDates.Contains(cursor);
-            var engagementScore = BuildEngagementScore(kitchenEvents, appOpenEvents, waterGoalHit, measurementLogged, careMessageSent, doneMeals + alternativeMeals);
+            var engagementScore = BuildEngagementScore(kitchenEvents, appOpenEvents, waterGoalHit, measurementLogged, careMessageSent, completedMeals);
             var primaryTrack = isPremium && plannedMeals > 0 ? "plan_adherence" : "daily_rhythm";
             var qualifiedForStreak = primaryTrack == "plan_adherence"
                 ? adherenceScore >= 0.8m
-                : kitchenEvents > 0 || (appOpenEvents > 0 && (waterGoalHit || measurementLogged || careMessageSent || doneMeals + alternativeMeals > 0));
+                : kitchenEvents > 0 || (appOpenEvents > 0 && (waterGoalHit || measurementLogged || careMessageSent || completedMeals > 0));
 
             runningStreak = qualifiedForStreak ? runningStreak + 1 : 0;
             bestStreak = Math.Max(bestStreak, runningStreak);
@@ -339,11 +348,28 @@ public class ClientGamificationService : IClientGamificationService
                 : "Bugun ritmi koruyacak bir etkileşim henuz yok."
             : null;
 
-        var anyPerfectDay = dayStates.Any(x => x.PlannedMeals > 0 && x.DoneMeals == x.PlannedMeals);
-        var anyFlexSaver = dayStates.Any(x => x.PlannedMeals > 0 && x.AlternativeMeals > 0 && x.AdherenceScore >= 0.8m);
+        var anyPerfectDay = dayStates.Any(IsPerfectDay);
+        var anyFlexSaver = dayStates.Any(x => x.PlannedMeals > 0 && x.AlternativeMeals > 0);
         var daysWithKitchen = dayStates.Count(x => x.KitchenEvents > 0);
-        var daysWithWaterGoal = dayStates.Count(x => x.WaterGoalHit);
         var weeklyQualifiedDays = dayStates.TakeLast(7).Count(x => x.QualifiedForStreak);
+        var hydrationRunningStreak = 0;
+        var hydrationStreakByDate = new Dictionary<DateOnly, int>();
+
+        foreach (var state in dayStates)
+        {
+            hydrationRunningStreak = state.WaterGoalHit ? hydrationRunningStreak + 1 : 0;
+            hydrationStreakByDate[state.Date] = hydrationRunningStreak;
+        }
+
+        var currentHydrationStreak = todayState.WaterGoalHit
+            ? hydrationStreakByDate.GetValueOrDefault(todayState.Date, 0)
+            : yesterdayState != null
+                ? hydrationStreakByDate.GetValueOrDefault(yesterdayState.Date, 0)
+                : 0;
+        var activePantryItems = await _appDb.ClientPantryItems
+            .AsNoTracking()
+            .Where(x => x.ClientId == clientId)
+            .CountAsync(ct);
 
         var achievements = new List<GamificationAchievementDTO>
         {
@@ -354,7 +380,9 @@ public class ClientGamificationService : IClientGamificationService
             CreateAchievement("protein_focus", (int)Math.Round(Math.Min(todayState.ProteinTotal, 70m)), 70, unlocks),
             CreateAchievement("veggie_focus", Math.Min(todayState.VegetableSignals, 3), 3, unlocks),
             CreateAchievement("kitchen_spark", Math.Min(daysWithKitchen, 5), 5, unlocks),
-            CreateAchievement("water_keeper", Math.Min(daysWithWaterGoal, 3), 3, unlocks),
+            CreateAchievement("pantry_ready", Math.Min(activePantryItems, 8), 8, unlocks),
+            CreateDailyAchievement("likir_likir", todayState.WaterGlasses, HydrationGoalGlasses),
+            CreateAchievement("water_keeper", currentHydrationStreak, HydrationStreakBadgeDays, unlocks),
             CreateAchievement("flex_saver", anyFlexSaver ? 1 : 0, 1, unlocks),
             CreateAchievement("plan_keeper", Math.Min(weeklyQualifiedDays, 5), 5, unlocks)
         };
@@ -362,6 +390,9 @@ public class ClientGamificationService : IClientGamificationService
         var newlyUnlocked = new List<string>();
         foreach (var achievement in achievements.Where(x => x.Unlocked))
         {
+            if (EphemeralAchievements.Contains(achievement.Id))
+                continue;
+
             if (unlocks.ContainsKey(achievement.Id))
                 continue;
 
@@ -464,7 +495,7 @@ public class ClientGamificationService : IClientGamificationService
                 AdherenceScore = todayState.AdherenceScore,
                 EngagementScore = todayState.EngagementScore,
                 QualifiedForStreak = todayState.QualifiedForStreak,
-                PerfectDay = todayState.PlannedMeals > 0 && todayState.DoneMeals == todayState.PlannedMeals,
+                PerfectDay = IsPerfectDay(todayState),
                 PlannedMeals = todayState.PlannedMeals,
                 DoneMeals = todayState.DoneMeals,
                 AlternativeMeals = todayState.AlternativeMeals,
@@ -497,6 +528,20 @@ public class ClientGamificationService : IClientGamificationService
         };
     }
 
+    private static GamificationAchievementDTO CreateDailyAchievement(
+        string id,
+        int progressCurrent,
+        int progressTarget)
+    {
+        return new GamificationAchievementDTO
+        {
+            Id = id,
+            ProgressCurrent = Math.Min(progressCurrent, progressTarget),
+            ProgressTarget = progressTarget,
+            Unlocked = progressCurrent >= progressTarget
+        };
+    }
+
     private static decimal BuildEngagementScore(
         int kitchenEvents,
         int appOpenEvents,
@@ -513,6 +558,16 @@ public class ClientGamificationService : IClientGamificationService
         score += careMessageSent ? 0.1m : 0m;
         score += completedMeals > 0 ? 0.15m : 0m;
         return Math.Min(1m, score);
+    }
+
+    private static int GetCompletedMeals(DayState state)
+    {
+        return state.DoneMeals + state.AlternativeMeals;
+    }
+
+    private static bool IsPerfectDay(DayState state)
+    {
+        return state.PlannedMeals > 0 && GetCompletedMeals(state) == state.PlannedMeals;
     }
 
     private static bool HasVegetableSignal(PlanMealItem item)

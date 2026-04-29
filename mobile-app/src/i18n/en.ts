@@ -1,4 +1,4 @@
-// src/i18n/en.ts — English translations
+﻿// src/i18n/en.ts â€” English translations
 import type { Translations } from './tr';
 
 export const en: Translations = {
@@ -17,7 +17,7 @@ export const en: Translations = {
     save:       'Save',
     cancel:     'Cancel',
     confirm:    'Confirm',
-    back:       '← Back',
+    back:       'â† Back',
     close:      'Close',
     ok:         'OK',
     yes:        'Yes',
@@ -119,8 +119,8 @@ export const en: Translations = {
     title:          'My Plan',
     noPlan:         'No plan yet',
     noPlanDesc:     'Enter the code from your dietitian to access your personal plan.',
-    noPlanBtn:      '🔑 Enter Premium Code',
-    exploreRecipes: '🍳 Explore Recipes →',
+    noPlanBtn:      'ğŸ”‘ Enter Premium Code',
+    exploreRecipes: 'ğŸ³ Explore Recipes â†’',
     todayEmpty:     'No plan for today',
     todayEmptyDesc: 'Your dietitian\'s plan will appear here when ready.',
     progress:       "Today's Progress",
@@ -175,7 +175,7 @@ export const en: Translations = {
     languageTR:      'Türkçe',
     languageEN:      'English',
     version:         'Version',
-    activatePremium: '✨ Upgrade to Premium',
+    activatePremium: 'âœ¨ Upgrade to Premium',
     logout:          'Log Out',
     logoutConfirm:   'Are you sure you want to log out?',
     userId:          'User ID',
@@ -189,19 +189,19 @@ export const en: Translations = {
     placeholder: 'Access Key (e.g. ABC-123)',
     activate:    'Activate',
     activating:  'Activating...',
-    success:     'Premium active! 🎉',
+    success:     'Premium active! ğŸ‰',
     successDesc: 'connected with your dietitian.',
     error:       'Invalid code',
     freeBenefits: [
-      '🥗 General recipes and recipe engine',
-      '📏 Measurement tracking (waist, hip, chest)',
+      'ğŸ¥— General recipes and recipe engine',
+      'ğŸ“ Measurement tracking (waist, hip, chest)',
     ],
     premiumBenefits: [
-      '📋 Personal diet plans',
-      '📊 Meal tracking and compliance scores',
-      '🔄 Alternative meal suggestions',
-      '📈 Progress and streak tracking',
-      '💬 Dietitian notes',
+      'ğŸ“‹ Personal diet plans',
+      'ğŸ“Š Meal tracking and compliance scores',
+      'ğŸ”„ Alternative meal suggestions',
+      'ğŸ“ˆ Progress and streak tracking',
+      'ğŸ’¬ Dietitian notes',
     ],
   },
 
@@ -231,3 +231,4 @@ export const en: Translations = {
     unknown:      'An unexpected error occurred.',
   },
 };
+

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import * as NavigationBar from 'expo-navigation-bar';
 import { lightTheme, darkTheme, type Theme } from '../theme/tokens';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -36,6 +37,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mode === 'dark' || (mode === 'system' && systemScheme === 'dark');
 
   const theme = isDark ? darkTheme : lightTheme;
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    void NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark');
+  }, [isDark]);
 
   return (
     <ThemeContext.Provider value={{ mode, setMode, theme, isDark }}>

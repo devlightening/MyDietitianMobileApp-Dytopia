@@ -49,6 +49,7 @@
     --brand-glow-soft: rgba(71, 185, 114, 0.10);
     --brand-accent: #57b8c7;
     --brand-accent-soft: rgba(87, 184, 199, 0.12);
+    --brand-accent-contrast: #0f172a;
     --brand-coral: #e57e6b;
     --brand-gold: #e3c45d;
 
@@ -72,6 +73,13 @@
     --shadow-emerald: 0 18px 40px rgba(71, 185, 114, 0.12);
     --shadow-emerald-sm: 0 8px 22px rgba(71, 185, 114, 0.10);
     --shadow-glow: 0 0 0 4px rgba(71, 185, 114, 0.16);
+    --page-glow-primary: rgba(123, 199, 162, 0.18);
+    --page-glow-accent: rgba(87, 184, 199, 0.08);
+    --page-glow-primary-dark: rgba(97, 210, 136, 0.10);
+    --page-glow-accent-dark: rgba(105, 196, 207, 0.05);
+    --preview-primary-soft: rgba(71, 185, 114, 0.16);
+    --preview-accent-soft: rgba(87, 184, 199, 0.16);
+    --preview-accent-strong: #57b8c7;
 
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -127,6 +135,7 @@
     --brand-glow-soft: rgba(97, 210, 136, 0.12);
     --brand-accent: #69c4cf;
     --brand-accent-soft: rgba(105, 196, 207, 0.16);
+    --brand-accent-contrast: #07130f;
     --brand-coral: #f08a78;
     --brand-gold: #e8ce75;
 
@@ -204,8 +213,8 @@
   body {
     min-height: 100vh;
     background:
-      radial-gradient(circle at top left, rgba(123, 199, 162, 0.18), transparent 28%),
-      radial-gradient(circle at right 12%, rgba(87, 184, 199, 0.08), transparent 24%),
+      radial-gradient(circle at top left, var(--page-glow-primary), transparent 28%),
+      radial-gradient(circle at right 12%, var(--page-glow-accent), transparent 24%),
       linear-gradient(180deg, #fbfefb 0%, var(--surface-base) 34%, #f3faf5 100%);
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
@@ -217,8 +226,8 @@
   .dark body {
     color-scheme: dark;
     background:
-      radial-gradient(circle at top left, rgba(97, 210, 136, 0.10), transparent 26%),
-      radial-gradient(circle at right 12%, rgba(105, 196, 207, 0.05), transparent 20%),
+      radial-gradient(circle at top left, var(--page-glow-primary-dark), transparent 26%),
+      radial-gradient(circle at right 12%, var(--page-glow-accent-dark), transparent 20%),
       linear-gradient(180deg, #050807 0%, #060909 32%, var(--surface-base) 100%);
   }
 
@@ -286,8 +295,8 @@
 
   .card-premium {
     background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(223, 241, 227, 0.96)),
-      linear-gradient(180deg, rgba(71, 185, 114, 0.06), rgba(71, 185, 114, 0));
+      linear-gradient(145deg, rgba(255, 255, 255, 0.98), var(--brand-primary-softer)),
+      linear-gradient(180deg, var(--brand-glow-soft), rgba(255, 255, 255, 0));
     border: 1px solid var(--border-emerald-dim);
     border-radius: 1.75rem;
     box-shadow: var(--shadow-card), var(--shadow-emerald);
@@ -338,7 +347,7 @@
     color: var(--brand-primary-contrast);
     font-size: 0.9rem;
     font-weight: 600;
-    box-shadow: 0 10px 22px rgba(71, 185, 114, 0.18);
+    box-shadow: var(--shadow-emerald-sm);
     transition:
       background var(--duration-fast) ease,
       box-shadow var(--duration-base) ease,
@@ -348,7 +357,7 @@
 
   .btn-primary:hover {
     background: var(--brand-primary-hover);
-    box-shadow: 0 14px 28px rgba(71, 185, 114, 0.24);
+    box-shadow: var(--shadow-emerald);
     transform: translateY(-1px);
   }
 
@@ -458,9 +467,9 @@
   }
 
   .badge-active {
-    background: rgba(44, 157, 102, 0.10);
+    background: var(--brand-primary-soft);
     color: var(--brand-emerald);
-    border-color: rgba(44, 157, 102, 0.20);
+    border-color: var(--border-emerald-dim);
   }
 
   .badge-inactive {
@@ -484,7 +493,7 @@
   .badge-new {
     background: var(--brand-accent-soft);
     color: var(--brand-accent);
-    border-color: rgba(87, 184, 199, 0.20);
+    border-color: rgba(var(--brand-accent-rgb), 0.24);
   }
 
   .nav-item {
@@ -588,7 +597,7 @@
   .kpi-cyan {
     background: var(--brand-accent-soft);
     color: var(--brand-accent);
-    border: 1px solid rgba(87, 184, 199, 0.20);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.24);
   }
 
   .kpi-gold {
@@ -643,9 +652,9 @@
   .shimmer {
     background: linear-gradient(
       90deg,
-      rgba(223, 241, 227, 0.55) 0%,
+      var(--brand-primary-softer) 0%,
       rgba(255, 255, 255, 0.96) 48%,
-      rgba(223, 241, 227, 0.55) 100%
+      var(--brand-primary-softer) 100%
     );
     background-size: 240% 100%;
     animation: shimmer 1.5s var(--ease-in-out-smooth) infinite;
@@ -780,21 +789,21 @@
 @keyframes pulseGlow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(71, 185, 114, 0.16);
+    box-shadow: 0 0 0 0 var(--brand-glow);
   }
 
   50% {
-    box-shadow: 0 0 0 8px rgba(71, 185, 114, 0);
+    box-shadow: 0 0 0 8px rgba(var(--brand-primary-rgb), 0);
   }
 }
 
 @keyframes ringExpand {
   from {
-    box-shadow: 0 0 0 0 rgba(71, 185, 114, 0.18);
+    box-shadow: 0 0 0 0 var(--brand-glow);
   }
 
   to {
-    box-shadow: 0 0 0 12px rgba(71, 185, 114, 0);
+    box-shadow: 0 0 0 12px rgba(var(--brand-primary-rgb), 0);
   }
 }
 
@@ -815,7 +824,7 @@ textarea:focus-visible,
 select:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid rgba(71, 185, 114, 0.42);
+  outline: 2px solid var(--border-glow);
   outline-offset: 2px;
 }
 
@@ -843,7 +852,7 @@ a:focus-visible {
 }
 
 ::selection {
-  background: rgba(71, 185, 114, 0.18);
+  background: var(--brand-primary-soft);
   color: hsl(var(--foreground));
 }
 

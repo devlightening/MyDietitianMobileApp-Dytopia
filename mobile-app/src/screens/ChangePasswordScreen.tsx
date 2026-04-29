@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, StatusBar,
@@ -29,7 +29,7 @@ export default function ChangePasswordScreen() {
 
   const tr = language === "tr";
 
-  // ── inline validation errors ──────────────────────────────────────────
+  // â”€â”€ inline validation errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const tooShort    = newPassword.length > 0 && newPassword.length < 8;
   const noMatch     = confirmPassword.length > 0 && newPassword !== confirmPassword;
   const sameAsCur   = newPassword.length > 0 && newPassword === currentPassword;
@@ -92,7 +92,7 @@ export default function ChangePasswordScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Header ── */}
+        {/* â”€â”€ Header â”€â”€ */}
         <TouchableOpacity onPress={() => (navigation as any).goBack()} style={s.backRow}>
           <Ionicons name="chevron-back" size={18} color={theme.primary} />
           <Text style={[s.backText, { color: theme.primary }]}>
@@ -109,7 +109,7 @@ export default function ChangePasswordScreen() {
             : "Choose a strong password for your security."}
         </Text>
 
-        {/* ── Form card ── */}
+        {/* â”€â”€ Form card â”€â”€ */}
         <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
 
           {/* Current password */}
@@ -210,7 +210,7 @@ export default function ChangePasswordScreen() {
           )}
         </View>
 
-        {/* ── Submit button ── */}
+        {/* â”€â”€ Submit button â”€â”€ */}
         <TouchableOpacity
           style={[
             s.submitBtn,
@@ -235,7 +235,7 @@ export default function ChangePasswordScreen() {
           )}
         </TouchableOpacity>
 
-        {/* ── Info note ── */}
+        {/* â”€â”€ Info note â”€â”€ */}
         <View style={[s.infoRow, { backgroundColor: `${theme.emerald}0A`, borderColor: `${theme.emerald}20` }]}>
           <Ionicons name="information-circle-outline" size={15} color={theme.emerald} />
           <Text style={[s.infoTxt, { color: theme.textSub }]}>
@@ -296,3 +296,4 @@ const s = StyleSheet.create({
   },
   infoTxt: { flex: 1, fontSize: 12, fontWeight: "500", lineHeight: 18 },
 });
+

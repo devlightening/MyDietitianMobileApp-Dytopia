@@ -131,5 +131,103 @@ public class RecipeRecommendationLoggingTests
             "engine must record that a substitute ingredient was used");
         log.OriginalCookable.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task AlternativeMealDecision_Returns_Fallback_Alternatives_When_Strict_Pool_Is_Empty()
+    {
+        await using var db = CreateDbContext();
+
+        var dietitianId = Guid.NewGuid();
+        var originalIngredient = new Ingredient(Guid.NewGuid(), "Patlican");
+        db.Ingredients.Add(originalIngredient);
+
+        var originalRecipe = new Recipe(Guid.NewGuid(), dietitianId, "Imam Bayildi", "Desc", isPublic: false);
+        originalRecipe.AddMandatoryIngredient(originalIngredient);
+        db.Recipes.Add(originalRecipe);
+
+        for (var recipeIndex = 0; recipeIndex < 2; recipeIndex++)
+        {
+            var candidate = new Recipe(
+                Guid.NewGuid(),
+                dietitianId,
+                $"Alternatif {recipeIndex + 1}",
+                "Desc",
+                isPublic: false);
+
+            for (var ingredientIndex = 0; ingredientIndex < 4; ingredientIndex++)
+            {
+                var ingredient = new Ingredient(Guid.NewGuid(), $"Aday-{recipeIndex}-{ingredientIndex}");
+                db.Ingredients.Add(ingredient);
+                candidate.AddMandatoryIngredient(ingredient);
+            }
+
+            db.Recipes.Add(candidate);
+        }
+
+        await db.SaveChangesAsync();
+
+        var service = new AlternativeMealDecisionService(
+            db,
+            CreateRepository(db),
+            CreateEngine(),
+            new IngredientTaxonomyService(db));
+
+        var decision = await service.DecideForMealAsync(
+            plannedRecipeId: originalRecipe.Id,
+            mealType: MealType.Breakfast,
+            clientAvailableIngredients: new List<Guid>(),
+            dietitianId: dietitianId,
+            CancellationToken.None);
+
+        decision.CanCookOriginal.Should().BeFalse();
+        decision.AlternativeRecommendations.Should().HaveCount(2,
+            "strict filter boşalsa bile sistem yine de aynı diyetisyenin en yakın alternatiflerini göstermeli");
+        decision.AlternativeRecommendations
+            .Select(x => x.RecipeName)
+            .Should()
+            .Contain(new[] { "Alternatif 1", "Alternatif 2" });
+    }
+
+    [Fact]
+    public async Task AlternativeMealDecision_Uses_Explicit_RecipeIngredients_When_Shadow_Joins_Are_Empty()
+    {
+        await using var db = CreateDbContext();
+
+        var dietitianId = Guid.NewGuid();
+        var originalIngredient = new Ingredient(Guid.NewGuid(), "Patlican");
+        var candidateIngredient = new Ingredient(Guid.NewGuid(), "Yogurt");
+        db.Ingredients.AddRange(originalIngredient, candidateIngredient);
+
+        var originalRecipe = new Recipe(Guid.NewGuid(), dietitianId, "Imam Bayildi", "Desc", isPublic: false);
+        originalRecipe.AddMandatoryIngredient(originalIngredient);
+        db.Recipes.Add(originalRecipe);
+
+        var importedCandidate = new Recipe(Guid.NewGuid(), dietitianId, "Yogurtlu Alternatif", "Desc", isPublic: false);
+        db.Recipes.Add(importedCandidate);
+
+        db.RecipeIngredients.Add(new RecipeIngredient(
+            importedCandidate.Id,
+            candidateIngredient.Id,
+            RecipeIngredient.MandatoryRole));
+
+        await db.SaveChangesAsync();
+
+        var service = new AlternativeMealDecisionService(
+            db,
+            CreateRepository(db),
+            CreateEngine(),
+            new IngredientTaxonomyService(db));
+
+        var decision = await service.DecideForMealAsync(
+            plannedRecipeId: originalRecipe.Id,
+            mealType: MealType.Breakfast,
+            clientAvailableIngredients: new List<Guid>(),
+            dietitianId: dietitianId,
+            CancellationToken.None);
+
+        decision.CanCookOriginal.Should().BeFalse();
+        decision.AlternativeRecommendations.Should().ContainSingle();
+        decision.AlternativeRecommendations[0].RecipeName.Should().Be("Yogurtlu Alternatif");
+    }
 }
 

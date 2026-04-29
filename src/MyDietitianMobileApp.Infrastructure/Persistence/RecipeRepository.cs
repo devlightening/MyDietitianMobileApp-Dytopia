@@ -29,11 +29,57 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
 
         public async Task<List<Recipe>> GetAllWithIngredientsAsync(CancellationToken cancellationToken)
         {
-            return await _context.Recipes
+            var recipes = await _context.Recipes
                 .Include(r => r.MandatoryIngredients)
                 .Include(r => r.OptionalIngredients)
                 .Include(r => r.ProhibitedIngredients)
                 .ToListAsync(cancellationToken);
+
+            if (recipes.Count == 0)
+            {
+                return recipes;
+            }
+
+            var recipeIds = recipes.Select(r => r.Id).ToList();
+            var explicitIngredients = await _context.RecipeIngredients
+                .AsNoTracking()
+                .Where(ri => recipeIds.Contains(ri.RecipeId))
+                .Include(ri => ri.Ingredient)
+                .ToListAsync(cancellationToken);
+
+            var groupedByRecipe = explicitIngredients
+                .GroupBy(ri => ri.RecipeId)
+                .ToDictionary(group => group.Key, group => group.ToList());
+
+            foreach (var recipe in recipes)
+            {
+                if (!groupedByRecipe.TryGetValue(recipe.Id, out var explicitRows))
+                {
+                    continue;
+                }
+
+                var mandatory = explicitRows
+                    .Where(ri => ri.Role == RecipeIngredient.MandatoryRole)
+                    .Select(ri => ri.Ingredient)
+                    .DistinctBy(ingredient => ingredient.Id)
+                    .ToList();
+
+                var optional = explicitRows
+                    .Where(ri => ri.Role == RecipeIngredient.OptionalRole || ri.Role == RecipeIngredient.FlavoringRole)
+                    .Select(ri => ri.Ingredient)
+                    .DistinctBy(ingredient => ingredient.Id)
+                    .ToList();
+
+                var prohibited = explicitRows
+                    .Where(ri => ri.Role == RecipeIngredient.ProhibitedRole)
+                    .Select(ri => ri.Ingredient)
+                    .DistinctBy(ingredient => ingredient.Id)
+                    .ToList();
+
+                recipe.HydrateFromExplicitIngredients(mandatory, optional, prohibited);
+            }
+
+            return recipes;
         }
     }
 }

@@ -138,6 +138,8 @@ export interface CareTimelineItem {
   text: string;
   createdAtUtc: string;
   isRead: boolean;
+  replyToId?: string | null;
+  replyToSnippet?: string | null;
 }
 
 export interface ClientAppointment {
@@ -346,8 +348,14 @@ export async function addClientCareNote(
 export async function sendClientCareReply(
   clientId: string,
   text: string,
+  replyToId?: string | null,
+  replyToSnippet?: string | null,
 ): Promise<{ item: CareTimelineItem }> {
-  const res = await api.post(`/api/dietitian/clients/${clientId}/care/replies`, { text });
+  const res = await api.post(`/api/dietitian/clients/${clientId}/care/replies`, {
+    text,
+    replyToId: replyToId ?? null,
+    replyToSnippet: replyToSnippet ?? null,
+  });
   return res.data;
 }
 

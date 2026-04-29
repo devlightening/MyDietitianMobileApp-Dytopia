@@ -10,9 +10,30 @@ internal sealed class RecipeImportIngredientMatcher
     private const double AmbiguousDelta = 0.04;
     private readonly AppDbContext _db;
 
+    // Lazily populated on first MatchAsync call and reused for the session lifetime.
+    // Avoids a full-table DB scan per ingredient (N×M queries → 1 query total).
+    private List<IngredientCandidate>? _cachedIngredients;
+
     public RecipeImportIngredientMatcher(AppDbContext db)
     {
         _db = db;
+    }
+
+    private async Task<List<IngredientCandidate>> GetIngredientsAsync(CancellationToken cancellationToken)
+    {
+        if (_cachedIngredients != null)
+            return _cachedIngredients;
+
+        _cachedIngredients = await _db.Ingredients
+            .AsNoTracking()
+            .Where(ingredient => ingredient.IsActive)
+            .Select(ingredient => new IngredientCandidate(
+                ingredient.Id,
+                ingredient.CanonicalName,
+                ingredient.Aliases == null ? null : ingredient.Aliases.ToString()))
+            .ToListAsync(cancellationToken);
+
+        return _cachedIngredients;
     }
 
     public async Task<ImportIngredientMatchResult> MatchAsync(string rawName, CancellationToken cancellationToken)
@@ -28,14 +49,7 @@ internal sealed class RecipeImportIngredientMatcher
         var normalized = rawName.Trim();
         var folded = ImportNormalizer.FoldText(rawName);
 
-        var ingredients = await _db.Ingredients
-            .AsNoTracking()
-            .Where(ingredient => ingredient.IsActive)
-            .Select(ingredient => new IngredientCandidate(
-                ingredient.Id,
-                ingredient.CanonicalName,
-                ingredient.Aliases == null ? null : ingredient.Aliases.ToString()))
-            .ToListAsync(cancellationToken);
+        var ingredients = await GetIngredientsAsync(cancellationToken);
 
         foreach (var ingredient in ingredients)
         {
