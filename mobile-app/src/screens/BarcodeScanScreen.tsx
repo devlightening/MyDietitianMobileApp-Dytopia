@@ -208,12 +208,12 @@ export default function BarcodeScanScreen() {
           <View style={[s.resultCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
             <Text style={[s.resultTitle, { color: theme.text }]}>{result.productName || result.barcode}</Text>
             <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-              {result.brand ? `${result.brand} â€¢ ` : ''}
-              {result.sourceProvider} â€¢ {Math.round(result.confidence * 100)}%
+              {result.brand ? `${result.brand} • ` : ''}
+              {result.sourceProvider} • {Math.round(result.confidence * 100)}%
             </Text>
             <Text style={[s.resultMeta, { color: theme.textMuted }]}>
               {result.mappingType}
-              {result.requiresConfirmation ? ' â€¢ kullanıcı onayı gerekli' : ' â€¢ güvenli otomatik eşleşme'}
+              {result.requiresConfirmation ? ' • kullanıcı onayı gerekli' : ' • güvenli otomatik eşleşme'}
             </Text>
           </View>
 
@@ -236,7 +236,7 @@ export default function BarcodeScanScreen() {
                   <View style={s.candidateMain}>
                     <Text style={[s.candidateTitle, { color: theme.text }]}>{candidate.canonicalName}</Text>
                     <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-                      {candidate.mappingType} â€¢ {Math.round(candidate.confidence * 100)}%
+                      {candidate.mappingType} • {Math.round(candidate.confidence * 100)}%
                     </Text>
                   </View>
                   <View

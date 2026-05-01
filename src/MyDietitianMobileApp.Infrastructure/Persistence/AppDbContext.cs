@@ -287,6 +287,14 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.Property(e => e.RecipeId)
                     .IsRequired(false);
 
+                entity.Property(e => e.SelectedRecipeId)
+                    .IsRequired(false);
+
+                entity.Property(e => e.SelectedRecipeSource)
+                    .IsRequired()
+                    .HasMaxLength(24)
+                    .HasDefaultValue("Original");
+
                 entity.Property(e => e.Title)
                     .IsRequired()
                     .HasMaxLength(200);
@@ -314,6 +322,9 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasIndex(e => e.Time)
                     .HasDatabaseName("IX_PlanMealItems_Time");
 
+                entity.HasIndex(e => e.SelectedRecipeId)
+                    .HasDatabaseName("IX_PlanMealItems_SelectedRecipeId");
+
                 // Relationships
                 entity.HasOne(e => e.Plan)
                     .WithMany(p => p.Items)
@@ -324,6 +335,12 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasOne(e => e.Recipe)
                     .WithMany()
                     .HasForeignKey(e => e.RecipeId)
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.SelectedRecipe)
+                    .WithMany()
+                    .HasForeignKey(e => e.SelectedRecipeId)
                     .IsRequired(false)
                     .OnDelete(DeleteBehavior.SetNull);
 
@@ -774,6 +791,22 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
 
                 entity.Property(e => e.SourceReferenceId)
                     .HasMaxLength(128);
+
+                entity.Property(e => e.SourceMealsJson)
+                    .HasColumnType("text");
+
+                entity.Property(e => e.IngredientRoleSummaryJson)
+                    .HasColumnType("text");
+
+                entity.Property(e => e.PrimaryMealTitle)
+                    .HasMaxLength(160);
+
+                entity.Property(e => e.PrimaryMealTime)
+                    .HasMaxLength(16);
+
+                entity.Property(e => e.GeneratedFromSelectedRecipe)
+                    .IsRequired()
+                    .HasDefaultValue(false);
 
                 entity.Property(e => e.Note)
                     .HasMaxLength(240);

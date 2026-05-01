@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import {
   getTodayTracking,
   updateTodayTracking,
@@ -22,6 +23,10 @@ import { useTranslation } from "../context/I18nContext";
 import { useTheme } from "../context/ThemeContext";
 import { refreshWidgetsFromApp } from "../widgets/services/widgetSyncService";
 import { DEFAULT_HYDRATION_GOAL_GLASSES } from "../widgets/types";
+import AnimatedCard from "../components/ui/AnimatedCard";
+import PulseBadge from "../components/ui/PulseBadge";
+import ShimmerLine from "../components/ui/ShimmerLine";
+import SuccessSettleWrapper from "../components/ui/SuccessSettleWrapper";
 
 export default function HydrationScreen() {
   const { theme } = useTheme();
@@ -133,7 +138,7 @@ export default function HydrationScreen() {
           />
         }
       >
-        <View style={[styles.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <AnimatedCard style={[styles.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={[styles.iconWrap, { backgroundColor: `${theme.primary}14` }]}>
             <Ionicons name="water-outline" size={28} color={theme.primary} />
           </View>
@@ -142,14 +147,27 @@ export default function HydrationScreen() {
             {copy.subtitle}
           </Text>
 
-          <Text style={[styles.progressValue, { color: theme.text }]}>
-            {currentGlasses} / {goalGlasses}
-          </Text>
+          <SuccessSettleWrapper trigger={currentGlasses}>
+            <Text style={[styles.progressValue, { color: theme.text }]}>
+              {currentGlasses} / {goalGlasses}
+            </Text>
+          </SuccessSettleWrapper>
           <Text style={[styles.progressLabel, { color: theme.textMuted }]}>
             {copy.progressLabel}
           </Text>
 
+          <PulseBadge
+            active={progressPercent < 100}
+            color={progressPercent >= 100 ? theme.emerald : theme.primary}
+            backgroundColor={progressPercent >= 100 ? `${theme.emerald}14` : `${theme.primary}12`}
+            borderColor={progressPercent >= 100 ? `${theme.emerald}2C` : `${theme.primary}26`}
+            label={language === "tr" ? `%${progressPercent} tamam` : `${progressPercent}% complete`}
+          />
+
           <View style={[styles.progressTrack, { backgroundColor: theme.surfaceElevated }]}>
+            {isSaving ? (
+              <ShimmerLine active color={`${theme.primary}18`} style={styles.progressSweep} />
+            ) : null}
             <View
               style={[
                 styles.progressFill,
@@ -183,14 +201,14 @@ export default function HydrationScreen() {
           </View>
 
           {isSaving ? (
-            <View style={styles.syncRow}>
+            <Animated.View entering={FadeInDown.duration(220)} style={styles.syncRow}>
               <ActivityIndicator size="small" color={theme.primary} />
               <Text style={[styles.syncText, { color: theme.textMuted }]}>
                 {copy.saving}
               </Text>
-            </View>
+            </Animated.View>
           ) : null}
-        </View>
+        </AnimatedCard>
       </ScrollView>
     </View>
   );
@@ -245,10 +263,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: "hidden",
     marginTop: 20,
+    position: "relative",
   },
   progressFill: {
     height: "100%",
     borderRadius: 6,
+  },
+  progressSweep: {
+    left: -40,
+    top: 0,
+    bottom: 0,
+    opacity: 0.8,
   },
   buttonRow: {
     flexDirection: "row",

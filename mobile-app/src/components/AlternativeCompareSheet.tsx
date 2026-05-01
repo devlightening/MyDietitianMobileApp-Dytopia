@@ -137,7 +137,7 @@ export default function AlternativeCompareSheet({ meal, onClose, onUndo, onChoos
               <Text style={[s.compareCardName, { color: theme.text }]} numberOfLines={3}>
                   {meal.alternativeRecipeId ? "Alternatif Tarif" : "Farklı Bir Şey"}
               </Text>
-              <Text style={[s.compareCardMacro, { color: theme.emerald }]}>âœ“ Kaydedildi</Text>
+              <Text style={[s.compareCardMacro, { color: theme.emerald }]}>✓ Kaydedildi</Text>
             </View>
           </View>
 

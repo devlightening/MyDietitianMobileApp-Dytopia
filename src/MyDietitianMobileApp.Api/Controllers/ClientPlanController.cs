@@ -70,6 +70,8 @@ public class ClientPlanController : ControllerBase
                      && p.Status == MealPlanStatus.Published)
             .Include(p => p.Items)
                 .ThenInclude(i => i.Recipe)
+            .Include(p => p.Items)
+                .ThenInclude(i => i.SelectedRecipe)
             .FirstOrDefaultAsync();
 
         if (plan == null)
@@ -114,6 +116,8 @@ public class ClientPlanController : ControllerBase
                      && p.Status == MealPlanStatus.Published)
             .Include(p => p.Items)
                 .ThenInclude(i => i.Recipe)
+            .Include(p => p.Items)
+                .ThenInclude(i => i.SelectedRecipe)
             .OrderBy(p => p.Date)
             .ToListAsync();
 
@@ -206,13 +210,15 @@ public class ClientPlanController : ControllerBase
         var availabilityError = ValidateMealActionWindow(mealItem!);
         if (availabilityError != null) return availabilityError;
 
+        var (completionStatus, alternativeRecipeId) = ResolveCompletionTarget(mealItem!);
+
         return await UpsertCompletion(
             clientId!.Value,
             mealItem!.Plan.CreatedBy,
             mealItemId,
-            MealCompletionStatus.Done,
+            completionStatus,
             body?.Note,
-            null);
+            alternativeRecipeId);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -256,6 +262,12 @@ public class ClientPlanController : ControllerBase
         var availabilityError = ValidateMealActionWindow(mealItem!);
         if (availabilityError != null) return availabilityError;
 
+        if (body.AlternativeRecipeId.HasValue && body.AlternativeRecipeId.Value != Guid.Empty)
+        {
+            mealItem!.SelectedRecipeId = body.AlternativeRecipeId.Value;
+            mealItem.SelectedRecipeSource = PlanMealSelectionTypes.Alternative;
+        }
+
         return await UpsertCompletion(
             clientId!.Value,
             mealItem!.Plan.CreatedBy,
@@ -263,6 +275,66 @@ public class ClientPlanController : ControllerBase
             MealCompletionStatus.Alternative,
             body.Note,
             body.AlternativeRecipeId);
+    }
+
+    [HttpPost("meals/{mealItemId}/selected-recipe")]
+    public async Task<IActionResult> SelectMealRecipe(Guid mealItemId, [FromBody] MealRecipeSelectionRequest body)
+    {
+        var (clientId, premiumError) = await RequirePremiumClientAsync();
+        if (premiumError != null) return premiumError;
+
+        var (mealItem, ownershipError) = await VerifyMealOwnership(mealItemId, clientId!.Value);
+        if (ownershipError != null) return ownershipError;
+
+        var normalizedSelectionType = NormalizeSelectionType(body.SelectionType);
+        if (normalizedSelectionType == null)
+        {
+            return BadRequest(ApiProblems.Validation(
+                "INVALID_SELECTION_TYPE",
+                "Seçim türü Original veya Alternative olmalıdır."));
+        }
+
+        if (normalizedSelectionType == PlanMealSelectionTypes.Alternative)
+        {
+            if (!body.AlternativeRecipeId.HasValue || body.AlternativeRecipeId.Value == Guid.Empty)
+            {
+                return BadRequest(ApiProblems.Validation(
+                    "ALTERNATIVE_RECIPE_REQUIRED",
+                    "Alternatif seçim için tarif seçilmelidir."));
+            }
+
+            var recipe = await LoadAccessibleRecipeAsync(body.AlternativeRecipeId.Value);
+            if (recipe == null)
+            {
+                return NotFound(ApiProblems.NotFound("RECIPE_NOT_FOUND", "Alternatif tarif bulunamadı."));
+            }
+
+            mealItem!.SelectedRecipeId = recipe.Id;
+            mealItem.SelectedRecipeSource = PlanMealSelectionTypes.Alternative;
+            await _appDb.SaveChangesAsync();
+            await PublishPlanAndGamificationEventsAsync(clientId.Value, mealItem.Plan.CreatedBy, mealItemId);
+
+            return Ok(new
+            {
+                message = "Alternatif tarif seçildi.",
+                selectionType = PlanMealSelectionTypes.Alternative,
+                selectedRecipeId = recipe.Id,
+                selectedRecipeName = recipe.Name
+            });
+        }
+
+        mealItem!.SelectedRecipeId = mealItem.RecipeId;
+        mealItem.SelectedRecipeSource = PlanMealSelectionTypes.Original;
+        await _appDb.SaveChangesAsync();
+        await PublishPlanAndGamificationEventsAsync(clientId.Value, mealItem.Plan.CreatedBy, mealItemId);
+
+        return Ok(new
+        {
+            message = "Planlanan tarif tekrar seçildi.",
+            selectionType = PlanMealSelectionTypes.Original,
+            selectedRecipeId = mealItem.RecipeId,
+            selectedRecipeName = mealItem.Recipe?.Name
+        });
     }
 
     [HttpPost("meals/{mealItemId}/feedback")]
@@ -429,6 +501,14 @@ public class ClientPlanController : ControllerBase
                     completionMap.TryGetValue(i.Id, out var comp);
                     AltRecipeInfo? alt = comp?.AlternativeRecipeId.HasValue == true
                         && altRecipeMap.TryGetValue(comp.AlternativeRecipeId!.Value, out var a) ? a : null;
+                    var selectedRecipe = i.SelectedRecipeId.HasValue && i.SelectedRecipeId == i.SelectedRecipe?.Id
+                        ? i.SelectedRecipe
+                        : (i.SelectedRecipeId == i.RecipeId ? i.Recipe : null);
+                    var selectedRecipeId = i.SelectedRecipeId ?? i.RecipeId;
+                    var selectedRecipeName = selectedRecipe?.Name ?? i.Recipe?.Name;
+                    var selectedRecipeSource = string.IsNullOrWhiteSpace(i.SelectedRecipeSource)
+                        ? PlanMealSelectionTypes.Original
+                        : i.SelectedRecipeSource;
 
                     return new MealItemDTO
                     {
@@ -437,6 +517,20 @@ public class ClientPlanController : ControllerBase
                         MealType         = i.MealType.ToString(),
                         RecipeId         = i.RecipeId,
                         RecipeName       = i.Recipe?.Name,
+                        SelectedRecipeId = selectedRecipeId,
+                        SelectedRecipeName = selectedRecipeName,
+                        SelectedRecipeSource = selectedRecipeSource,
+                        SelectedCalories = selectedRecipe?.CaloriesKcal ?? i.Calories,
+                        SelectedMacros = selectedRecipe != null && (selectedRecipe.ProteinGrams.HasValue || selectedRecipe.CarbsGrams.HasValue || selectedRecipe.FatGrams.HasValue)
+                            ? new MacrosDTO
+                            {
+                                ProteinGrams = selectedRecipe.ProteinGrams,
+                                CarbsGrams = selectedRecipe.CarbsGrams,
+                                FatGrams = selectedRecipe.FatGrams,
+                            }
+                            : (i.ProteinGrams.HasValue || i.CarbsGrams.HasValue || i.FatGrams.HasValue
+                                ? new MacrosDTO { ProteinGrams = i.ProteinGrams, CarbsGrams = i.CarbsGrams, FatGrams = i.FatGrams }
+                                : null),
                         Title            = i.Title,
                         Note             = i.Note,
                         OrderIndex       = i.OrderIndex,
@@ -519,6 +613,8 @@ public class ClientPlanController : ControllerBase
     {
         var item = await _appDb.PlanMealItems
             .Include(i => i.Plan)
+            .Include(i => i.Recipe)
+            .Include(i => i.SelectedRecipe)
             .FirstOrDefaultAsync(i => i.Id == mealItemId);
 
         if (item == null)
@@ -528,6 +624,49 @@ public class ClientPlanController : ControllerBase
             return (null, Forbid());
 
         return (item, null);
+    }
+
+    private (MealCompletionStatus status, Guid? alternativeRecipeId) ResolveCompletionTarget(PlanMealItem mealItem)
+    {
+        if (mealItem.SelectedRecipeSource == PlanMealSelectionTypes.Alternative
+            && mealItem.SelectedRecipeId.HasValue
+            && mealItem.SelectedRecipeId != mealItem.RecipeId)
+        {
+            return (MealCompletionStatus.Alternative, mealItem.SelectedRecipeId);
+        }
+
+        return (MealCompletionStatus.Done, null);
+    }
+
+    private async Task<Recipe?> LoadAccessibleRecipeAsync(Guid recipeId)
+    {
+        var userIdRaw = User.GetUserId();
+        if (string.IsNullOrWhiteSpace(userIdRaw) || !Guid.TryParse(userIdRaw, out var userId))
+            return null;
+
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(userId, CancellationToken.None);
+        var query = _appDb.Recipes
+            .AsNoTracking()
+            .Where(x => x.Id == recipeId)
+            .Where(x => !x.IsDemo && !x.IsDraft && !x.IsHiddenFromProduction);
+
+        if (!premium.IsPremium)
+            return await query.FirstOrDefaultAsync(x => x.IsPublic);
+
+        return await query.FirstOrDefaultAsync(x => x.IsPublic || x.DietitianId == premium.ActiveDietitianId);
+    }
+
+    private static string? NormalizeSelectionType(string? selectionType)
+    {
+        if (string.IsNullOrWhiteSpace(selectionType))
+            return null;
+
+        var normalized = selectionType.Trim();
+        if (normalized.Equals(PlanMealSelectionTypes.Original, StringComparison.OrdinalIgnoreCase))
+            return PlanMealSelectionTypes.Original;
+        if (normalized.Equals(PlanMealSelectionTypes.Alternative, StringComparison.OrdinalIgnoreCase))
+            return PlanMealSelectionTypes.Alternative;
+        return null;
     }
 
     private async Task<IActionResult> UpsertCompletion(
@@ -631,3 +770,11 @@ public record MealActionRequest(string? Note);
 public record AlternativeMealRequest(Guid? AlternativeRecipeId, string? Note);
 
 public record MealFeedbackRequest(string FeedbackKey);
+
+public record MealRecipeSelectionRequest(string SelectionType, Guid? AlternativeRecipeId);
+
+internal static class PlanMealSelectionTypes
+{
+    public const string Original = "Original";
+    public const string Alternative = "Alternative";
+}

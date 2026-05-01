@@ -436,9 +436,11 @@ function SideTab({
 export default function BottomBar({
   active,
   onChange,
+  messagesAttention = false,
 }: {
   active: TabKey;
   onChange: (t: TabKey) => void;
+  messagesAttention?: boolean;
 }) {
   const { isDark } = useTheme();
   const { t } = useTranslation();
@@ -517,17 +519,32 @@ export default function BottomBar({
     }
 
     return (
-      <SideTab
-        key={tab.key}
-        tab={tab}
-        isActive={active === tab.key}
-        label={labels[tab.key]}
-        activeText={activeText}
-        inactiveIcon={inactiveIcon}
-        inactiveText={inactiveText}
-        dotColor={isDark ? "#6FE0A4" : "#38A85E"}
-        onPress={() => onChange(tab.key)}
-      />
+      <View key={tab.key} style={s.messageSlotWrap}>
+        <SideTab
+          tab={tab}
+          isActive={active === tab.key}
+          label={labels[tab.key]}
+          activeText={activeText}
+          inactiveIcon={
+            tab.key === "messages" && messagesAttention && active !== "messages"
+              ? (isDark ? "#FF8FA3" : "#D84B63")
+              : inactiveIcon
+          }
+          inactiveText={
+            tab.key === "messages" && messagesAttention && active !== "messages"
+              ? (isDark ? "#FFD2DB" : "#B63C55")
+              : inactiveText
+          }
+          dotColor={isDark ? "#6FE0A4" : "#38A85E"}
+          onPress={() => onChange(tab.key)}
+        />
+        {tab.key === "messages" ? (
+          <MessageAttentionDot
+            visible={messagesAttention && active !== "messages"}
+            color={isDark ? "#FF6B83" : "#E74C67"}
+          />
+        ) : null}
+      </View>
     );
   }
 
@@ -556,6 +573,139 @@ export default function BottomBar({
         <View style={s.row}>{TABS.map(renderTab)}</View>
       </View>
     </Animated.View>
+  );
+}
+
+function MessageAttentionDot({
+  visible,
+  color,
+}: {
+  visible: boolean;
+  color: string;
+}) {
+  const scale = useRef(new Animated.Value(visible ? 1 : 0.86)).current;
+  const opacity = useRef(new Animated.Value(visible ? 0.95 : 0)).current;
+  const haloScale = useRef(new Animated.Value(visible ? 1 : 0.7)).current;
+  const haloOpacity = useRef(new Animated.Value(visible ? 0.28 : 0)).current;
+
+  useEffect(() => {
+    if (!visible) {
+      scale.stopAnimation();
+      opacity.stopAnimation();
+      haloScale.stopAnimation();
+      haloOpacity.stopAnimation();
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.timing(haloOpacity, {
+          toValue: 0,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scale, {
+          toValue: 0.86,
+          damping: 14,
+          stiffness: 220,
+          useNativeDriver: true,
+        }),
+        Animated.spring(haloScale, {
+          toValue: 0.7,
+          damping: 14,
+          stiffness: 220,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return;
+    }
+
+    scale.setValue(0.92);
+    opacity.setValue(0.95);
+    haloScale.setValue(0.8);
+    haloOpacity.setValue(0.24);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1.08,
+            duration: 720,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 720,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(haloScale, {
+            toValue: 1.9,
+            duration: 920,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(haloOpacity, {
+            toValue: 0.06,
+            duration: 920,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 0.96,
+            duration: 720,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.82,
+            duration: 720,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(haloScale, {
+            toValue: 0.84,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+          Animated.timing(haloOpacity, {
+            toValue: 0.26,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [haloOpacity, haloScale, opacity, scale, visible]);
+
+  return (
+    <View pointerEvents="none" style={s.attentionWrap}>
+      <Animated.View
+        style={[
+          s.attentionHalo,
+          {
+            backgroundColor: color,
+            opacity: haloOpacity,
+            transform: [{ scale: haloScale }],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          s.attentionDot,
+          {
+            backgroundColor: color,
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      />
+    </View>
   );
 }
 
@@ -685,11 +835,42 @@ const s = StyleSheet.create({
     justifyContent: "flex-end",
     minWidth: 0,
   },
+  messageSlotWrap: {
+    flex: 1,
+    position: "relative",
+  },
+  attentionWrap: {
+    position: "absolute",
+    top: 2,
+    right: "22%",
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  attentionHalo: {
+    position: "absolute",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
   activeDot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
     marginBottom: 4,
+  },
+  attentionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#E74C67",
+    shadowOpacity: 0.34,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   sideLabel: {
     width: "100%",

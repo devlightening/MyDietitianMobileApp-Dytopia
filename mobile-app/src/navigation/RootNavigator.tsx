@@ -12,6 +12,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../auth/AuthContext";
 import { Routes } from "./routes";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import { InAppNotificationProvider } from "../context/InAppNotificationContext";
 
 import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
@@ -281,7 +282,9 @@ function AppNavigator() {
 export default function RootNavigator() {
   return (
     <ThemeProvider>
-      <AppNavigator />
+      <InAppNotificationProvider>
+        <AppNavigator />
+      </InAppNotificationProvider>
     </ThemeProvider>
   );
 }

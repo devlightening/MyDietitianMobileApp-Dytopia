@@ -27,7 +27,7 @@ export default function QuickKitchenHandle({ onSwipeUp }: Props) {
       hitSlop={{ top: 10, bottom: 10, left: 20, right: 20 }}
     >
       <View style={[s.handle, { backgroundColor: theme.primary + '30' }]} />
-      <Text style={[s.hint, { color: theme.textMuted }]}>â†‘ Hızlı Mutfak</Text>
+        <Text style={[s.hint, { color: theme.textMuted }]}>↑ Hızlı Mutfak</Text>
     </View>
   );
 }

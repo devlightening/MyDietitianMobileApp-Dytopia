@@ -12,15 +12,15 @@ interface Props {
 }
 
 function getMilestoneData(streak: number) {
-  if (streak >= 365) return { emoji: 'ğŸ‘‘', label: '1 yıl seri!', color: '#f59e0b', msg: 'Efsane bir bağlılık! 365 gün dur durak bilmeden.' };
-  if (streak >= 180) return { emoji: 'ğŸ†', label: '6 ay seri!', color: '#8b5cf6', msg: 'İnanılmaz â€” tam 180 gün kesintisiz!' };
-  if (streak >= 90)  return { emoji: 'ğŸ’', label: '90 günlük seri', color: '#3b82f6', msg: 'Alışkanlık artık bir yaşam biçimi.' };
-  if (streak >= 60)  return { emoji: 'ğŸ”¥', label: '60 günlük seri', color: '#ef4444', msg: '2 ay boyunca hiç durmadın. Mükemmel!' };
-  if (streak >= 30)  return { emoji: 'âš¡', label: '30 günlük seri', color: '#f97316', msg: 'Bir ay tamamlandı. Harika gidiyorsun!' };
-  if (streak >= 21)  return { emoji: 'ğŸŒŸ', label: '21 günlük seri', color: '#eab308', msg: '3 hafta! Alışkanlığın kökleniyor.' };
-  if (streak >= 14)  return { emoji: 'âœ¨', label: '2 haftalık seri', color: '#22c55e', msg: '14 gün tutturmak ciddi bir başarı.' };
-  if (streak >= 7)   return { emoji: 'ğŸ¯', label: '1 haftalık seri', color: '#22c55e', msg: 'İlk haftanı tamamladın. Devam et!' };
-  return              { emoji: 'ğŸ‰', label: `${streak} günlük seri`, color: '#22c55e', msg: 'Her gün bir adım!' };
+  if (streak >= 365) return { emoji: '🏅', label: '1 yıl seri!', color: '#f59e0b', msg: 'Efsane bir bağlılık! 365 gün dur durak bilmeden.' };
+  if (streak >= 180) return { emoji: '🏆', label: '6 ay seri!', color: '#8b5cf6', msg: 'İnanılmaz — tam 180 gün kesintisiz!' };
+  if (streak >= 90)  return { emoji: '💎', label: '90 günlük seri', color: '#3b82f6', msg: 'Alışkanlık artık bir yaşam biçimi.' };
+  if (streak >= 60)  return { emoji: '🔥', label: '60 günlük seri', color: '#ef4444', msg: '2 ay boyunca hiç durmadın. Mükemmel!' };
+  if (streak >= 30)  return { emoji: '⚡', label: '30 günlük seri', color: '#f97316', msg: 'Bir ay tamamlandı. Harika gidiyorsun!' };
+  if (streak >= 21)  return { emoji: '🌟', label: '21 günlük seri', color: '#eab308', msg: '3 hafta! Alışkanlığın kökleniyor.' };
+  if (streak >= 14)  return { emoji: '✨', label: '2 haftalık seri', color: '#22c55e', msg: '14 gün tutturmak ciddi bir başarı.' };
+  if (streak >= 7)   return { emoji: '🎯', label: '1 haftalık seri', color: '#22c55e', msg: 'İlk haftanı tamamladın. Devam et!' };
+  return              { emoji: '🎉', label: `${streak} günlük seri`, color: '#22c55e', msg: 'Her gün bir adım!' };
 }
 
 export default function StreakMilestoneToast({ streak, onDismiss }: Props) {

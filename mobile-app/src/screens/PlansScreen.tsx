@@ -16,13 +16,14 @@ import { Routes } from "../navigation/routes";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useInAppNotifications } from "../context/InAppNotificationContext";
 import { radii, spacing } from "../theme/tokens";
 import { useFadeRise, useScaleSettle, useStaggerItem } from "../hooks/useAuraMotion";
 import { useGamification } from "../queries/useGamification";
 import { buildMotivationSummary, mapGamificationToMotivation, type DashboardMotivation } from "../motivation/streaks";
 import {
   getPlansData, getTodayPlan, completeMeal, skipMeal, undoMealCompletion,
-  saveMealFeedback,
+  saveMealFeedback, selectMealRecipe,
   type ClientPlan, type TodayPlan, type MealItem, type MealType, type MealCompletionStatus,
 } from "../data/plansRepo";
 import AppEmptyState from "../components/ui/AppEmptyState";
@@ -31,6 +32,11 @@ import AlternativePickerSheet from "../components/AlternativePickerSheet";
 import AlternativeCompareSheet from "../components/AlternativeCompareSheet";
 import RecipeNutritionPanel from "../components/recipes/RecipeNutritionPanel";
 import { buildWeeklyDigest } from "../features/smartInsights";
+import {
+  buildAlternateRecipeAppliedNotification,
+  buildMealCompletedNotification,
+  buildMealFeedbackNotification,
+} from "../notifications/notificationEvents";
 
 /* ── helpers ── */
 function getTodayFormatted(): string {
@@ -50,6 +56,31 @@ function updateItemStatus(plan: TodayPlan, itemId: string, status: MealCompletio
   return {
     ...plan,
     items: plan.items.map(i => i.id === itemId ? { ...i, completionStatus: status } : i),
+  };
+}
+
+function getSelectedMealRecipeLabel(item: MealItem, language: "tr" | "en"): string | null {
+  if (item.selectedRecipeSource === "Alternative" && item.selectedRecipeName) {
+    return language === "tr"
+      ? `Seçilen tarif: ${item.selectedRecipeName}`
+      : `Selected recipe: ${item.selectedRecipeName}`;
+  }
+  return null;
+}
+
+function getEffectiveRecipeForMeal(item: MealItem) {
+  const isSelectedAlternative =
+    item.selectedRecipeSource === "Alternative" &&
+    !!item.selectedRecipeId &&
+    item.selectedRecipeId !== item.recipeId;
+
+  return {
+    recipeId: isSelectedAlternative ? item.selectedRecipeId : item.recipeId,
+    recipeName: isSelectedAlternative
+      ? (item.selectedRecipeName ?? item.recipeName ?? item.title)
+      : (item.recipeName ?? item.title),
+    calories: isSelectedAlternative ? item.selectedCalories : item.calories,
+    macros: isSelectedAlternative ? item.selectedMacros : item.macros,
   };
 }
 
@@ -89,6 +120,47 @@ function buildMealLockMessage(item: MealItem, language: "tr" | "en"): string | n
   return isTodayDateKey(date)
     ? `${time}'de açılır`
     : `${date} ${time} itibarıyla açılır`;
+}
+
+function getMinutesUntilLocalTime(time?: string | null): number | null {
+  if (!time) return null;
+  const [hourRaw, minuteRaw] = time.split(":");
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hour, minute, 0, 0);
+  return Math.ceil((target.getTime() - now.getTime()) / 60_000);
+}
+
+function buildUpcomingMealBadge(item: MealItem, language: "tr" | "en") {
+  if (item.completionStatus !== "Planned") return null;
+
+  const minutesLeft = getMinutesUntilLocalTime(item.actionBlockedUntilTime ?? item.time);
+  if (item.isActionableNow !== false) {
+    return {
+      label: language === "tr" ? "Şimdi açıldı" : "Open now",
+      tone: "open" as const,
+      icon: "checkmark-circle-outline" as const,
+    };
+  }
+
+  if (minutesLeft !== null && minutesLeft > 0 && minutesLeft <= 90) {
+    return {
+      label: language === "tr" ? `${minutesLeft} dk kaldı` : `${minutesLeft} min left`,
+      tone: "soon" as const,
+      icon: "time-outline" as const,
+    };
+  }
+
+  const time = item.actionBlockedUntilTime ?? item.time;
+  return {
+    label: language === "tr" ? `${time}'de açılır` : `Opens at ${time}`,
+    tone: "locked" as const,
+    icon: "lock-closed-outline" as const,
+  };
 }
 
 function PlansHeroBand({
@@ -141,15 +213,18 @@ function PlansHeroBand({
 export default function PlansScreen({
   onPressKitchen,
   isActive = true,
+  onTabSwipeEnabledChange,
 }: {
   onPressKitchen?: () => void;
   isActive?: boolean;
+  onTabSwipeEnabledChange?: (enabled: boolean) => void;
 } = {}) {
   const { user } = useAuth();
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
   const { syncSchedules } = useNotifications();
+  const { notify } = useInAppNotifications();
   const { data: gamification } = useGamification();
   const isPremium = user?.isPremium === true;
   const motivation = mapGamificationToMotivation(gamification);
@@ -163,14 +238,19 @@ export default function PlansScreen({
   const [selectedMeal, setSelectedMeal] = useState<MealItem | null>(null);
   const [altPickerMeal, setAltPickerMeal]   = useState<MealItem | null>(null);
   const [altCompareMeal, setAltCompareMeal] = useState<MealItem | null>(null);
-  const [planToast, setPlanToast] = useState<{ title: string; body: string } | null>(null);
   const [mealFeedback, setMealFeedback] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!onTabSwipeEnabledChange) return;
+    const hasBlockingOverlay = !!selectedMeal || !!altPickerMeal || !!altCompareMeal;
+    onTabSwipeEnabledChange(!hasBlockingOverlay);
+    return () => {
+      onTabSwipeEnabledChange(true);
+    };
+  }, [altCompareMeal, altPickerMeal, onTabSwipeEnabledChange, selectedMeal]);
 
   const isFirstLoad  = useRef(true);
   const headerStyle  = useFadeRise(0, 16);
-  const toastTranslateY = useRef(new RNAnimated.Value(-140)).current;
-  const toastOpacity = useRef(new RNAnimated.Value(0)).current;
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── data ── */
   const load = useCallback(async () => {
@@ -222,45 +302,6 @@ export default function PlansScreen({
     void load();
   }, [isActive, isPremium, load]);
 
-  const hidePlanToast = useCallback(() => {
-    RNAnimated.parallel([
-      RNAnimated.timing(toastOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-      RNAnimated.timing(toastTranslateY, { toValue: -140, duration: 220, useNativeDriver: true }),
-    ]).start(({ finished }) => {
-      if (finished) {
-        setPlanToast(null);
-      }
-    });
-  }, [toastOpacity, toastTranslateY]);
-
-  const showPlanToast = useCallback((title: string, body: string) => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = null;
-    }
-
-    setPlanToast({ title, body });
-    toastTranslateY.setValue(-140);
-    toastOpacity.setValue(0);
-
-    RNAnimated.parallel([
-      RNAnimated.timing(toastOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
-      RNAnimated.spring(toastTranslateY, { toValue: 0, damping: 20, stiffness: 220, useNativeDriver: true }),
-    ]).start(() => {
-      toastTimerRef.current = setTimeout(() => {
-        toastTimerRef.current = null;
-        hidePlanToast();
-      }, 2400);
-    });
-  }, [hidePlanToast, toastOpacity, toastTranslateY]);
-
-  useEffect(() => () => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = null;
-    }
-  }, []);
-
   /* ── actions (preserve existing logic exactly) ── */
   const handleComplete = useCallback(async (item: MealItem) => {
     if (actingOn) return;
@@ -283,12 +324,13 @@ export default function PlansScreen({
     setActingOn(item.id);
     try {
       await completeMeal(item.id);
-      setTodayPlan(prev => prev ? updateItemStatus(prev, item.id, "Done") : prev);
       await syncSchedules();
+      await load();
+      notify(buildMealCompletedNotification(language, item.selectedRecipeName ?? item.title));
     } catch {
       Alert.alert("Hata", "Öğün tamamlanamadı. Lütfen tekrar deneyin.");
     } finally { setActingOn(null); }
-  }, [actingOn, language]);
+  }, [actingOn, language, load, notify, syncSchedules]);
 
   const handleSkip = useCallback(async (item: MealItem) => {
     if (actingOn) return;
@@ -309,22 +351,31 @@ export default function PlansScreen({
 
   const handleAlternative = useCallback((item: MealItem) => {
     if (!item.recipeId) return;
-    const lockMessage = buildMealLockMessage(item, language);
-    if (lockMessage) {
-      Alert.alert(language === "tr" ? "Henüz açılamadı" : "Not available yet", lockMessage);
-      return;
-    }
     setAltPickerMeal(item);
-  }, [language]);
+  }, []);
+
+  const handleResetSelectedRecipe = useCallback(async (item: MealItem) => {
+    if (actingOn) return;
+    setActingOn(item.id);
+    try {
+      await selectMealRecipe(item.id, "Original");
+      await load();
+    } catch {
+      Alert.alert("Hata", "Tarif tercihi güncellenemedi. Lütfen tekrar deneyin.");
+    } finally {
+      setActingOn(null);
+    }
+  }, [actingOn, load]);
 
   const handleViewRecipe = useCallback((item: MealItem) => {
-    if (!item.recipeId) return;
+    const effectiveRecipe = getEffectiveRecipeForMeal(item);
+    if (!effectiveRecipe.recipeId) return;
     // Pass calories/macros from MealItem for immediate display; RecipeDetailScreen fetches
     // full ingredient/step data via plan-context endpoint when explanation is absent.
     (navigation as any).navigate(Routes.App.RecipeDetail, {
       result: {
-        recipeId: item.recipeId,
-        name: item.recipeName ?? item.title,
+        recipeId: effectiveRecipe.recipeId,
+        name: effectiveRecipe.recipeName,
         description: '',
         score: 0,
         matchStatus: 'FULL_MATCH' as const,
@@ -340,6 +391,10 @@ export default function PlansScreen({
         isDietitianRecipe: true,
         motivationText: '',
         isOwnedByActiveDietitian: true,
+        caloriesKcal: effectiveRecipe.calories,
+        proteinGrams: effectiveRecipe.macros?.proteinGrams,
+        carbsGrams: effectiveRecipe.macros?.carbsGrams,
+        fatGrams: effectiveRecipe.macros?.fatGrams,
       },
     });
   }, [navigation]);
@@ -381,12 +436,9 @@ export default function PlansScreen({
     void load();
     void syncSchedules();
     if (payload?.type === "alternative") {
-      showPlanToast(
-        "Alternatif kaydedildi",
-        `${payload.recipeName ?? "Seçilen tarif"} bugünkü öğün için alternatif olarak kaydedildi. Plan akışı korunur.`,
-      );
+      notify(buildAlternateRecipeAppliedNotification(language, payload.recipeName ?? "Seçilen tarif"));
     }
-  }, [load, showPlanToast, syncSchedules]);
+  }, [language, load, notify, syncSchedules]);
 
   const handleViewAlternativeRecipe = useCallback(() => {
     if (!altCompareMeal) return;
@@ -461,17 +513,12 @@ export default function PlansScreen({
     setMealFeedback(seeded);
   }, [todayPlan]);
 
-  const handleQuickFeedback = useCallback(async (item: MealItem, feedbackKey: string, label: string) => {
+  const handleQuickFeedback = useCallback(async (item: MealItem, feedbackKey: string, _label: string) => {
     const previous = mealFeedback[item.id];
     setMealFeedback((current) => ({ ...current, [item.id]: feedbackKey }));
     try {
       await saveMealFeedback(item.id, feedbackKey);
-      showPlanToast(
-        language === "tr" ? "Değerlendirme kaydedildi" : "Feedback saved",
-        language === "tr"
-          ? `${item.title} için "${label}" notu kaydedildi.`
-          : `"${label}" note was saved for ${item.title}.`,
-      );
+      notify(buildMealFeedbackNotification(language, item.title, feedbackKey as "filling" | "light" | "repeat" | "hard"));
     } catch {
       setMealFeedback((current) => {
         const next = { ...current };
@@ -486,8 +533,7 @@ export default function PlansScreen({
           : "The meal feedback could not be saved right now. Please try again.",
       );
     }
-  }, [language, mealFeedback, showPlanToast]);
-  const toastTop     = (StatusBar.currentHeight ?? 0) + spacing.sm;
+  }, [language, mealFeedback, notify]);
 
   /* ── loading state ── */
   if (loading) {
@@ -514,38 +560,6 @@ export default function PlansScreen({
         iconColor={`${theme.emerald}42`}
         style={[s.screenGlowB, { backgroundColor: theme.emeraldGlow }]}
       />
-      {planToast && (
-        <RNAnimated.View
-          pointerEvents="none"
-          style={[
-            s.planToastWrap,
-            {
-              top: toastTop,
-              opacity: toastOpacity,
-              transform: [{ translateY: toastTranslateY }],
-            },
-          ]}
-        >
-          <View
-            style={[
-              s.planToastCard,
-              {
-                backgroundColor: theme.surface,
-                borderColor: theme.borderEmerald,
-                shadowColor: theme.primaryDark,
-              },
-            ]}
-          >
-            <View style={[s.planToastIcon, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
-              <Ionicons name="checkmark-circle" size={18} color={theme.primary} />
-            </View>
-            <View style={s.planToastContent}>
-              <Text style={[s.planToastTitle, { color: theme.text }]}>{planToast.title}</Text>
-              <Text style={[s.planToastBody, { color: theme.textSub }]}>{planToast.body}</Text>
-            </View>
-          </View>
-        </RNAnimated.View>
-      )}
 
       <ScrollView
         contentContainerStyle={s.scroll}
@@ -691,6 +705,7 @@ export default function PlansScreen({
                           onComplete={() => void handleComplete(item)}
                           onSkip={() => void handleSkip(item)}
                           onAlternative={() => void handleAlternative(item)}
+                          onResetSelection={() => void handleResetSelectedRecipe(item)}
                           onViewRecipe={() => handleViewRecipe(item)}
                       />
                     ))}
@@ -775,6 +790,12 @@ export default function PlansScreen({
         onSkip={handleSkipFromSheet}
         onUndo={handleCompleteFromSheet}
         onAlternative={handleAlternativeFromSheet}
+        onResetSelection={() => {
+          if (!selectedMeal) return;
+          const item = selectedMeal;
+          setSelectedMeal(null);
+          void handleResetSelectedRecipe(item);
+        }}
         onViewRecipe={handleViewRecipeFromSheet}
       />
 
@@ -1031,6 +1052,7 @@ function MealDetailSheet({
   onSkip,
   onUndo,
   onAlternative,
+  onResetSelection,
   onViewRecipe,
 }: {
   item: MealItem | null;
@@ -1043,6 +1065,7 @@ function MealDetailSheet({
   onSkip: () => void;
   onUndo: () => void;
   onAlternative: () => void;
+  onResetSelection: () => void;
   onViewRecipe: () => void;
 }) {
   if (!item) return null;
@@ -1058,6 +1081,7 @@ function MealDetailSheet({
       : isCompleted
         ? { label: item.completionStatus === "Alternative" ? "Alternatif" : "Tamamlandı", color: theme.emerald, bg: theme.glassEmerald, border: theme.borderEmerald }
         : { label: "Bekliyor", color: theme.primary, bg: theme.primaryLight, border: theme.borderEmerald };
+  const selectedRecipeLabel = getSelectedMealRecipeLabel(item, language);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -1088,6 +1112,15 @@ function MealDetailSheet({
             </View>
           )}
 
+          {!!selectedRecipeLabel && (
+            <View style={[s.detailNoteBox, { backgroundColor: theme.surfaceElevated, borderLeftColor: theme.primary }]}>
+              <Text style={[s.detailNoteLabel, { color: theme.textMuted }]}>
+                {language === "tr" ? "Aktif tarif tercihi" : "Active recipe choice"}
+              </Text>
+              <Text style={[s.detailNoteText, { color: theme.textSub }]}>{selectedRecipeLabel}</Text>
+            </View>
+          )}
+
           {isLocked && (
             <View style={[s.detailNoteBox, { backgroundColor: theme.surfaceElevated, borderLeftColor: theme.border }]}>
               <Text style={[s.detailNoteLabel, { color: theme.textMuted }]}>
@@ -1114,7 +1147,7 @@ function MealDetailSheet({
               style={[s.detailRecipeBtn, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}
               onPress={onViewRecipe}
               activeOpacity={0.8}
-              disabled={isActing || isLocked}
+              disabled={isActing}
             >
               <Ionicons name="book-outline" size={16} color={theme.primary} />
               <Text style={[s.detailRecipeBtnText, { color: theme.primary }]}>Tarifini Gör</Text>
@@ -1172,10 +1205,25 @@ function MealDetailSheet({
                       style={[s.detailGhostBtn, { borderColor: theme.border }]}
                       onPress={onAlternative}
                       activeOpacity={0.75}
-                      disabled={isActing || isLocked}
+                      disabled={isActing}
                     >
                       <Ionicons name="swap-horizontal-outline" size={14} color={theme.textMuted} />
-                      <Text style={[s.detailGhostBtnText, { color: theme.textMuted }]}>Alternatif</Text>
+                      <Text style={[s.detailGhostBtnText, { color: theme.textMuted }]}>
+                        {language === "tr" ? "Alternatif Seç" : "Choose alternative"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {item.selectedRecipeSource === "Alternative" && (
+                    <TouchableOpacity
+                      style={[s.detailGhostBtn, { borderColor: theme.border }]}
+                      onPress={onResetSelection}
+                      activeOpacity={0.75}
+                      disabled={isActing}
+                    >
+                      <Ionicons name="refresh-outline" size={14} color={theme.textMuted} />
+                      <Text style={[s.detailGhostBtnText, { color: theme.textMuted }]}>
+                        {language === "tr" ? "Orijinale Dön" : "Back to original"}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1192,7 +1240,7 @@ function MealDetailSheet({
    PENDING CARD — full size, primary actions
 ═══════════════════════════════════════════════════════ */
 function PendingCard({
-  item, index, language, theme, isActing, onOpenDetail, onComplete, onSkip, onAlternative, onViewRecipe,
+  item, index, language, theme, isActing, onOpenDetail, onComplete, onSkip, onAlternative, onResetSelection, onViewRecipe,
 }: {
   item: MealItem;
   index: number;
@@ -1203,38 +1251,126 @@ function PendingCard({
   onComplete: () => void;
   onSkip: () => void;
   onAlternative: () => void;
+  onResetSelection: () => void;
   onViewRecipe: () => void;
 }) {
   const style = useStaggerItem(index, 120, 60);
   const meta  = MEAL_TYPE_META[item.mealType] ?? MEAL_TYPE_META.Snack;
-  const hasMacros = item.calories || item.macros?.proteinGrams || item.macros?.carbsGrams || item.macros?.fatGrams;
   const lockMessage = buildMealLockMessage(item, language);
   const isLocked = !!lockMessage;
+  const upcomingBadge = buildUpcomingMealBadge(item, language);
+  const upcomingBadgeColor = upcomingBadge?.tone === "open"
+    ? theme.emerald
+    : upcomingBadge?.tone === "soon"
+      ? theme.accentGold
+      : theme.textMuted;
+  const selectedRecipeLabel = getSelectedMealRecipeLabel(item, language);
+  const hasAlternativeSelection = item.selectedRecipeSource === "Alternative" && !!item.selectedRecipeName;
+  const [showSelectedSide, setShowSelectedSide] = useState(false);
+  const lastTapRef = useRef(0);
+  const isFlippingRef = useRef(false);
+  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flipScaleX = useRef(new RNAnimated.Value(1)).current;
+  const displayAlternativeSide = hasAlternativeSelection && showSelectedSide;
+  const displayTitle = displayAlternativeSide ? (item.selectedRecipeName ?? item.title) : item.title;
+  const displayTime = item.time;
+  const displayCalories = displayAlternativeSide ? item.selectedCalories : item.calories;
+  const displayMacros = displayAlternativeSide ? item.selectedMacros : item.macros;
+  const hasDisplayMacros =
+    displayCalories ||
+    displayMacros?.proteinGrams ||
+    displayMacros?.carbsGrams ||
+    displayMacros?.fatGrams;
+
+  const triggerFlip = useCallback((nextSide?: boolean) => {
+    if (!hasAlternativeSelection || isFlippingRef.current) return;
+    isFlippingRef.current = true;
+    RNAnimated.timing(flipScaleX, { toValue: 0, duration: 170, useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) {
+        isFlippingRef.current = false;
+        return;
+      }
+      setShowSelectedSide(prev => (typeof nextSide === "boolean" ? nextSide : !prev));
+      RNAnimated.timing(flipScaleX, { toValue: 1, duration: 190, useNativeDriver: true }).start(() => {
+        isFlippingRef.current = false;
+      });
+    });
+  }, [flipScaleX, hasAlternativeSelection]);
+
+  const handleCardPress = useCallback(() => {
+    if (!hasAlternativeSelection) {
+      onOpenDetail();
+      return;
+    }
+    if (isFlippingRef.current) return;
+
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
+      lastTapRef.current = 0;
+      triggerFlip();
+      return;
+    }
+
+    lastTapRef.current = now;
+    if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
+    singleTapTimeoutRef.current = setTimeout(() => {
+      lastTapRef.current = 0;
+      singleTapTimeoutRef.current = null;
+      onOpenDetail();
+    }, 285);
+  }, [hasAlternativeSelection, onOpenDetail, triggerFlip]);
+
+  useEffect(() => {
+    setShowSelectedSide(false);
+    lastTapRef.current = 0;
+  }, [item.id, item.selectedRecipeId]);
+
+  useEffect(() => () => {
+    if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
+  }, []);
 
   return (
     <Animated.View style={style}>
-      <View style={[s.pendingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <RNAnimated.View style={[
+        s.pendingCard,
+        {
+          backgroundColor: theme.surface,
+          borderColor: displayAlternativeSide ? `${theme.accentGold}38` : theme.border,
+          transform: [{ scaleX: flipScaleX }],
+        },
+      ]}>
         <View style={[s.cardStrip, { backgroundColor: theme.primary + "70" }]} />
 
         <View style={s.pendingBody}>
-          <TouchableOpacity activeOpacity={0.82} onPress={onOpenDetail}>
+          <TouchableOpacity activeOpacity={0.86} onPress={handleCardPress}>
           {/* Time + emoji + title */}
           <View style={s.cardTopRow}>
-            <Text style={[s.cardTime, { color: theme.primary }]}>{item.time}</Text>
+            <Text style={[s.cardTime, { color: displayAlternativeSide ? theme.accentGold : theme.primary }]}>{displayTime}</Text>
             <View style={[s.mealIconWrap, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
               <Ionicons name={meta.icon} size={16} color={theme.primaryDark} />
             </View>
             <View style={s.cardTitleBlock}>
-              <Text style={[s.cardTypeLabel, { color: theme.textMuted }]}>{meta.label}</Text>
+              <Text style={[s.cardTypeLabel, { color: theme.textMuted }]}>
+                {displayAlternativeSide ? (language === "tr" ? "Aktif alternatif" : "Active alternative") : meta.label}
+              </Text>
               <Text style={[s.cardTitle, { color: theme.text }]} numberOfLines={2}>
-                {item.title}
+                {displayTitle}
               </Text>
             </View>
-            {isLocked ? (
-              <View style={[s.lockPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-                <Ionicons name="time-outline" size={12} color={theme.textMuted} />
-                <Text style={[s.lockPillTxt, { color: theme.textMuted }]}>
-                  {language === "tr" ? "Henüz değil" : "Locked"}
+            {upcomingBadge ? (
+              <View
+                style={[
+                  s.upcomingPill,
+                  { backgroundColor: `${upcomingBadgeColor}12`, borderColor: `${upcomingBadgeColor}30` },
+                ]}
+              >
+                <Ionicons name={upcomingBadge.icon} size={12} color={upcomingBadgeColor} />
+                <Text style={[s.upcomingPillTxt, { color: upcomingBadgeColor }]}>
+                  {upcomingBadge.label}
                 </Text>
               </View>
             ) : (
@@ -1243,19 +1379,19 @@ function PendingCard({
           </View>
 
           {/* Macro chips — semantic nutrition colors */}
-          {!!hasMacros && (
+          {!!hasDisplayMacros && (
             <View style={s.macroRow}>
-              {!!item.calories && (
-                <MacroChip value={`${item.calories} kcal`} color={theme.macroCalorie} />
+              {!!displayCalories && (
+                <MacroChip value={`${displayCalories} kcal`} color={theme.macroCalorie} />
               )}
-              {!!item.macros?.proteinGrams && (
-                <MacroChip value={`P ${item.macros.proteinGrams}g`} color={theme.macroProtein} />
+              {!!displayMacros?.proteinGrams && (
+                <MacroChip value={`P ${displayMacros.proteinGrams}g`} color={theme.macroProtein} />
               )}
-              {!!item.macros?.carbsGrams && (
-                <MacroChip value={`K ${item.macros.carbsGrams}g`} color={theme.macroCarb} />
+              {!!displayMacros?.carbsGrams && (
+                <MacroChip value={`K ${displayMacros.carbsGrams}g`} color={theme.macroCarb} />
               )}
-              {!!item.macros?.fatGrams && (
-                <MacroChip value={`Y ${item.macros.fatGrams}g`} color={theme.macroFat} />
+              {!!displayMacros?.fatGrams && (
+                <MacroChip value={`Y ${displayMacros.fatGrams}g`} color={theme.macroFat} />
               )}
             </View>
           )}
@@ -1266,6 +1402,36 @@ function PendingCard({
               <Text style={[s.noteText, { color: theme.textSub }]} numberOfLines={3}>
                 {item.note}
               </Text>
+            </View>
+          )}
+          {!!selectedRecipeLabel && (
+            <View style={[s.selectedRecipeBox, { backgroundColor: `${theme.primary}10`, borderColor: `${theme.primary}28` }]}>
+              <View style={s.selectedRecipeTextWrap}>
+                <View style={[s.selectedRecipeIconWrap, { backgroundColor: `${theme.primary}16`, borderColor: `${theme.primary}26` }]}>
+                  <Ionicons name="sparkles-outline" size={13} color={theme.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.selectedRecipeLabel, { color: theme.primary }]}>{selectedRecipeLabel}</Text>
+                  <Text style={[s.selectedRecipeHint, { color: theme.textMuted }]}>
+                    {language === "tr"
+                      ? "Çift dokunarak planlanan tarif ile seçilen alternatifi karşılaştır."
+                      : "Double tap to compare planned and selected recipes."}
+                  </Text>
+                </View>
+              </View>
+              {hasAlternativeSelection && (
+                <TouchableOpacity
+                  style={[s.selectedRecipeResetBtn, { backgroundColor: theme.surface, borderColor: `${theme.primary}24` }]}
+                  onPress={onResetSelection}
+                  disabled={isActing}
+                  activeOpacity={0.76}
+                >
+                  <Ionicons name="refresh-outline" size={13} color={theme.primary} />
+                  <Text style={[s.selectedRecipeResetTxt, { color: theme.primary }]}>
+                    {language === "tr" ? "Orijinale Dön" : "Use original"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           {isLocked && (
@@ -1311,11 +1477,13 @@ function PendingCard({
                 <TouchableOpacity
                   style={[s.ghostBtn, { borderColor: theme.border }]}
                   onPress={onAlternative}
-                  disabled={isActing || isLocked}
+                  disabled={isActing}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="swap-horizontal-outline" size={13} color={theme.textMuted} />
-                  <Text style={[s.ghostBtnTxt, { color: theme.textMuted }]}>Alternatif</Text>
+                  <Text style={[s.ghostBtnTxt, { color: theme.textMuted }]}>
+                    {language === "tr" ? "Alternatif Seç" : "Choose alternative"}
+                  </Text>
                 </TouchableOpacity>
               )}
 
@@ -1333,7 +1501,7 @@ function PendingCard({
             </View>
           </View>
         </View>
-      </View>
+      </RNAnimated.View>
     </Animated.View>
   );
 }
@@ -1882,37 +2050,6 @@ const s = StyleSheet.create({
   root:    { flex: 1 },
   centered:{ justifyContent: "center", alignItems: "center" },
   scroll:  { paddingHorizontal: spacing.lg, paddingTop: spacing.xl + 18 },
-  planToastWrap: {
-    position: "absolute",
-    left: spacing.lg,
-    right: spacing.lg,
-    zIndex: 30,
-  },
-  planToastCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 8,
-  },
-  planToastIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-  },
-  planToastContent: { flex: 1, gap: 3 },
-  planToastTitle: { fontSize: 13, fontWeight: "900" },
-  planToastBody: { fontSize: 12, fontWeight: "600", lineHeight: 18 },
   bottomPad: { height: 132 },
   screenGlowA: {
     position: "absolute",
@@ -2167,6 +2304,17 @@ const s = StyleSheet.create({
     paddingVertical: 5,
   },
   lockPillTxt: { fontSize: 10, fontWeight: "800" },
+  upcomingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    maxWidth: 116,
+  },
+  upcomingPillTxt: { fontSize: 10, fontWeight: "900" },
   lockHintBox: {
     marginTop: 8,
     borderWidth: 1,
@@ -2227,6 +2375,50 @@ const s = StyleSheet.create({
     borderLeftWidth: 2,
   },
   noteText: { fontSize: 12, fontWeight: "500", lineHeight: 17 },
+  selectedRecipeBox: {
+    marginTop: 10,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  selectedRecipeTextWrap: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  selectedRecipeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectedRecipeLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+  },
+  selectedRecipeHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  selectedRecipeResetBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  selectedRecipeResetTxt: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
 
   detailBackdrop: {
     flex: 1,

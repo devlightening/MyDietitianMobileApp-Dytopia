@@ -37,6 +37,17 @@ public class PlanMealItem
     /// </summary>
     public Guid? RecipeId { get; set; }
 
+    /// <summary>
+    /// Final recipe preference selected by the client for this meal.
+    /// Defaults to the original RecipeId when not explicitly changed.
+    /// </summary>
+    public Guid? SelectedRecipeId { get; set; }
+
+    /// <summary>
+    /// Whether the selected recipe points to the original plan or an alternative.
+    /// </summary>
+    public string SelectedRecipeSource { get; set; } = "Original";
+
     /// <summary>Meal title (e.g., "Yulaf Ezmesi", "Sebzeli Omlet")</summary>
     public string Title { get; set; } = string.Empty;
 
@@ -58,5 +69,6 @@ public class PlanMealItem
     // Navigation
     public MealPlan Plan { get; set; } = null!;
     public Recipe?  Recipe { get; set; }
+    public Recipe?  SelectedRecipe { get; set; }
     public MealCompletion? Completion { get; set; }
 }

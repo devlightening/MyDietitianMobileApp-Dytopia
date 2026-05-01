@@ -72,7 +72,7 @@ export default function ProfileNotificationsScreen() {
   }, [preferences]);
 
   const copy = useMemo(() => language === "tr" ? {
-    back: "â† Geri",
+    back: "← Geri",
     title: "Bildirimler",
     subtitle: "Su, öğün, ölçüm ve geri çağırma hatırlatıcılarını yönet.",
     permissionReady: "Bildirim izni aktif",
@@ -82,6 +82,12 @@ export default function ProfileNotificationsScreen() {
     permissionButton: "İzin Ver",
     previewButton: "Test Bildirimi Gönder",
     global: "Tüm Bildirimler",
+    coach: "Uygulama içi koç bildirimleri",
+    coachSub: "Üstten akan akıllı yönlendirme ve onay bildirimleri",
+    achievement: "Kazanımlar ve seri kutlamaları",
+    achievementSub: "Rozet ve seri başarılarını daha görünür yaşa",
+    pantry: "Dolap ve mutfak bildirimleri",
+    pantrySub: "Dolap güncellemesi ve eksik liste aksiyonları",
     hydration: "Su hatırlatmaları",
     hydrationSub: "Gün içi düzenli su içme akışı",
     hydrationWindow: "Aktif saat aralığı",
@@ -94,7 +100,7 @@ export default function ProfileNotificationsScreen() {
     mealLead: "Önceden haber ver",
     measurementDay: "Hatırlatma günü",
     measurementTime: "Hatırlatma saati",
-    save: "Bildirim Planını Kaydet",
+    save: "Bildirim planını kaydet",
     synced: "Bildirim ayarları kaydedildi ve zamanlandı.",
     permissionDenied: "Bildirim izni olmadan cihaz üzerinde hatırlatıcı planlanamaz.",
     saveError: "Bildirim ayarları kaydedilemedi.",
@@ -102,7 +108,7 @@ export default function ProfileNotificationsScreen() {
     timeStart: "Başlangıç",
     timeEnd: "Bitiş",
   } : {
-    back: "â† Back",
+    back: "← Back",
     title: "Notifications",
     subtitle: "Manage water, meal, measurement, and re-engagement reminders.",
     permissionReady: "Notifications enabled",
@@ -112,6 +118,12 @@ export default function ProfileNotificationsScreen() {
     permissionButton: "Allow notifications",
     previewButton: "Send Test Notification",
     global: "All Notifications",
+    coach: "In-app coach notifications",
+    coachSub: "Smart top banners and guidance inside the app",
+    achievement: "Achievements and streak celebrations",
+    achievementSub: "Make badge and streak wins more visible",
+    pantry: "Pantry and kitchen notifications",
+    pantrySub: "Pantry updates and missing-item actions",
     hydration: "Hydration reminders",
     hydrationSub: "Steady water check-ins during the day",
     hydrationWindow: "Active hours",
@@ -252,6 +264,33 @@ export default function ProfileNotificationsScreen() {
             onChange={(value) => update("notificationsEnabled", value)}
           />
         </SettingsCard>
+
+        <SectionCard
+          theme={theme}
+          title={copy.coach}
+          subtitle={copy.coachSub}
+          enabled={draft.notificationsEnabled && draft.inAppCoachNotificationsEnabled}
+          toggleValue={draft.inAppCoachNotificationsEnabled}
+          onToggle={(value) => update("inAppCoachNotificationsEnabled", value)}
+        />
+
+        <SectionCard
+          theme={theme}
+          title={copy.achievement}
+          subtitle={copy.achievementSub}
+          enabled={draft.notificationsEnabled && draft.achievementNotificationsEnabled}
+          toggleValue={draft.achievementNotificationsEnabled}
+          onToggle={(value) => update("achievementNotificationsEnabled", value)}
+        />
+
+        <SectionCard
+          theme={theme}
+          title={copy.pantry}
+          subtitle={copy.pantrySub}
+          enabled={draft.notificationsEnabled && draft.pantryActivityNotificationsEnabled}
+          toggleValue={draft.pantryActivityNotificationsEnabled}
+          onToggle={(value) => update("pantryActivityNotificationsEnabled", value)}
+        />
 
         <SectionCard
           theme={theme}
@@ -447,7 +486,7 @@ function SectionCard({
   enabled: boolean;
   toggleValue: boolean;
   onToggle: (value: boolean) => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border, opacity: enabled ? 1 : 0.88 }]}>
@@ -458,7 +497,7 @@ function SectionCard({
         </View>
         <Switch value={toggleValue} onValueChange={onToggle} trackColor={{ true: theme.primary, false: "#CBD5D1" }} />
       </View>
-      <View style={s.sectionBody}>{children}</View>
+      {children ? <View style={s.sectionBody}>{children}</View> : null}
     </View>
   );
 }

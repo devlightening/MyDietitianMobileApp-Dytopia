@@ -2,6 +2,9 @@ import apiClient from "./client";
 
 export interface NotificationPreferences {
   notificationsEnabled: boolean;
+  inAppCoachNotificationsEnabled: boolean;
+  achievementNotificationsEnabled: boolean;
+  pantryActivityNotificationsEnabled: boolean;
   hydrationRemindersEnabled: boolean;
   hydrationIntervalMinutes: number;
   hydrationStartLocalTime: string;
@@ -21,6 +24,9 @@ export interface NotificationPreferences {
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   notificationsEnabled: true,
+  inAppCoachNotificationsEnabled: true,
+  achievementNotificationsEnabled: true,
+  pantryActivityNotificationsEnabled: true,
   hydrationRemindersEnabled: true,
   hydrationIntervalMinutes: 120,
   hydrationStartLocalTime: "09:00",

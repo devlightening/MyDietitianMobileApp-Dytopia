@@ -14,7 +14,7 @@ export default function ComplianceButtons({ mealId, onMark, currentStatus, disab
   const { theme } = useTheme();
 
   const BTNS = [
-    { status: 'done'        as const, emoji: 'âœ…', label: 'Yaptım',      bg: theme.success + '18',  active: theme.success },
+  { status: 'done'        as const, emoji: '✓', label: 'Yaptım',      bg: theme.success + '18',  active: theme.success },
     { status: 'alternative' as const, emoji: 'ğŸ”', label: 'Alternatif',  bg: theme.warning + '18',  active: theme.warning },
     { status: 'skipped'     as const, emoji: 'â­ï¸', label: 'Yapamadım',   bg: theme.border,           active: theme.textMuted },
   ];

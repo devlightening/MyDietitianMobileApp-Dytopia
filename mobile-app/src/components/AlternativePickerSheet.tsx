@@ -15,7 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { radii, spacing } from "../theme/tokens";
-import { alternativeMeal, completeMeal, type MealItem } from "../data/plansRepo";
+import { selectMealRecipe, type MealItem } from "../data/plansRepo";
 import { decideAlternative } from "../api/alternative";
 import { getPantry } from "../api/pantry";
 import type { AlternativeDecisionResponse, AlternativeRecipe } from "../types/alternative";
@@ -221,7 +221,7 @@ export default function AlternativePickerSheet({ meal, onClose, onConfirmed }: P
 
     setActing(true);
     try {
-      await alternativeMeal(meal.id, alt.recipeId);
+      await selectMealRecipe(meal.id, "Alternative", alt.recipeId);
       onConfirmed({ type: "alternative", recipeName: alt.recipeName });
       dismiss();
     } catch {
@@ -230,12 +230,12 @@ export default function AlternativePickerSheet({ meal, onClose, onConfirmed }: P
     }
   }
 
-  async function handleCookOriginal() {
+  async function handleSelectOriginal() {
     if (!meal) return;
 
     setActing(true);
     try {
-      await completeMeal(meal.id);
+      await selectMealRecipe(meal.id, "Original");
       onConfirmed({ type: "original" });
       dismiss();
     } catch {
@@ -312,7 +312,7 @@ export default function AlternativePickerSheet({ meal, onClose, onConfirmed }: P
               <View style={styles.centerBlock}>
                 <ActivityIndicator color={theme.primary} size="large" />
                 <Text style={[styles.centerText, { color: theme.textMuted }]}>
-                  Besin değerlerine göre alternatifiniz aranıyorâ€¦
+                  Besin değerlerine göre alternatifiniz aranıyor…
                 </Text>
               </View>
             ) : null}
@@ -452,7 +452,7 @@ export default function AlternativePickerSheet({ meal, onClose, onConfirmed }: P
                     ) : null}
 
                     <Text style={[styles.selectionHint, { color: theme.textMuted }]}>
-                      Seçtiğinde öğün alternatif tercih ile tamamlandı olarak kaydedilir.
+                      Seçtiğinde bu öğün için hazırlanacak tarif tercihi güncellenir. Tamamlanma kaydı oluşmaz.
                     </Text>
                   </View>
                 ) : null}
@@ -467,7 +467,7 @@ export default function AlternativePickerSheet({ meal, onClose, onConfirmed }: P
                       </Text>
                       {alternatives.length > 1 ? (
                         <Text style={[styles.swipeHint, { color: theme.textMuted }]}>
-                          â† kaydır â†’
+                          Kaydırarak diğer alternatiflere bak
                         </Text>
                       ) : null}
                     </View>
@@ -551,12 +551,12 @@ export default function AlternativePickerSheet({ meal, onClose, onConfirmed }: P
                     borderColor: theme.borderEmerald,
                   },
                 ]}
-                onPress={() => void handleCookOriginal()}
+                onPress={() => void handleSelectOriginal()}
                 activeOpacity={0.8}
               >
                 <Ionicons name="restaurant" size={16} color={theme.emerald} />
                 <Text style={[styles.secondaryButtonText, { color: theme.emerald }]}>
-                  Orijinali Yaptım
+                  Orijinali Seç
                 </Text>
               </TouchableOpacity>
             ) : null}

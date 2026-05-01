@@ -14,12 +14,16 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInDown, FadeOutUp, LinearTransition } from "react-native-reanimated";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
 import { Routes } from "../navigation/routes";
 import { radii, spacing } from "../theme/tokens";
 import ProduceBubble from "../components/decor/ProduceBubble";
 import AppEmptyState from "../components/ui/AppEmptyState";
+import AnimatedCard from "../components/ui/AnimatedCard";
+import PulseBadge from "../components/ui/PulseBadge";
+import SuccessSettleWrapper from "../components/ui/SuccessSettleWrapper";
 import {
   addShoppingListItem,
   clearCheckedShoppingListItems,
@@ -28,6 +32,7 @@ import {
   getShoppingList,
   type ShoppingListResponse,
   type ShoppingListItem,
+  type ShoppingPlanRecipeCard,
   type ShoppingListSummary,
   toggleShoppingListItem,
 } from "../api/shopping-list";
@@ -48,6 +53,8 @@ export default function ShoppingListScreen() {
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "meal">("list");
+  const [expandedPlanCardKey, setExpandedPlanCardKey] = useState<string | null>(null);
 
   const copy = language === "en"
     ? {
@@ -74,11 +81,23 @@ export default function ShoppingListScreen() {
         emptyDesc: "Generate ingredients from your plan or add custom pantry needs.",
         activeSection: "To buy",
         completedSection: "Completed",
+        listView: "List",
+        mealView: "By meal",
+        mealBreakdown: "Meal breakdown",
+        selectedRecipePrefix: "Selected recipe",
+        mandatory: "Mandatory",
+        optional: "Optional",
+        flavoring: "Flavoring",
+        moreMealsSuffix: "more meals",
         sourcePlan: "Plan",
         sourceKitchen: "Kitchen",
         sourceRecipe: "Recipe",
         sourceManual: "Manual",
         share: "Share list",
+        planCardsTitle: "Today's plan cards",
+        pantryCoveredTitle: "Skipped because it is in your pantry",
+        missingTitle: "To buy for this recipe",
+        noMissingForRecipe: "Your pantry already covers this recipe.",
       }
     : {
         back: "Geri",
@@ -104,11 +123,23 @@ export default function ShoppingListScreen() {
         emptyDesc: "Planından malzeme üret veya kendi ihtiyaçlarını tek satırla ekle.",
         activeSection: "Alınacaklar",
         completedSection: "Tamamlananlar",
+        listView: "Liste",
+        mealView: "Öğün Bazlı",
+        mealBreakdown: "Öğün kırılımı",
+        selectedRecipePrefix: "Seçilen tarif",
+        mandatory: "Zorunlu",
+        optional: "Opsiyonel",
+        flavoring: "Lezzetlendirici",
+        moreMealsSuffix: "öğün daha",
         sourcePlan: "Plan",
         sourceKitchen: "Mutfak",
         sourceRecipe: "Tarif",
         sourceManual: "Elle",
         share: "Listeyi Paylaş",
+        planCardsTitle: "Bugünün plan kartları",
+        pantryCoveredTitle: "Dolabında var diye listeye eklenmedi",
+        missingTitle: "Bu tarif için alınacaklar",
+        noMissingForRecipe: "Dolabın bu tarifi şimdilik karşılıyor.",
       };
 
   const load = useCallback(async () => {
@@ -149,6 +180,49 @@ export default function ShoppingListScreen() {
     () => items.filter((item) => item.sourceType === "TodayPlan" || item.sourceType === "Recipe").length,
     [items],
   );
+
+  const categoryLabel = useCallback((category?: string | null) => {
+    switch ((category ?? "").toLowerCase()) {
+      case "mandatory":
+        return copy.mandatory;
+      case "optional":
+        return copy.optional;
+      case "flavoring":
+        return copy.flavoring;
+      default:
+        return copy.mandatory;
+    }
+  }, [copy.flavoring, copy.mandatory, copy.optional]);
+
+  const categoryTone = useCallback((category?: string | null) => {
+    switch ((category ?? "").toLowerCase()) {
+      case "optional":
+        return { fg: theme.primary, bg: `${theme.primary}12`, border: `${theme.primary}2c` };
+      case "flavoring":
+        return { fg: theme.accentGold, bg: `${theme.accentGold}12`, border: `${theme.accentGold}2c` };
+      default:
+        return { fg: theme.emerald, bg: `${theme.emerald}12`, border: `${theme.emerald}2c` };
+    }
+  }, [theme.accentGold, theme.emerald, theme.primary]);
+
+  const getRoleSummary = useCallback((item: ShoppingListItem) => {
+    const roles = item.ingredientRoleSummary?.length
+      ? item.ingredientRoleSummary
+      : item.sourceMeals?.map((meal) => meal.category).filter(Boolean) ?? [];
+    return Array.from(new Set(roles));
+  }, []);
+
+  const getMealCaption = useCallback((item: ShoppingListItem) => {
+    if (!item.primaryMealTitle) return null;
+    return item.primaryMealTime
+      ? `${item.primaryMealTitle} • ${item.primaryMealTime}`
+      : item.primaryMealTitle;
+  }, []);
+
+  const activeMealGroups = useMemo(() => buildMealGroups(activeItems), [activeItems, language]);
+  const completedMealGroups = useMemo(() => buildMealGroups(completedItems), [completedItems, language]);
+  const recipeCards = generation?.recipeCards ?? [];
+
   const smartAssist = useMemo(() => {
     if (summary.activeCount >= 6) {
       return {
@@ -274,60 +348,309 @@ export default function ShoppingListScreen() {
     }
   }
 
+  function buildMealGroups(sourceItems: ShoppingListItem[]) {
+    const orderMap = new Map<string, {
+      key: string;
+      mealTitle: string;
+      mealTime: string;
+      selectedRecipeName?: string | null;
+      generatedFromSelectedRecipe?: boolean;
+      mandatory: ShoppingListItem[];
+      optional: ShoppingListItem[];
+      flavoring: ShoppingListItem[];
+    }>();
+
+    sourceItems.forEach((item) => {
+      const sourceMeals = item.sourceMeals?.length
+        ? item.sourceMeals
+        : [{
+            mealItemId: `manual-${item.id}`,
+            mealTitle: item.primaryMealTitle ?? copy.sourceManual,
+            mealTime: item.primaryMealTime ?? "",
+            category: item.ingredientRoleSummary?.[0] ?? "Mandatory",
+            selectedRecipeName: null,
+            generatedFromSelectedRecipe: item.generatedFromSelectedRecipe,
+          }];
+
+      sourceMeals.forEach((meal) => {
+        const key = `${meal.mealItemId}:${meal.mealTitle}:${meal.mealTime}`;
+        if (!orderMap.has(key)) {
+          orderMap.set(key, {
+            key,
+            mealTitle: meal.mealTitle,
+            mealTime: meal.mealTime,
+            selectedRecipeName: meal.selectedRecipeName,
+            generatedFromSelectedRecipe: meal.generatedFromSelectedRecipe,
+            mandatory: [],
+            optional: [],
+            flavoring: [],
+          });
+        }
+
+        const group = orderMap.get(key)!;
+        const bucketName =
+          meal.category === "Optional"
+            ? "optional"
+            : meal.category === "Flavoring"
+              ? "flavoring"
+              : "mandatory";
+        const bucket = group[bucketName];
+        if (!bucket.some((entry) => entry.id === item.id)) {
+          bucket.push(item);
+        }
+      });
+    });
+
+    return Array.from(orderMap.values()).sort((a, b) => {
+      if (!a.mealTime && !b.mealTime) return a.mealTitle.localeCompare(b.mealTitle, "tr");
+      if (!a.mealTime) return 1;
+      if (!b.mealTime) return -1;
+      return a.mealTime.localeCompare(b.mealTime, "tr");
+    });
+  }
+
   function renderShoppingItem(item: ShoppingListItem) {
+    const mealCaption = getMealCaption(item);
+    const roleSummary = getRoleSummary(item);
+    const additionalMeals = Math.max(0, (item.sourceMeals?.length ?? 0) - 1);
+
     return (
-      <TouchableOpacity
+      <Animated.View
         key={item.id}
-        activeOpacity={0.88}
-        style={[
-          s.itemCard,
-          {
-            backgroundColor: item.isChecked ? theme.surfaceElevated : theme.surface,
-            borderColor: item.isChecked ? `${theme.emerald}30` : theme.border,
-          },
-        ]}
-        onPress={() => void handleToggle(item)}
+        entering={FadeInDown.duration(180)}
+        exiting={FadeOutUp.duration(140)}
+        layout={LinearTransition.duration(160)}
       >
-        <View style={[s.checkWrap, { backgroundColor: item.isChecked ? theme.emerald : theme.surfaceElevated, borderColor: item.isChecked ? `${theme.emerald}22` : theme.border }]}>
-          <Ionicons
-            name={item.isChecked ? "checkmark" : "ellipse-outline"}
-            size={16}
-            color={item.isChecked ? "#FFFFFF" : theme.textMuted}
-          />
-        </View>
-        <View style={s.itemBody}>
-          <View style={s.itemTop}>
-            <Text
-              style={[
-                s.itemTitle,
-                { color: theme.text },
-                item.isChecked && { textDecorationLine: "line-through", color: theme.textMuted },
-              ]}
-            >
-              {item.title}
-            </Text>
-            <View style={[s.sourcePill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
-              <Text style={[s.sourcePillTxt, { color: theme.emerald }]}>{sourceLabel(item.sourceType)}</Text>
-            </View>
-          </View>
-          {!!item.note && (
-            <Text style={[s.itemMeta, { color: theme.textMuted }]} numberOfLines={2}>
-              {item.note}
-            </Text>
-          )}
-        </View>
         <TouchableOpacity
-          style={s.deleteTap}
-          onPress={() => void handleDelete(item)}
-          disabled={busyId === item.id}
+          activeOpacity={0.88}
+          style={[
+            s.itemCard,
+            {
+              backgroundColor: item.isChecked ? theme.surfaceElevated : theme.surface,
+              borderColor: item.isChecked ? `${theme.emerald}30` : theme.border,
+            },
+          ]}
+          onPress={() => void handleToggle(item)}
         >
-          {busyId === item.id ? (
-            <ActivityIndicator size="small" color={theme.textSub} />
-          ) : (
-            <Ionicons name="close-outline" size={22} color={theme.textSub} />
-          )}
+          <View style={[s.checkWrap, { backgroundColor: item.isChecked ? theme.emerald : theme.surfaceElevated, borderColor: item.isChecked ? `${theme.emerald}22` : theme.border }]}>
+            <Ionicons
+              name={item.isChecked ? "checkmark" : "ellipse-outline"}
+              size={16}
+              color={item.isChecked ? "#FFFFFF" : theme.textMuted}
+            />
+          </View>
+          <View style={s.itemBody}>
+            <View style={s.itemTop}>
+              <Text
+                style={[
+                  s.itemTitle,
+                  { color: theme.text },
+                  item.isChecked && { textDecorationLine: "line-through", color: theme.textMuted },
+                ]}
+              >
+                {item.title}
+              </Text>
+              <View style={[s.sourcePill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+                <Text style={[s.sourcePillTxt, { color: theme.emerald }]}>{sourceLabel(item.sourceType)}</Text>
+              </View>
+            </View>
+            <View style={s.itemMetaWrap}>
+              {!!mealCaption && (
+                <Text style={[s.itemMealCaption, { color: theme.textMuted }]} numberOfLines={1}>
+                  {mealCaption}
+                </Text>
+              )}
+              {additionalMeals > 0 && (
+                <Text style={[s.itemMeta, { color: theme.primary }]}>
+                  +{additionalMeals} {copy.moreMealsSuffix}
+                </Text>
+              )}
+            </View>
+            {roleSummary.length > 0 && (
+              <View style={s.rolePillRow}>
+                {roleSummary.map((role) => {
+                  const tone = categoryTone(role);
+                  return (
+                    <View
+                      key={`${item.id}-${role}`}
+                      style={[s.rolePill, { backgroundColor: tone.bg, borderColor: tone.border }]}
+                    >
+                      <Text style={[s.rolePillTxt, { color: tone.fg }]}>{categoryLabel(role)}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+            {!!item.note && (
+              <Text style={[s.itemMeta, { color: theme.textMuted }]} numberOfLines={2}>
+                {item.note}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            style={s.deleteTap}
+            onPress={() => void handleDelete(item)}
+            disabled={busyId === item.id}
+          >
+            {busyId === item.id ? (
+              <ActivityIndicator size="small" color={theme.textSub} />
+            ) : (
+              <Ionicons name="close-outline" size={22} color={theme.textSub} />
+            )}
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
+      </Animated.View>
+    );
+  }
+
+  function renderMealGroupedSections(sourceGroups: ReturnType<typeof buildMealGroups>, accentColor: string) {
+    return sourceGroups.map((group, index) => (
+      <AnimatedCard
+        key={group.key}
+        delay={120 + index * 40}
+        style={[s.mealGroupCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      >
+        <View style={s.mealGroupTop}>
+          <View>
+            <Text style={[s.mealGroupTitle, { color: theme.text }]}>{group.mealTitle}</Text>
+            {!!group.mealTime && (
+              <Text style={[s.mealGroupTime, { color: theme.textMuted }]}>{group.mealTime}</Text>
+            )}
+          </View>
+          <View style={[s.mealGroupCount, { backgroundColor: `${accentColor}12`, borderColor: `${accentColor}2c` }]}>
+            <Text style={[s.mealGroupCountTxt, { color: accentColor }]}>
+              {group.mandatory.length + group.optional.length + group.flavoring.length}
+            </Text>
+          </View>
+        </View>
+
+        {!!group.selectedRecipeName && group.generatedFromSelectedRecipe && (
+          <View style={[s.selectedRecipeHintCard, { backgroundColor: `${theme.primary}10`, borderColor: `${theme.primary}24` }]}>
+            <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+            <Text style={[s.selectedRecipeHintText, { color: theme.primary }]}>
+              {copy.selectedRecipePrefix}: {group.selectedRecipeName}
+            </Text>
+          </View>
+        )}
+
+        {([
+          ["mandatory", group.mandatory],
+          ["optional", group.optional],
+          ["flavoring", group.flavoring],
+        ] as const).map(([bucket, bucketItems]) => {
+          if (bucketItems.length === 0) return null;
+          const tone = categoryTone(bucket === "mandatory" ? "Mandatory" : bucket === "optional" ? "Optional" : "Flavoring");
+          return (
+            <View key={`${group.key}-${bucket}`} style={s.mealCategoryBlock}>
+              <View style={[s.mealCategoryPill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
+                <Text style={[s.mealCategoryPillTxt, { color: tone.fg }]}>
+                  {bucket === "mandatory" ? copy.mandatory : bucket === "optional" ? copy.optional : copy.flavoring}
+                </Text>
+              </View>
+              <View style={s.mealCategoryItems}>
+                {bucketItems.map(renderShoppingItem)}
+              </View>
+            </View>
+          );
+        })}
+      </AnimatedCard>
+    ));
+  }
+
+  function renderIngredientGroup(
+    label: string,
+    category: "Mandatory" | "Optional" | "Flavoring",
+    ingredients: ShoppingPlanRecipeCard["missingGroups"]["mandatory"],
+  ) {
+    if (ingredients.length === 0) return null;
+    const tone = categoryTone(category);
+    return (
+      <View style={s.planCardGroup}>
+        <View style={[s.planCardGroupPill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
+          <Text style={[s.planCardGroupPillText, { color: tone.fg }]}>{label}</Text>
+        </View>
+        <View style={s.planCardIngredientWrap}>
+          {ingredients.map((ingredient) => (
+            <View
+              key={`${category}-${ingredient.ingredientId}`}
+              style={[s.planCardIngredientChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+            >
+              <Text style={[s.planCardIngredientText, { color: theme.textSub }]}>{ingredient.ingredientName}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  function renderRecipePlanCard(card: ShoppingPlanRecipeCard, index: number) {
+    const expanded = expandedPlanCardKey === card.mealItemId;
+    const hasMissing = card.missingCount > 0;
+    const hasCovered = card.pantryCoveredCount > 0;
+    const sourceIsAlternative = card.selectedRecipeSource === "Alternative" || card.generatedFromSelectedRecipe;
+
+    return (
+      <AnimatedCard
+        key={card.mealItemId}
+        delay={300 + index * 35}
+        style={[s.planRecipeCard, { backgroundColor: theme.surface, borderColor: sourceIsAlternative ? `${theme.accentGold}34` : theme.border }]}
+      >
+        <TouchableOpacity
+          style={s.planRecipeCardHead}
+          activeOpacity={0.86}
+          onPress={() => setExpandedPlanCardKey(expanded ? null : card.mealItemId)}
+        >
+          <View style={[s.planRecipeIcon, { backgroundColor: `${theme.primary}12`, borderColor: `${theme.primary}26` }]}>
+            <Ionicons name={sourceIsAlternative ? "sparkles-outline" : "restaurant-outline"} size={17} color={sourceIsAlternative ? theme.accentGold : theme.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.planRecipeMeal, { color: theme.textMuted }]}>
+              {card.mealTime ? `${card.mealTitle} • ${card.mealTime}` : card.mealTitle}
+            </Text>
+            <Text style={[s.planRecipeTitle, { color: theme.text }]} numberOfLines={2}>{card.recipeName}</Text>
+            {sourceIsAlternative && !!card.plannedRecipeName && card.plannedRecipeName !== card.recipeName && (
+              <Text style={[s.planRecipeSub, { color: theme.textMuted }]} numberOfLines={1}>
+                {language === "tr" ? "Planlanan:" : "Planned:"} {card.plannedRecipeName}
+              </Text>
+            )}
+          </View>
+          <View style={[s.planCoveragePill, { backgroundColor: `${theme.emerald}12`, borderColor: `${theme.emerald}28` }]}>
+            <Text style={[s.planCoverageText, { color: theme.emerald }]}>%{card.coveragePercent}</Text>
+          </View>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={theme.textSub} />
+        </TouchableOpacity>
+
+        {expanded && (
+          <View style={[s.planRecipeDetails, { borderTopColor: theme.border }]}>
+            <View style={s.planRecipeSummaryRow}>
+              <View style={[s.planRecipeMiniStat, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                <Text style={[s.planRecipeMiniStatValue, { color: theme.primary }]}>{card.missingCount}</Text>
+                <Text style={[s.planRecipeMiniStatLabel, { color: theme.textMuted }]}>{language === "tr" ? "eksik" : "missing"}</Text>
+              </View>
+              <View style={[s.planRecipeMiniStat, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                <Text style={[s.planRecipeMiniStatValue, { color: theme.emerald }]}>{card.pantryCoveredCount}</Text>
+                <Text style={[s.planRecipeMiniStatLabel, { color: theme.textMuted }]}>{language === "tr" ? "dolapta" : "in pantry"}</Text>
+              </View>
+            </View>
+
+            <Text style={[s.planRecipeSectionTitle, { color: hasMissing ? theme.text : theme.emerald }]}>
+              {hasMissing ? copy.missingTitle : copy.noMissingForRecipe}
+            </Text>
+            {renderIngredientGroup(copy.mandatory, "Mandatory", card.missingGroups.mandatory)}
+            {renderIngredientGroup(copy.optional, "Optional", card.missingGroups.optional)}
+            {renderIngredientGroup(copy.flavoring, "Flavoring", card.missingGroups.flavoring)}
+
+            {hasCovered && (
+              <View style={[s.coveredBox, { backgroundColor: `${theme.emerald}0D`, borderColor: `${theme.emerald}24` }]}>
+                <Text style={[s.planRecipeSectionTitle, { color: theme.emerald }]}>{copy.pantryCoveredTitle}</Text>
+                {renderIngredientGroup(copy.mandatory, "Mandatory", card.pantryCoveredGroups.mandatory)}
+                {renderIngredientGroup(copy.optional, "Optional", card.pantryCoveredGroups.optional)}
+                {renderIngredientGroup(copy.flavoring, "Flavoring", card.pantryCoveredGroups.flavoring)}
+              </View>
+            )}
+          </View>
+        )}
+      </AnimatedCard>
     );
   }
 
@@ -366,15 +689,21 @@ export default function ShoppingListScreen() {
           <Text style={[s.backTxt, { color: theme.textSub }]}>{copy.back}</Text>
         </TouchableOpacity>
 
-        <View style={[s.hero, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+        <AnimatedCard delay={40} style={[s.hero, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
           <View style={s.heroTop}>
             <View style={[s.eyebrow, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
               <Text style={[s.eyebrowTxt, { color: theme.primaryDark }]}>{copy.eyebrow}</Text>
             </View>
-            <View style={[s.counter, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-              <Text style={[s.counterNum, { color: theme.text }]}>{summary.total}</Text>
-              <Text style={[s.counterTxt, { color: theme.textMuted }]}>{copy.totalItems}</Text>
-            </View>
+            <SuccessSettleWrapper trigger={summary.total}>
+              <PulseBadge
+                active={summary.total > 0}
+                color={theme.primary}
+                backgroundColor={theme.surfaceElevated}
+                borderColor={theme.border}
+                textColor={theme.text}
+                label={`${summary.total} ${copy.totalItems}`}
+              />
+            </SuccessSettleWrapper>
           </View>
           <Text style={[s.heroTitle, { color: theme.text }]}>{copy.title}</Text>
           <Text style={[s.heroSub, { color: theme.textSub }]}>{copy.subtitle}</Text>
@@ -424,9 +753,9 @@ export default function ShoppingListScreen() {
               <Text style={[s.metricTxt, { color: theme.textMuted }]}>{copy.fromPlan}</Text>
             </View>
           </View>
-        </View>
+        </AnimatedCard>
 
-        <View style={[s.smartAssistCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+        <AnimatedCard delay={110} style={[s.smartAssistCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
           <View style={[s.smartAssistIcon, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
             <Ionicons name="bulb-outline" size={16} color={theme.primary} />
           </View>
@@ -434,9 +763,9 @@ export default function ShoppingListScreen() {
             <Text style={[s.smartAssistTitle, { color: theme.text }]}>{smartAssist.title}</Text>
             <Text style={[s.smartAssistBody, { color: theme.textSub }]}>{smartAssist.body}</Text>
           </View>
-        </View>
+        </AnimatedCard>
 
-        <View style={[s.composer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <AnimatedCard delay={150} style={[s.composer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={s.composerHead}>
             <Text style={[s.composerTitle, { color: theme.text }]}>{copy.quickAddTitle}</Text>
             <Text style={[s.composerHint, { color: theme.textMuted }]}>{copy.quickAddHint}</Text>
@@ -457,9 +786,10 @@ export default function ShoppingListScreen() {
               {adding ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={s.inlineBtnTxt}>{copy.add}</Text>}
             </TouchableOpacity>
           </View>
-        </View>
+        </AnimatedCard>
 
         <Text style={[s.blockTitle, { color: theme.textMuted }]}>{copy.actionsTitle}</Text>
+        <AnimatedCard delay={210}>
         <TouchableOpacity
           style={[s.generateCard, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}
           onPress={handleGenerateFromPlan}
@@ -479,8 +809,9 @@ export default function ShoppingListScreen() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={theme.primary} />
         </TouchableOpacity>
+        </AnimatedCard>
 
-        <View style={s.actionRow}>
+        <AnimatedCard delay={250} style={s.actionRow}>
           <TouchableOpacity
             style={[s.actionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
             onPress={handleClearChecked}
@@ -497,10 +828,48 @@ export default function ShoppingListScreen() {
             <Ionicons name="share-outline" size={16} color={theme.accentCyan} />
             <Text style={[s.actionBtnTxt, { color: theme.text }]}>{copy.share}</Text>
           </TouchableOpacity>
-        </View>
+        </AnimatedCard>
+
+        <AnimatedCard delay={270} style={[s.viewModeCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[s.viewModeTitle, { color: theme.textMuted }]}>{copy.mealBreakdown}</Text>
+          <View style={s.viewModeRow}>
+            <TouchableOpacity
+              style={[
+                s.viewModeBtn,
+                {
+                  backgroundColor: viewMode === "list" ? `${theme.primary}12` : theme.surfaceElevated,
+                  borderColor: viewMode === "list" ? `${theme.primary}2c` : theme.border,
+                },
+              ]}
+              onPress={() => setViewMode("list")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="list-outline" size={15} color={viewMode === "list" ? theme.primary : theme.textMuted} />
+              <Text style={[s.viewModeBtnTxt, { color: viewMode === "list" ? theme.primary : theme.textSub }]}>
+                {copy.listView}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                s.viewModeBtn,
+                {
+                  backgroundColor: viewMode === "meal" ? `${theme.primary}12` : theme.surfaceElevated,
+                  borderColor: viewMode === "meal" ? `${theme.primary}2c` : theme.border,
+                },
+              ]}
+              onPress={() => setViewMode("meal")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="grid-outline" size={15} color={viewMode === "meal" ? theme.primary : theme.textMuted} />
+              <Text style={[s.viewModeBtnTxt, { color: viewMode === "meal" ? theme.primary : theme.textSub }]}>
+                {copy.mealView}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </AnimatedCard>
 
         {!!generation && (
-          <View style={[s.aiCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+          <AnimatedCard delay={290} style={[s.aiCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
             <View style={[s.aiIconWrap, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
               <Ionicons name="sparkles-outline" size={18} color={theme.primary} />
             </View>
@@ -512,6 +881,29 @@ export default function ShoppingListScreen() {
               <Text style={[s.aiCountNum, { color: theme.primary }]}>{generation.generatedCount}</Text>
               <Text style={[s.aiCountTxt, { color: theme.textMuted }]}>{copy.aiCountLabel}</Text>
             </View>
+            <View style={s.generationStatsRow}>
+              <View style={[s.generationStatChip, { backgroundColor: `${theme.emerald}12`, borderColor: `${theme.emerald}28` }]}>
+                <Text style={[s.generationStatTxt, { color: theme.emerald }]}>{generation.mandatoryCount ?? 0} {copy.mandatory}</Text>
+              </View>
+              <View style={[s.generationStatChip, { backgroundColor: `${theme.primary}12`, borderColor: `${theme.primary}28` }]}>
+                <Text style={[s.generationStatTxt, { color: theme.primary }]}>{generation.optionalCount ?? 0} {copy.optional}</Text>
+              </View>
+              <View style={[s.generationStatChip, { backgroundColor: `${theme.accentGold}12`, borderColor: `${theme.accentGold}28` }]}>
+                <Text style={[s.generationStatTxt, { color: theme.accentGold }]}>{generation.flavoringCount ?? 0} {copy.flavoring}</Text>
+              </View>
+            </View>
+          </AnimatedCard>
+        )}
+
+        {recipeCards.length > 0 && (
+          <View style={s.planRecipeSection}>
+            <View style={s.sectionHeader}>
+              <Text style={[s.sectionTitle, { color: theme.text }]}>{copy.planCardsTitle}</Text>
+              <View style={[s.sectionCountPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                <Text style={[s.sectionCountTxt, { color: theme.primary }]}>{recipeCards.length}</Text>
+              </View>
+            </View>
+            {recipeCards.map(renderRecipePlanCard)}
           </View>
         )}
 
@@ -537,7 +929,9 @@ export default function ShoppingListScreen() {
                     <Text style={[s.sectionCountTxt, { color: theme.primary }]}>{activeItems.length}</Text>
                   </View>
                 </View>
-                {activeItems.map(renderShoppingItem)}
+                {viewMode === "meal"
+                  ? renderMealGroupedSections(activeMealGroups, theme.primary)
+                  : activeItems.map(renderShoppingItem)}
               </View>
             )}
 
@@ -549,7 +943,9 @@ export default function ShoppingListScreen() {
                     <Text style={[s.sectionCountTxt, { color: theme.emerald }]}>{completedItems.length}</Text>
                   </View>
                 </View>
-                {completedItems.map(renderShoppingItem)}
+                {viewMode === "meal"
+                  ? renderMealGroupedSections(completedMealGroups, theme.emerald)
+                  : completedItems.map(renderShoppingItem)}
               </View>
             )}
           </View>
@@ -752,12 +1148,39 @@ const s = StyleSheet.create({
   generateTitle: { fontSize: 15, fontWeight: "900", marginBottom: 4 },
   generateHint: { fontSize: 12, lineHeight: 17 },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.base },
+  viewModeCard: {
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  viewModeTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  viewModeRow: { flexDirection: "row", gap: spacing.sm },
+  viewModeBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  viewModeBtnTxt: { fontSize: 12, fontWeight: "800" },
   aiCard: {
     borderWidth: 1,
     borderRadius: radii.xxl,
     padding: spacing.md,
     marginBottom: spacing.base,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-start",
     gap: spacing.sm,
   },
@@ -782,6 +1205,96 @@ const s = StyleSheet.create({
   },
   aiCountNum: { fontSize: 20, fontWeight: "900" },
   aiCountTxt: { fontSize: 10, fontWeight: "700" },
+  generationStatsRow: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: spacing.xs,
+  },
+  generationStatChip: {
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  generationStatTxt: { fontSize: 10.5, fontWeight: "800" },
+  planRecipeSection: { gap: spacing.sm, marginBottom: spacing.base },
+  planRecipeCard: {
+    borderWidth: 1,
+    borderRadius: radii.xxl,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  planRecipeCardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  planRecipeIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  planRecipeMeal: { fontSize: 11, fontWeight: "800", marginBottom: 2 },
+  planRecipeTitle: { fontSize: 15, fontWeight: "900", lineHeight: 20 },
+  planRecipeSub: { fontSize: 11.5, fontWeight: "700", marginTop: 3 },
+  planCoveragePill: {
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  planCoverageText: { fontSize: 11.5, fontWeight: "900" },
+  planRecipeDetails: {
+    borderTopWidth: 1,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  planRecipeSummaryRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  planRecipeMiniStat: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  planRecipeMiniStatValue: { fontSize: 17, fontWeight: "900" },
+  planRecipeMiniStatLabel: { fontSize: 10.5, fontWeight: "800", marginTop: 2 },
+  planRecipeSectionTitle: { fontSize: 12.5, fontWeight: "900", lineHeight: 17 },
+  planCardGroup: { gap: 7 },
+  planCardGroupPill: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  planCardGroupPillText: { fontSize: 10.5, fontWeight: "900" },
+  planCardIngredientWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  planCardIngredientChip: {
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  planCardIngredientText: { fontSize: 11.5, fontWeight: "700" },
+  coveredBox: {
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
   actionBtn: {
     flex: 1,
     minHeight: 50,
@@ -840,13 +1353,32 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   itemBody: { flex: 1, gap: 4 },
+  itemMetaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   itemTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
   itemTitle: { flex: 1, fontSize: 15, fontWeight: "800" },
+  itemMealCaption: { fontSize: 11.5, fontWeight: "700" },
   itemMeta: { fontSize: 12, lineHeight: 17 },
+  rolePillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  rolePill: {
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  rolePillTxt: { fontSize: 10, fontWeight: "800" },
   sourcePill: {
     borderWidth: 1,
     borderRadius: radii.full,
@@ -854,6 +1386,49 @@ const s = StyleSheet.create({
     paddingVertical: 6,
   },
   sourcePillTxt: { fontSize: 10, fontWeight: "800" },
+  mealGroupCard: {
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  mealGroupTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  mealGroupTitle: { fontSize: 15, fontWeight: "900" },
+  mealGroupTime: { fontSize: 12, fontWeight: "700", marginTop: 3 },
+  mealGroupCount: {
+    minWidth: 34,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  mealGroupCountTxt: { fontSize: 11, fontWeight: "900" },
+  selectedRecipeHintCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  selectedRecipeHintText: { flex: 1, fontSize: 11.5, fontWeight: "700", lineHeight: 17 },
+  mealCategoryBlock: { gap: 8 },
+  mealCategoryPill: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  mealCategoryPillTxt: { fontSize: 10.5, fontWeight: "800" },
+  mealCategoryItems: { gap: spacing.xs },
   deleteTap: {
     width: 36,
     alignItems: "center",

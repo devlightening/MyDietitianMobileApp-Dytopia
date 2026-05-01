@@ -169,7 +169,7 @@ export default function CheckIngredientsScreen() {
     <ScrollView style={{ backgroundColor: theme.bg }} keyboardShouldPersistTaps="handled">
       <View style={s.content}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backRow}>
-          <Text style={[s.backText, { color: theme.primary }]}>â† Geri</Text>
+          <Text style={[s.backText, { color: theme.primary }]}>← Geri</Text>
         </TouchableOpacity>
 
         <Text style={[s.title, { color: theme.text }]}>Malzeme Kontrolü</Text>
@@ -198,7 +198,7 @@ export default function CheckIngredientsScreen() {
                     borderColor: item.checked ? theme.primary : theme.textMuted,
                   },
                 ]}>
-                  {item.checked && <Text style={s.checkmark}>âœ“</Text>}
+                  {item.checked && <Text style={s.checkmark}>✓</Text>}
                 </View>
                 <Text style={[
                   s.rowText,
@@ -240,7 +240,7 @@ export default function CheckIngredientsScreen() {
                     borderColor: item.checked ? theme.primary : theme.textMuted,
                   },
                 ]}>
-                  {item.checked && <Text style={s.checkmark}>âœ“</Text>}
+                  {item.checked && <Text style={s.checkmark}>✓</Text>}
                 </View>
                 <Text style={[s.rowText, { color: item.checked ? theme.text : theme.textSub }]}>
                   {item.name}

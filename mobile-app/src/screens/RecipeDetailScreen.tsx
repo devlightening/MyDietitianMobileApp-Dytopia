@@ -194,12 +194,17 @@ export default function RecipeDetailScreen() {
     partial: "1 MISSING",
     mandatory: "Mandatory",
     optional: "Optional",
+    flavoring: "Flavoring",
     missing: "Missing",
     why: "Why suggested?",
     matched: "Covered ingredients",
     matchedMandatory: "Matched mandatory ingredients",
     matchedOptional: "Matched optional ingredients",
     matchedSupport: "Matched flavoring ingredients",
+    pantryCoverageTitle: "Pantry coverage",
+    pantryCoverageBody: "Your pantry covers this recipe by weighted ingredient priority.",
+    pantryCoverageFormula: "Mandatory 70% • Optional 20% • Flavoring 10%",
+    inPantry: "In your pantry",
     missingTitle: "Missing Mandatory Ingredients",
     strengthenTitle: "Missing but can strengthen",
     optionalAddable: "Can be added optionally",
@@ -218,12 +223,17 @@ export default function RecipeDetailScreen() {
     partial: "1 EKSİK",
     mandatory: "Zorunlu",
     optional: "Opsiyonel",
+    flavoring: "Lezzetlendirici",
     missing: "Eksik",
     why: "Neden önerildi?",
     matched: "Karşılanan malzemeler",
     matchedMandatory: "Eşleşen zorunlular",
     matchedOptional: "Eşleşen opsiyoneller",
     matchedSupport: "Eşleşen lezzetlendiriciler",
+    pantryCoverageTitle: "Dolap karşılama oranı",
+    pantryCoverageBody: "Dolabındaki ürünler bu tarifi ağırlıklı malzeme önceliğine göre karşılıyor.",
+    pantryCoverageFormula: "Zorunlu %70 • Opsiyonel %20 • Lezzetlendirici %10",
+    inPantry: "Dolabında olanlar",
     missingTitle: "Eksik Zorunlu Malzemeler",
     strengthenTitle: "Eksik ama eklenirse güçlenir",
     optionalAddable: "Opsiyonel olarak eklenebilir",
@@ -245,8 +255,12 @@ export default function RecipeDetailScreen() {
   const displayProteinGrams = planCtx?.proteinGrams ?? result.proteinGrams;
   const displayCarbsGrams = planCtx?.carbsGrams ?? result.carbsGrams;
   const displayFatGrams = planCtx?.fatGrams ?? result.fatGrams;
-  const planMatchedMandatory = planCtx?.ingredients.mandatory.map(i => ({ id: i.id, name: i.name })) ?? [];
-  const planMatchedOptional = planCtx?.ingredients.optional.map(i => ({ id: i.id, name: i.name })) ?? [];
+  const planMatchedMandatory = (planCtx?.matchedGroups?.mandatory ?? planCtx?.ingredients.mandatory ?? []).map(i => ({ id: i.id, name: i.name }));
+  const planMatchedOptional = (planCtx?.matchedGroups?.optional ?? []).map(i => ({ id: i.id, name: i.name }));
+  const planMatchedFlavoring = (planCtx?.matchedGroups?.flavoring ?? []).map(i => ({ id: i.id, name: i.name }));
+  const planMissingMandatory = (planCtx?.missingGroups?.mandatory ?? []).map(i => ({ id: i.id, name: i.name }));
+  const planMissingOptional = (planCtx?.missingGroups?.optional ?? []).map(i => ({ id: i.id, name: i.name }));
+  const planMissingFlavoring = (planCtx?.missingGroups?.flavoring ?? []).map(i => ({ id: i.id, name: i.name }));
 
   const isClinic =
     result.isOwnedByActiveDietitian === true ||
@@ -260,12 +274,17 @@ export default function RecipeDetailScreen() {
   const sourcePillLabel = isClinic ? copy.clinic : isCatalog ? copy.catalog : copy.general;
   const matchedIngredients = explanation?.matchedIngredients ?? planMatchedMandatory;
   const matchedOptionalIngredients = explanation?.matchedOptionalIngredients ?? planMatchedOptional;
-  const matchedSupportIngredients = explanation?.matchedFlavoringIngredients ?? explanation?.matchedSupportIngredients ?? [];
-  const missingOptionalIngredients = explanation?.missingOptionalIngredients ?? [];
-  const missingSupportIngredients = explanation?.missingFlavoringIngredients ?? explanation?.missingSupportIngredients ?? [];
-  const missingItems = result.missing ?? [];
+  const matchedSupportIngredients = explanation?.matchedFlavoringIngredients ?? explanation?.matchedSupportIngredients ?? planMatchedFlavoring;
+  const missingOptionalIngredients = explanation?.missingOptionalIngredients ?? planMissingOptional;
+  const missingSupportIngredients = explanation?.missingFlavoringIngredients ?? explanation?.missingSupportIngredients ?? planMissingFlavoring;
+  const missingItems = explanation
+    ? (result.missing ?? [])
+    : planMissingMandatory.map((ingredient) => ({ ingredient, suggestedSubstitutes: [] }));
   const usedSubstitutes = explanation?.usedSubstitutes ?? [];
   const why = buildWhySuggested(result, language as "tr" | "en");
+  const displayCompatibility = planCtx?.coverage
+    ? formatCompatibilityPercent({ compatibilityPercent: planCtx.coverage.percent })
+    : formatCompatibilityPercent(result);
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -330,9 +349,9 @@ export default function RecipeDetailScreen() {
                 border={`${isFullMatch ? theme.emerald : theme.warning}24`}
               />
             </View>
-            {typeof result.score === "number" && (
+            {(typeof result.score === "number" || planCtx?.coverage) && (
               <View style={[s.scoreWrap, { borderColor: `${accent}24`, backgroundColor: `${accent}10` }]}>
-                <Text style={[s.scoreTxt, { color: accent }]}>{formatCompatibilityPercent(result)}</Text>
+                <Text style={[s.scoreTxt, { color: accent }]}>{displayCompatibility}</Text>
               </View>
             )}
           </View>
@@ -345,21 +364,45 @@ export default function RecipeDetailScreen() {
 
           <View style={[s.metrics, { backgroundColor: `${accent}08`, borderColor: `${accent}1C` }]}>
             <View style={s.metricCell}>
-              <Text style={[s.metricValue, { color: accent }]}>{result.matchedMandatoryCount}/{result.mandatoryCount}</Text>
+              <Text style={[s.metricValue, { color: accent }]}>
+                {planCtx?.coverage ? `${planCtx.coverage.mandatory.matchedCount}/${planCtx.coverage.mandatory.total}` : `${result.matchedMandatoryCount}/${result.mandatoryCount}`}
+              </Text>
               <Text style={[s.metricLabel, { color: theme.textMuted }]}>{copy.mandatory}</Text>
             </View>
             <View style={[s.metricDivider, { backgroundColor: `${accent}24` }]} />
             <View style={s.metricCell}>
-              <Text style={[s.metricValue, { color: theme.textMuted }]}>{explanation?.matchedOptionalCount ?? 0}/{explanation?.optionalCount ?? 0}</Text>
+              <Text style={[s.metricValue, { color: theme.textMuted }]}>
+                {planCtx?.coverage ? `${planCtx.coverage.optional.matchedCount}/${planCtx.coverage.optional.total}` : `${explanation?.matchedOptionalCount ?? 0}/${explanation?.optionalCount ?? 0}`}
+              </Text>
               <Text style={[s.metricLabel, { color: theme.textMuted }]}>{copy.optional}</Text>
             </View>
             <View style={[s.metricDivider, { backgroundColor: `${accent}24` }]} />
             <View style={s.metricCell}>
-              <Text style={[s.metricValue, { color: theme.textMuted }]}>{missingItems.length}</Text>
+              <Text style={[s.metricValue, { color: theme.textMuted }]}>{planCtx?.coverage?.missingCount ?? missingItems.length}</Text>
               <Text style={[s.metricLabel, { color: theme.textMuted }]}>{copy.missing}</Text>
             </View>
           </View>
         </Animated.View>
+
+        {!!planCtx?.coverage && (
+          <Animated.View entering={FadeInDown.delay(35).duration(dur.base)} style={[s.coverageCard, { backgroundColor: theme.surface, borderColor: `${accent}26` }]}>
+            <View style={s.coverageTop}>
+              <View style={[s.coverageRing, { backgroundColor: `${accent}12`, borderColor: `${accent}28` }]}>
+                <Text style={[s.coverageRingText, { color: accent }]}>{displayCompatibility}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.coverageTitle, { color: theme.text }]}>{copy.pantryCoverageTitle}</Text>
+                <Text style={[s.coverageBody, { color: theme.textSub }]}>{copy.pantryCoverageBody}</Text>
+              </View>
+            </View>
+            <Text style={[s.coverageFormula, { color: theme.textMuted }]}>{copy.pantryCoverageFormula}</Text>
+            <View style={s.coverageBreakdown}>
+              <Pill label={`${copy.mandatory} ${planCtx.coverage.mandatoryPercent}%`} color={theme.emerald} bg={`${theme.emerald}10`} border={`${theme.emerald}24`} />
+              <Pill label={`${copy.optional} ${planCtx.coverage.optionalPercent}%`} color={theme.primary} bg={`${theme.primary}10`} border={`${theme.primary}24`} />
+              <Pill label={`${copy.flavoring} ${planCtx.coverage.flavoringPercent}%`} color={theme.accentGold} bg={`${theme.accentGold}10`} border={`${theme.accentGold}24`} />
+            </View>
+          </Animated.View>
+        )}
 
         <Animated.View entering={FadeInDown.delay(50).duration(dur.base)} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[s.cardLabel, { color: theme.textMuted }]}>{copy.why}</Text>
@@ -620,6 +663,31 @@ const s = StyleSheet.create({
     padding: 16,
     marginBottom: spacing.md,
   },
+  coverageCard: {
+    borderWidth: 1,
+    borderRadius: radii.xxl,
+    padding: 16,
+    marginBottom: spacing.md,
+    gap: 12,
+  },
+  coverageTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  coverageRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  coverageRingText: { fontSize: 18, fontWeight: "900" },
+  coverageTitle: { fontSize: 15, fontWeight: "900", marginBottom: 4 },
+  coverageBody: { fontSize: 12.5, lineHeight: 18 },
+  coverageFormula: { fontSize: 11.5, fontWeight: "800" },
+  coverageBreakdown: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   cardLabel: {
     fontSize: 10.5,
     fontWeight: "900",

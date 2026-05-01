@@ -4,6 +4,7 @@ enableScreens(true);
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { queryClient } from "./src/queries/queryClient";
 import { AuthProvider } from "./src/auth/AuthContext";
 import { I18nProvider } from "./src/context/I18nContext";
@@ -82,17 +83,19 @@ const eb = StyleSheet.create({
 export default function App() {
   return (
     <AppErrorBoundary>
-      <I18nProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <NotificationProvider>
-              <WidgetSyncBootstrap />
-              <RootNavigator />
-              <OfflineBanner />
-            </NotificationProvider>
-          </AuthProvider>
-        </QueryClientProvider>
-      </I18nProvider>
+      <SafeAreaProvider>
+        <I18nProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <NotificationProvider>
+                <WidgetSyncBootstrap />
+                <RootNavigator />
+                <OfflineBanner />
+              </NotificationProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </I18nProvider>
+      </SafeAreaProvider>
     </AppErrorBoundary>
   );
 }

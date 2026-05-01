@@ -57,6 +57,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
         var sw = Stopwatch.StartNew();
         rawInput ??= string.Empty;
         var normalized = NormalizeText(rawInput);
+        var canonicalNormalized = NormalizeCanonicalText(rawInput);
 
         if (string.IsNullOrWhiteSpace(normalized))
         {
@@ -82,7 +83,7 @@ public class IngredientNormalizationService : IIngredientNormalizationService
 
         // ── Layer A: Exact canonical match ───────────────────────────────────────
         var canonicalMatches = ingredients
-            .Where(i => NormalizeText(i.CanonicalName) == normalized)
+            .Where(i => NormalizeCanonicalText(i.CanonicalName) == canonicalNormalized)
             .ToList();
 
         if (canonicalMatches.Count == 1)
@@ -539,6 +540,17 @@ public class IngredientNormalizationService : IIngredientNormalizationService
 
         var collapsed = WhitespaceRegex.Replace(trimmed, " ");
         return FoldTurkish(collapsed.ToLowerInvariant());
+    }
+
+    private static string NormalizeCanonicalText(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        var trimmed = input.Trim().Trim(TrimPunctuation);
+        if (trimmed.Length == 0) return string.Empty;
+
+        return WhitespaceRegex.Replace(trimmed, " ").ToLowerInvariant();
     }
 
     /// <summary>

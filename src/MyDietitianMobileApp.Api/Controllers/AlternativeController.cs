@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
 using MyDietitianMobileApp.Application.Queries;
+using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 
@@ -147,8 +148,15 @@ public class AlternativeController : ControllerBase
         try
         {
             var userId = User.GetUserId();
-            if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out _))
+            if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
                 return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Kimlik doğrulama gerekli"));
+
+            var user = await _authDb.UserAccounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == userGuid && u.Role == "Client", cancellationToken);
+
+            if (user?.LinkedClientId == null)
+                return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Client hesabı bulunamadı"));
 
             // Load all recipes with ingredients (uses proven, cached repository path)
             var allRecipes = await _recipeRepository.GetAllWithIngredientsAsync(cancellationToken);
@@ -162,6 +170,25 @@ public class AlternativeController : ControllerBase
                     Detail = "Tarif bulunamadı"
                 });
 
+            var explicitRows = await _appDb.RecipeIngredients
+                .AsNoTracking()
+                .Where(x => x.RecipeId == recipeId)
+                .Include(x => x.Ingredient)
+                .Where(x => x.Ingredient != null)
+                .ToListAsync(cancellationToken);
+
+            var groups = BuildPlanContextIngredientGroups(recipe, explicitRows);
+            var pantryIds = (await _appDb.ClientPantryItems
+                .AsNoTracking()
+                .Where(x => x.ClientId == user.LinkedClientId.Value)
+                .Select(x => x.IngredientId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+            var mandatoryCoverage = BuildCoverageGroup(groups.Mandatory, pantryIds);
+            var optionalCoverage = BuildCoverageGroup(groups.Optional, pantryIds);
+            var flavoringCoverage = BuildCoverageGroup(groups.Flavoring, pantryIds);
+
             var result = new RecipePlanContextResult
             {
                 RecipeId = recipe.Id,
@@ -174,13 +201,23 @@ public class AlternativeController : ControllerBase
                 FatGrams = recipe.FatGrams,
                 Ingredients = new RecipeIngredientGroupsDto
                 {
-                    Mandatory = recipe.MandatoryIngredients
-                        .Select(i => new IngredientInfoDto { Id = i.Id, Name = i.CanonicalName })
-                        .ToList(),
-                    Optional = recipe.OptionalIngredients
-                        .Select(i => new IngredientInfoDto { Id = i.Id, Name = i.CanonicalName })
-                        .ToList()
-                }
+                    Mandatory = ToIngredientInfo(groups.Mandatory),
+                    Optional = ToIngredientInfo(groups.Optional),
+                    Flavoring = ToIngredientInfo(groups.Flavoring)
+                },
+                MatchedGroups = new RecipeIngredientGroupsDto
+                {
+                    Mandatory = mandatoryCoverage.Matched,
+                    Optional = optionalCoverage.Matched,
+                    Flavoring = flavoringCoverage.Matched
+                },
+                MissingGroups = new RecipeIngredientGroupsDto
+                {
+                    Mandatory = mandatoryCoverage.Missing,
+                    Optional = optionalCoverage.Missing,
+                    Flavoring = flavoringCoverage.Missing
+                },
+                Coverage = BuildCoverageSummary(mandatoryCoverage, optionalCoverage, flavoringCoverage)
             };
 
             return Ok(result);
@@ -193,6 +230,98 @@ public class AlternativeController : ControllerBase
                 ApiProblems.InternalServerError("PLAN_CONTEXT_FAILED", "Tarif detayı alınamadı"));
         }
     }
+
+    private static RecipeIngredientGroups BuildPlanContextIngredientGroups(
+        Recipe recipe,
+        IReadOnlyCollection<RecipeIngredient> explicitRows)
+    {
+        var explicitMandatory = explicitRows
+            .Where(x => x.Role == RecipeIngredient.MandatoryRole)
+            .Select(x => x.Ingredient!)
+            .DistinctBy(x => x.Id)
+            .ToList();
+        var explicitOptional = explicitRows
+            .Where(x => x.Role == RecipeIngredient.OptionalRole)
+            .Select(x => x.Ingredient!)
+            .DistinctBy(x => x.Id)
+            .ToList();
+        var explicitFlavoring = explicitRows
+            .Where(x => x.Role == RecipeIngredient.FlavoringRole)
+            .Select(x => x.Ingredient!)
+            .DistinctBy(x => x.Id)
+            .ToList();
+
+        var mandatory = explicitMandatory.Count > 0
+            ? explicitMandatory
+            : recipe.MandatoryIngredients.DistinctBy(x => x.Id).ToList();
+
+        if (explicitOptional.Count > 0 || explicitFlavoring.Count > 0)
+            return new RecipeIngredientGroups(mandatory, explicitOptional, explicitFlavoring);
+
+        return new RecipeIngredientGroups(
+            mandatory,
+            recipe.OptionalIngredients.Where(x => !x.IsCondiment).DistinctBy(x => x.Id).ToList(),
+            recipe.OptionalIngredients.Where(x => x.IsCondiment).DistinctBy(x => x.Id).ToList());
+    }
+
+    private static RecipeCoverageGroupDto BuildCoverageGroup(
+        IReadOnlyCollection<Ingredient> ingredients,
+        IReadOnlySet<Guid> pantryIds)
+    {
+        var matched = ingredients
+            .Where(x => pantryIds.Contains(x.Id))
+            .Select(x => new IngredientInfoDto { Id = x.Id, Name = x.CanonicalName })
+            .ToList();
+        var missing = ingredients
+            .Where(x => !pantryIds.Contains(x.Id))
+            .Select(x => new IngredientInfoDto { Id = x.Id, Name = x.CanonicalName })
+            .ToList();
+
+        return new RecipeCoverageGroupDto
+        {
+            Matched = matched,
+            Missing = missing,
+            Total = ingredients.Count,
+            MatchedCount = matched.Count,
+            MissingCount = missing.Count
+        };
+    }
+
+    private static RecipeCoverageSummaryDto BuildCoverageSummary(
+        RecipeCoverageGroupDto mandatory,
+        RecipeCoverageGroupDto optional,
+        RecipeCoverageGroupDto flavoring)
+    {
+        static decimal Ratio(RecipeCoverageGroupDto group)
+            => group.Total == 0 ? 1m : (decimal)group.MatchedCount / group.Total;
+
+        var weightedPercent = (int)Math.Round(
+            Ratio(mandatory) * 70m +
+            Ratio(optional) * 20m +
+            Ratio(flavoring) * 10m);
+
+        return new RecipeCoverageSummaryDto
+        {
+            Percent = Math.Clamp(weightedPercent, 0, 100),
+            MatchedCount = mandatory.MatchedCount + optional.MatchedCount + flavoring.MatchedCount,
+            MissingCount = mandatory.MissingCount + optional.MissingCount + flavoring.MissingCount,
+            Mandatory = mandatory,
+            Optional = optional,
+            Flavoring = flavoring,
+            MandatoryPercent = (int)Math.Round(Ratio(mandatory) * 100m),
+            OptionalPercent = (int)Math.Round(Ratio(optional) * 100m),
+            FlavoringPercent = (int)Math.Round(Ratio(flavoring) * 100m),
+            MandatoryWeight = 70,
+            OptionalWeight = 20,
+            FlavoringWeight = 10
+        };
+    }
+
+    private static List<IngredientInfoDto> ToIngredientInfo(IEnumerable<Ingredient> ingredients)
+        => ingredients
+            .DistinctBy(x => x.Id)
+            .Select(x => new IngredientInfoDto { Id = x.Id, Name = x.CanonicalName })
+            .ToList();
 }
 
 /// <summary>
@@ -209,12 +338,41 @@ public class RecipePlanContextResult
     public decimal? CarbsGrams { get; set; }
     public decimal? FatGrams { get; set; }
     public RecipeIngredientGroupsDto Ingredients { get; set; } = new();
+    public RecipeIngredientGroupsDto MatchedGroups { get; set; } = new();
+    public RecipeIngredientGroupsDto MissingGroups { get; set; } = new();
+    public RecipeCoverageSummaryDto Coverage { get; set; } = new();
 }
 
 public class RecipeIngredientGroupsDto
 {
     public List<IngredientInfoDto> Mandatory { get; set; } = new();
     public List<IngredientInfoDto> Optional { get; set; } = new();
+    public List<IngredientInfoDto> Flavoring { get; set; } = new();
+}
+
+public class RecipeCoverageGroupDto
+{
+    public List<IngredientInfoDto> Matched { get; set; } = new();
+    public List<IngredientInfoDto> Missing { get; set; } = new();
+    public int Total { get; set; }
+    public int MatchedCount { get; set; }
+    public int MissingCount { get; set; }
+}
+
+public class RecipeCoverageSummaryDto
+{
+    public int Percent { get; set; }
+    public int MatchedCount { get; set; }
+    public int MissingCount { get; set; }
+    public int MandatoryPercent { get; set; }
+    public int OptionalPercent { get; set; }
+    public int FlavoringPercent { get; set; }
+    public int MandatoryWeight { get; set; }
+    public int OptionalWeight { get; set; }
+    public int FlavoringWeight { get; set; }
+    public RecipeCoverageGroupDto Mandatory { get; set; } = new();
+    public RecipeCoverageGroupDto Optional { get; set; } = new();
+    public RecipeCoverageGroupDto Flavoring { get; set; } = new();
 }
 
 public class IngredientInfoDto

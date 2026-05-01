@@ -116,7 +116,7 @@ export default function PremiumActivationScreen() {
               { transform: [{ scale: successScale }] },
             ]}
           >
-            <Text style={s.successCheck}>âœ…</Text>
+          <Text style={s.successCheck}>✓</Text>
             <Text style={[s.successTxt, { color: theme.success }]}>{msg}</Text>
           </Animated.View>
         )}
@@ -156,7 +156,7 @@ export default function PremiumActivationScreen() {
         {/* Error message */}
         {!isSuccess && msg && (
           <View style={[s.errorWrap, { backgroundColor: theme.error + '10', borderColor: theme.error + '35' }]}>
-            <Text style={[s.errorTxt, { color: theme.error }]}>âœ• {msg}</Text>
+          <Text style={[s.errorTxt, { color: theme.error }]}>× {msg}</Text>
           </View>
         )}
 

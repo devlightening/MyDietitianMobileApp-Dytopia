@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using FluentAssertions;
+using MyDietitianMobileApp.Api.Time;
 using MyDietitianMobileApp.Api.SmokeTests.Infrastructure;
 using Xunit;
 
@@ -81,6 +82,16 @@ public class MealPlanComplianceSmokeTests : IClassFixture<SmokeWebApplicationFac
         return clientId;
     }
 
+    private static string BuildActionableMealTime()
+    {
+        var now = AppTime.LocalTimeNow;
+        var actionableTime = now.Hour == 0 && now.Minute == 0
+            ? new TimeOnly(0, 0)
+            : now.AddMinutes(-1);
+
+        return actionableTime.ToString("HH:mm");
+    }
+
     // ─── TEST 1: complete → verify Done → undo → verify Planned ─────────────
 
     [Fact]
@@ -88,7 +99,7 @@ public class MealPlanComplianceSmokeTests : IClassFixture<SmokeWebApplicationFac
     {
         await SmokeTestSeeder.EnsureSeededAsync(_factory.Services);
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        var today = AppTime.LocalToday.ToString("yyyy-MM-dd");
         var http = _factory.CreateDefaultClient();
 
         // 1. Login as client1 first to get their domain clientId from /api/client/me
@@ -115,7 +126,7 @@ public class MealPlanComplianceSmokeTests : IClassFixture<SmokeWebApplicationFac
             $"/api/dietitian/daily-plans/{planId}/meals",
             new
             {
-                time     = "08:00",
+                time     = BuildActionableMealTime(),
                 mealType = "Breakfast",
                 title    = "Smoke Test Kahvaltı",
                 note     = (string?)null,
@@ -193,7 +204,7 @@ public class MealPlanComplianceSmokeTests : IClassFixture<SmokeWebApplicationFac
     {
         await SmokeTestSeeder.EnsureSeededAsync(_factory.Services);
 
-        var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        var today = AppTime.LocalToday.ToString("yyyy-MM-dd");
         var http = _factory.CreateDefaultClient();
 
         // 1. Login as client2 first to get their domain clientId from /api/client/me

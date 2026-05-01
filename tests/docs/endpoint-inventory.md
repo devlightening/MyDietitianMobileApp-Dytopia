@@ -1,9 +1,11 @@
 ﻿# Endpoint Inventory
 
-Generated at: 2026-04-13 09:24:03 UTC
+Generated at: 2026-05-01 22:49:14 UTC
 
 | Method | Route | Auth Required | Roles / Policy | RateLimitPolicy |
 |--------|-------|---------------|----------------|-----------------|
+| GET | `/api/openai/ping` | No | - | - |
+| GET | `/api/openai/vision/ping` | No | - | - |
 | GET | `/debug/build` | No | - | - |
 | GET | `/debug/endpoints` | No | - | - |
 | GET | `/health` | No | - | - |
@@ -38,15 +40,21 @@ Generated at: 2026-04-13 09:24:03 UTC
 | POST | `api/client/login/google` | No | - | auth |
 | GET | `api/client/me` | Yes | - | - |
 | PUT | `api/client/me` | Yes | - | profile-write |
+| GET | `api/client/meal-logs` | Yes | Roles: Client | - |
+| POST | `api/client/meal-logs` | Yes | Roles: Client | - |
+| DELETE | `api/client/meal-logs/{id:guid}` | Yes | Roles: Client | - |
 | GET | `api/client/meal-plans` | Yes | Roles: Client | - |
 | POST | `api/client/meals/{mealItemId}/alternative` | Yes | Roles: Client | - |
 | DELETE | `api/client/meals/{mealItemId}/complete` | Yes | Roles: Client | - |
 | POST | `api/client/meals/{mealItemId}/complete` | Yes | Roles: Client | - |
+| POST | `api/client/meals/{mealItemId}/feedback` | Yes | Roles: Client | - |
+| POST | `api/client/meals/{mealItemId}/selected-recipe` | Yes | Roles: Client | - |
 | POST | `api/client/meals/{mealItemId}/skip` | Yes | Roles: Client | - |
 | GET | `api/client/meals/next` | Yes | Roles: Client | - |
 | GET | `api/client/measurements` | Yes | - | - |
 | POST | `api/client/measurements` | Yes | - | progress-write |
 | DELETE | `api/client/measurements/{id:guid}` | Yes | - | progress-write |
+| GET | `api/client/measurements/latest` | Yes | - | - |
 | GET | `api/client/messages` | Yes | Roles: Client | - |
 | POST | `api/client/messages` | Yes | Roles: Client | profile-write |
 | GET | `api/client/notes` | Yes | - | - |
@@ -57,10 +65,12 @@ Generated at: 2026-04-13 09:24:03 UTC
 | GET | `api/client/pantry` | Yes | Roles: Client | - |
 | PUT | `api/client/pantry` | Yes | Roles: Client | pantry |
 | DELETE | `api/client/pantry/{ingredientId:guid}` | Yes | Roles: Client | pantry |
+| POST | `api/client/pantry/analyze-receipt` | Yes | Roles: Client | kitchen-vision |
 | GET | `api/client/pantry/items` | Yes | - | pantry |
 | POST | `api/client/pantry/items` | Yes | - | pantry |
 | DELETE | `api/client/pantry/items/{ingredientId:guid}` | Yes | - | pantry |
 | POST | `api/client/pantry/packs/{packId:guid}` | Yes | - | pantry |
+| GET | `api/client/pantry/recent` | Yes | Roles: Client | - |
 | POST | `api/client/plan/meals/{dietPlanMealId:guid}/done` | Yes | - | telemetry-write |
 | POST | `api/client/plan/meals/{dietPlanMealId:guid}/skip` | Yes | - | telemetry-write |
 | GET | `api/client/plans/today` | Yes | Roles: Client | - |
@@ -69,6 +79,7 @@ Generated at: 2026-04-13 09:24:03 UTC
 | PUT | `api/client/preferences` | Yes | Roles: Client | profile-write |
 | GET | `api/client/prohibitions` | Yes | - | - |
 | PUT | `api/client/prohibitions` | Yes | - | profile-write |
+| GET | `api/client/recipes/{recipeId:guid}/plan-context` | Yes | Roles: Client | - |
 | GET | `api/client/recipes/available` | Yes | - | - |
 | POST | `api/client/register` | No | - | auth-strict |
 | GET | `api/client/shopping-list` | Yes | Roles: Client | - |
@@ -89,6 +100,8 @@ Generated at: 2026-04-13 09:24:03 UTC
 | POST | `api/contact` | No | - | contact |
 | DELETE | `api/contact/{id:guid}` | No | - | - |
 | PATCH | `api/contact/{id:guid}/read` | No | - | - |
+| GET | `api/dev/benchmark/acquisition` | No | - | - |
+| GET | `api/dev/benchmark/hybrid-recipe` | No | - | - |
 | GET | `api/dev/benchmark/normalization` | No | - | - |
 | GET | `api/dev/benchmark/normalization/llm-compare` | No | - | - |
 | GET | `api/dev/benchmark/recommendation` | No | - | - |
@@ -113,11 +126,14 @@ Generated at: 2026-04-13 09:24:03 UTC
 | POST | `api/dietitian/clients/{clientId:guid}/notes` | Yes | Policy: Dietitian | dietitian-write |
 | POST | `api/dietitian/clients/{clientId:guid}/revoke` | Yes | Policy: Dietitian | - |
 | GET | `api/dietitian/clients/{clientId}` | Yes | - | - |
+| GET | `api/dietitian/clients/{clientId}/active-plan` | Yes | - | - |
 | GET | `api/dietitian/clients/{clientId}/activities` | Yes | - | - |
 | GET | `api/dietitian/clients/{clientId}/analytics/activity` | Yes | - | - |
 | GET | `api/dietitian/clients/{clientId}/analytics/compliance-trend` | Yes | - | - |
 | GET | `api/dietitian/clients/{clientId}/analytics/measurements` | Yes | - | - |
 | GET | `api/dietitian/clients/{clientId}/measurements` | Yes | - | - |
+| POST | `api/dietitian/clients/{clientId}/measurements` | Yes | - | - |
+| PUT | `api/dietitian/clients/{clientId}/measurements/{measurementId:guid}` | Yes | - | - |
 | POST | `api/dietitian/clients/{publicUserId}/access-key` | Yes | - | keygen |
 | GET | `api/dietitian/clients/{publicUserId}/activity` | Yes | Policy: Dietitian | dietitian-read-heavy |
 | GET | `api/dietitian/clients/{publicUserId}/compliance` | Yes | Policy: Dietitian | dietitian-read-heavy |
@@ -148,8 +164,10 @@ Generated at: 2026-04-13 09:24:03 UTC
 | DELETE | `api/dietitian/plan-templates/{id:guid}` | Yes | - | - |
 | GET | `api/dietitian/plan-templates/{id:guid}` | Yes | - | - |
 | POST | `api/dietitian/plan-templates/from-plan` | Yes | - | - |
+| PATCH | `api/dietitian/plans/{planId:guid}` | Yes | - | - |
 | GET | `api/dietitian/plans/clients/{clientId:guid}` | Yes | - | - |
 | POST | `api/dietitian/plans/clients/{clientId:guid}/assign` | Yes | - | - |
+| POST | `api/dietitian/plans/clients/{clientId:guid}/assign-from-template` | Yes | - | - |
 | GET | `api/dietitian/recipes` | Yes | - | - |
 | POST | `api/dietitian/recipes` | Yes | - | - |
 | DELETE | `api/dietitian/recipes/{id:guid}` | Yes | - | - |
@@ -173,9 +191,13 @@ Generated at: 2026-04-13 09:24:03 UTC
 | DELETE | `api/dietitian/settings/logo` | Yes | Policy: DietitianOnly | - |
 | POST | `api/dietitian/settings/logo` | Yes | Policy: DietitianOnly | - |
 | GET | `api/health` | No | - | - |
+| POST | `api/ingredients/acquisition/log` | Yes | Policy: Client | - |
 | POST | `api/ingredients/analyze-image` | Yes | Policy: Client | kitchen-vision |
+| POST | `api/ingredients/detect/confirm` | Yes | Policy: Client | - |
 | GET | `api/ingredients/packs` | No | - | - |
+| POST | `api/ingredients/resolve-barcode` | Yes | Policy: Client | - |
 | GET | `api/ingredients/search` | No | - | - |
 | GET | `api/public/recipes` | No | - | - |
 | POST | `api/recipes/decide-alternative` | Yes | Roles: Client | - |
 | POST | `api/recipes/match` | Yes | - | kitchen |
+| GET | `api/recipes/match/diagnose` | Yes | - | - |

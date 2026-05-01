@@ -30,6 +30,25 @@ import { useGamification } from "../queries/useGamification";
 import { radii, spacing } from "../theme/tokens";
 import { useFadeRise, useFloating, useHeroEntrance } from "../hooks/useAuraMotion";
 
+function getNextBadgePreview(badge: BadgeCollectionItem | null, language: "tr" | "en") {
+  if (!badge) return null;
+  const target = Math.max(1, badge.progressTarget || badge.targetFallback || 1);
+  const current = Math.max(0, Math.min(target, badge.progressCurrent || 0));
+  const remaining = Math.max(0, target - current);
+  const percent = Math.round((current / target) * 100);
+
+  return {
+    progress: `${current}/${target}`,
+    percent: `%${percent}`,
+    remaining: badge.unlocked
+      ? (language === "tr" ? "Tamamlandı" : "Complete")
+      : (language === "tr" ? `${remaining} kaldı` : `${remaining} left`),
+    nudge: badge.unlocked
+      ? (language === "tr" ? "Bu rozeti açtın; sıradaki hedef için ritmini koru." : "Unlocked. Keep the rhythm for the next target.")
+      : (language === "tr" ? "Bugün küçük bir adım bile bu rozete yaklaştırır." : "Even one small action today moves this badge closer."),
+  };
+}
+
 export default function BadgeVaultScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
@@ -87,6 +106,10 @@ export default function BadgeVaultScreen() {
   const visibleUnlockedBadges = useMemo(() => filteredBadges.filter((item) => item.unlocked), [filteredBadges]);
   const visibleLockedBadges = useMemo(() => filteredBadges.filter((item) => !item.unlocked), [filteredBadges]);
   const lockedCount = totalBadgeCount - earnedBadgeCount;
+  const nextBadgePreview = useMemo(
+    () => getNextBadgePreview(spotlight, language),
+    [language, spotlight],
+  );
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -241,6 +264,38 @@ export default function BadgeVaultScreen() {
                   <Text style={[s.spotlightMeta, { color: theme.textMuted }]}>
                     {spotlight.progressLabel} | {spotlight.statusLabel}
                   </Text>
+
+                  {nextBadgePreview ? (
+                    <View style={s.spotlightPreviewWrap}>
+                      <View style={s.spotlightPreviewRow}>
+                        <View style={[s.spotlightPreviewChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                          <Text style={[s.spotlightPreviewValue, { color: theme.text }]}>{nextBadgePreview.progress}</Text>
+                          <Text style={[s.spotlightPreviewLabel, { color: theme.textMuted }]}>
+                            {language === "tr" ? "tamamlandı" : "done"}
+                          </Text>
+                        </View>
+                        <View style={[s.spotlightPreviewChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                          <Text style={[s.spotlightPreviewValue, { color: getToneColor(theme, spotlight.tone) }]}>
+                            {nextBadgePreview.percent}
+                          </Text>
+                          <Text style={[s.spotlightPreviewLabel, { color: theme.textMuted }]}>
+                            {language === "tr" ? "ilerleme" : "progress"}
+                          </Text>
+                        </View>
+                        <View style={[s.spotlightPreviewChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                          <Text style={[s.spotlightPreviewValue, { color: theme.accentGold }]}>
+                            {nextBadgePreview.remaining}
+                          </Text>
+                          <Text style={[s.spotlightPreviewLabel, { color: theme.textMuted }]}>
+                            {language === "tr" ? "hedef" : "target"}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[s.spotlightNudge, { color: theme.textSub }]}>
+                        {nextBadgePreview.nudge}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             </Pressable>
@@ -599,6 +654,35 @@ const s = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     marginTop: 6,
+  },
+  spotlightPreviewWrap: {
+    gap: 8,
+    marginTop: 10,
+  },
+  spotlightPreviewRow: {
+    flexDirection: "row",
+    gap: 7,
+  },
+  spotlightPreviewChip: {
+    flex: 1,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  spotlightPreviewValue: {
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 2,
+  },
+  spotlightPreviewLabel: {
+    fontSize: 9.5,
+    fontWeight: "800",
+  },
+  spotlightNudge: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    fontWeight: "700",
   },
   sectionHeader: {
     marginBottom: 12,

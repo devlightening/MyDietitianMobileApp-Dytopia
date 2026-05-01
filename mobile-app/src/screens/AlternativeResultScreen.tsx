@@ -6,9 +6,16 @@ import {
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { radii, spacing } from "../theme/tokens";
 import { useTheme } from "../context/ThemeContext";
+import { useTranslation } from "../context/I18nContext";
+import { useInAppNotifications } from "../context/InAppNotificationContext";
 import type { AlternativeDecisionResponse, AlternativeRecipe } from "../types/alternative";
 import { addIngredientsToShoppingList } from "../api/shopping-list";
 import { alternativeMeal } from "../data/plansRepo";
+import { Routes } from "../navigation/routes";
+import {
+  buildAlternateRecipeAppliedNotification,
+  buildShoppingItemsAddedNotification,
+} from "../notifications/notificationEvents";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 // Each carousel page occupies the full screen width; card has internal horizontal padding.
@@ -36,6 +43,8 @@ export default function AlternativeResultScreen() {
   const nav = useNavigation();
   const route = useRoute<R>();
   const { theme } = useTheme();
+  const { language } = useTranslation();
+  const { notify } = useInAppNotifications();
   const { decision, recipeName, mealId, plannedRecipeId } = route.params;
 
   const [addingToList, setAddingToList] = useState(false);
@@ -71,21 +80,26 @@ export default function AlternativeResultScreen() {
     ]).start();
   }, []);
 
-  const HERO_ICON:  Record<MatchState, string> = { FULL_MATCH: "âœ“", HAS_ALTERNATIVE: "â‡„", NO_ALTERNATIVE: "âœ•" };
-  const HERO_LABEL: Record<MatchState, string> = { FULL_MATCH: "Yapılabilir", HAS_ALTERNATIVE: "Alternatif Önerildi", NO_ALTERNATIVE: "Yapılamaz" };
+  const HERO_ICON:  Record<MatchState, string> = { FULL_MATCH: "✓", HAS_ALTERNATIVE: "⇄", NO_ALTERNATIVE: "✕" };
+  const HERO_LABEL: Record<MatchState, string> = {
+    FULL_MATCH: language === "tr" ? "Yapılabilir" : "Cookable",
+    HAS_ALTERNATIVE: language === "tr" ? "Alternatif Önerildi" : "Alternative Found",
+    NO_ALTERNATIVE: language === "tr" ? "Yapılamaz" : "Unavailable",
+  };
 
   async function handleAddMissingToList() {
     if (missingIds.length === 0) return;
     setAddingToList(true);
     try {
-      await addIngredientsToShoppingList(missingIds, 'PlannedRecipe', plannedRecipeId);
-      Alert.alert(
-        'Listeye Eklendi',
-        `${missingIds.length} eksik malzeme alışveriş listenize eklendi.`,
-        [{ text: 'Tamam', onPress: () => (nav as any).goBack() }],
-      );
+      await addIngredientsToShoppingList(missingIds, "PlannedRecipe", plannedRecipeId);
+      notify({
+        ...buildShoppingItemsAddedNotification(language, missingIds.length),
+        ctaLabel: language === "tr" ? "Listeyi Aç" : "Open list",
+        onPress: () => (nav as any).navigate(Routes.App.ShoppingList),
+      });
+      (nav as any).goBack();
     } catch {
-      Alert.alert('Hata', 'Malzemeler listeye eklenemedi.');
+      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Malzemeler listeye eklenemedi." : "Could not add items to the list.");
     } finally {
       setAddingToList(false);
     }
@@ -96,13 +110,10 @@ export default function AlternativeResultScreen() {
     setAdoptingIndex(idx);
     try {
       await alternativeMeal(mealId, alt.recipeId);
-      Alert.alert(
-        'Alternatif Seçildi',
-        `"${alt.recipeName}" planınıza eklendi.`,
-        [{ text: 'Tamam', onPress: () => (nav as any).popToTop() }],
-      );
+      notify(buildAlternateRecipeAppliedNotification(language, alt.recipeName));
+      (nav as any).popToTop();
     } catch {
-      Alert.alert('Hata', 'Alternatif seçilirken bir sorun oluştu.');
+      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Alternatif seçilirken bir sorun oluştu." : "There was a problem selecting the alternative.");
     } finally {
       setAdoptingIndex(null);
     }
@@ -139,9 +150,9 @@ export default function AlternativeResultScreen() {
           {/* FULL_MATCH */}
           {matchState === "FULL_MATCH" && (
             <View style={[s.card, { backgroundColor: theme.primary + '08', borderColor: theme.primary + '30' }]}>
-            <Text style={[s.cardLabel, { color: theme.primary }]}>DEĞERLENDİRME</Text>
+            <Text style={[s.cardLabel, { color: theme.primary }]}>{language === "tr" ? "DEĞERLENDİRME" : "STATUS"}</Text>
               <Text style={[s.successNote, { color: theme.primary }]}>
-                Tüm malzemeler tamam! Hemen yapabilirsin.
+                {language === "tr" ? "Tüm malzemeler tamam. Hemen yapabilirsin." : "All ingredients are ready. You can cook it now."}
               </Text>
             </View>
           )}
@@ -149,7 +160,7 @@ export default function AlternativeResultScreen() {
           {/* Original recipe's missing ingredients (explains why alternatives are shown) */}
           {missingNames.length > 0 && matchState !== "FULL_MATCH" && (
             <View style={[s.card, { backgroundColor: theme.warning + '07', borderColor: theme.warning + '30' }]}>
-              <Text style={[s.cardLabel, { color: theme.warning }]}>ORIJINAL TARİFTE EKSİK</Text>
+              <Text style={[s.cardLabel, { color: theme.warning }]}>{language === "tr" ? "ORİJİNAL TARİFTE EKSİK" : "MISSING FROM ORIGINAL"}</Text>
               <View style={s.missingList}>
                 {missingNames.map((name, i) => (
                   <View key={i} style={[s.missingChip, { backgroundColor: theme.warning + '14', borderColor: theme.warning + '38' }]}>
@@ -175,10 +186,14 @@ export default function AlternativeResultScreen() {
             <View style={[s.carouselWrapper, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <View style={s.altHeaderRow}>
                 <Text style={[s.cardLabel, { color: theme.textMuted }]}>
-                  {alts.length === 1 ? 'ÖNERİLEN ALTERNATİF' : `${alts.length} ALTERNATİF TARİF`}
+                  {alts.length === 1
+                    ? (language === "tr" ? "ÖNERİLEN ALTERNATİF" : "SUGGESTED ALTERNATIVE")
+                    : language === "tr"
+                      ? `${alts.length} ALTERNATİF TARİF`
+                      : `${alts.length} ALTERNATIVE RECIPES`}
                 </Text>
                 {alts.length > 1 && (
-                  <Text style={[s.swipeHint, { color: theme.textMuted }]}>← kaydır →</Text>
+                  <Text style={[s.swipeHint, { color: theme.textMuted }]}>{language === "tr" ? "← kaydır →" : "← swipe →"}</Text>
                 )}
               </View>
 

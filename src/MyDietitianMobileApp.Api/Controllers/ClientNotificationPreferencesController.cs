@@ -75,6 +75,9 @@ public class ClientNotificationPreferencesController : ControllerBase
         var preference = await GetOrCreatePreferenceAsync(identity.Value.clientId);
         preference.Update(
             request.NotificationsEnabled,
+            request.InAppCoachNotificationsEnabled,
+            request.AchievementNotificationsEnabled,
+            request.PantryActivityNotificationsEnabled,
             request.HydrationRemindersEnabled,
             request.HydrationIntervalMinutes,
             hydrationStart,
@@ -108,7 +111,7 @@ public class ClientNotificationPreferencesController : ControllerBase
         return Ok(new
         {
             lastAppOpenAtUtc = preference.LastAppOpenAtUtc,
-            updatedAtUtc = preference.UpdatedAtUtc
+            updatedAtUtc = preference.UpdatedAtUtc,
         });
     }
 
@@ -127,7 +130,7 @@ public class ClientNotificationPreferencesController : ControllerBase
         return Ok(new
         {
             lastNotificationSyncAtUtc = preference.LastNotificationSyncAtUtc,
-            updatedAtUtc = preference.UpdatedAtUtc
+            updatedAtUtc = preference.UpdatedAtUtc,
         });
     }
 
@@ -150,6 +153,9 @@ public class ClientNotificationPreferencesController : ControllerBase
         return new
         {
             notificationsEnabled = preference.NotificationsEnabled,
+            inAppCoachNotificationsEnabled = preference.InAppCoachNotificationsEnabled,
+            achievementNotificationsEnabled = preference.AchievementNotificationsEnabled,
+            pantryActivityNotificationsEnabled = preference.PantryActivityNotificationsEnabled,
             hydrationRemindersEnabled = preference.HydrationRemindersEnabled,
             hydrationIntervalMinutes = preference.HydrationIntervalMinutes,
             hydrationStartLocalTime = preference.HydrationStartLocalTime.ToString("HH':'mm"),
@@ -164,7 +170,7 @@ public class ClientNotificationPreferencesController : ControllerBase
             timeZoneId = preference.TimeZoneId,
             lastAppOpenAtUtc = preference.LastAppOpenAtUtc,
             lastNotificationSyncAtUtc = preference.LastNotificationSyncAtUtc,
-            updatedAtUtc = preference.UpdatedAtUtc
+            updatedAtUtc = preference.UpdatedAtUtc,
         };
     }
 
@@ -182,13 +188,16 @@ public class ClientNotificationPreferencesController : ControllerBase
         await _syncPublisher.PublishToLinkAsync(activeDietitianId.Value, clientId, "notification.preferences.updated", new
         {
             clientId,
-            source
+            source,
         });
     }
 }
 
 public sealed record UpdateNotificationPreferencesRequest(
     bool NotificationsEnabled,
+    bool InAppCoachNotificationsEnabled,
+    bool AchievementNotificationsEnabled,
+    bool PantryActivityNotificationsEnabled,
     bool HydrationRemindersEnabled,
     int HydrationIntervalMinutes,
     string HydrationStartLocalTime,

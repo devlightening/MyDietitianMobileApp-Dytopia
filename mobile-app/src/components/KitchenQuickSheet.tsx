@@ -141,7 +141,7 @@ export default function KitchenQuickSheet({
                 onPress={dismiss}
                 activeOpacity={0.75}
               >
-                <Text style={[s.closeTxt, { color: theme.textMuted }]}>âœ•</Text>
+                <Text style={[s.closeTxt, { color: theme.textMuted }]}>×</Text>
               </TouchableOpacity>
             </View>
           </View>

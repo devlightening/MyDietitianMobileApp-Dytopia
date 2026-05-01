@@ -308,7 +308,7 @@ function IngredientRow({
           <Text style={[s.rowTitle, { color: theme.text }]}>{item.canonicalName}</Text>
           {!!item.aliases?.length && (
             <Text style={[s.rowAlias, { color: theme.textMuted }]} numberOfLines={1}>
-              {item.aliases.slice(0, 2).join(' â€¢ ')}
+              {item.aliases.slice(0, 2).join(' • ')}
             </Text>
           )}
         </View>

@@ -53,7 +53,7 @@ export default function NextMealCard({ nextMeal, theme, onPress }: Props) {
           onPress={onPress}
           activeOpacity={0.7}
         >
-          <Text style={[s.detailBtnTxt, { color: theme.primary }]}>Detay â†’</Text>
+        <Text style={[s.detailBtnTxt, { color: theme.primary }]}>Detay →</Text>
         </TouchableOpacity>
       </View>
     </AppCard>

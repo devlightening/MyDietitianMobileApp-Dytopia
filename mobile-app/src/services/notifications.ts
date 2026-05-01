@@ -105,7 +105,7 @@ export async function scheduleNotificationsFromPreferencesAsync(
   }
 
   await syncAppointmentReminderNotificationsAsync(appointments, language, true);
-  await maybeSendMotivationNotification(language);
+  await maybeSendMotivationNotification(language, preferences);
 }
 
 export async function schedulePreviewNotificationAsync(language: "tr" | "en"): Promise<void> {
@@ -116,7 +116,7 @@ export async function schedulePreviewNotificationAsync(language: "tr" | "en"): P
   const fallback = {
     title: language === "tr" ? "Test bildirimi" : "Test notification",
     body: language === "tr"
-      ? "Android emulator uzerinde local notification basariyla calisiyor."
+      ? "Bildirim dili hazır. Su, plan ve başarı anları cihazında akabilir."
       : "Local notification is working successfully on the Android emulator.",
   };
 
@@ -153,7 +153,14 @@ export async function schedulePreviewNotificationAsync(language: "tr" | "en"): P
   await NotificationTestModule!.showTestNotification(fallback.title, fallback.body);
 }
 
-async function maybeSendMotivationNotification(language: "tr" | "en") {
+async function maybeSendMotivationNotification(
+  language: "tr" | "en",
+  preferences: NotificationPreferences,
+) {
+  if (!preferences.achievementNotificationsEnabled) {
+    return;
+  }
+
   try {
     const summary = await getGamificationSummary();
     const motivationPayload = buildMotivationNotification(

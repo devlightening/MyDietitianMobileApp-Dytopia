@@ -374,7 +374,7 @@ export default function IngredientScanScreen() {
                           <View style={s.itemMain}>
                             <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
                             <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                              %{Math.round(item.confidence * 100)} â€¢ {item.matchedBy ?? item.mappingType}
+                              %{Math.round(item.confidence * 100)} • {item.matchedBy ?? item.mappingType}
                             </Text>
                             {item.detectedName !== item.canonicalName && (
                               <Text style={[s.itemRaw, { color: theme.textMuted }]}>"{item.detectedName}"</Text>
@@ -425,7 +425,7 @@ export default function IngredientScanScreen() {
                           <View style={s.itemMain}>
                             <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
                             <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                              %{Math.round(item.confidence * 100)} â€¢ {item.matchedBy ?? item.mappingType} â€¢ onay gerekli
+                              %{Math.round(item.confidence * 100)} • {item.matchedBy ?? item.mappingType} • onay gerekli
                             </Text>
                             {item.detectedName !== item.canonicalName && (
                               <Text style={[s.itemRaw, { color: theme.textMuted }]}>"{item.detectedName}"</Text>

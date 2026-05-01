@@ -52,6 +52,11 @@ export interface MealItem {
   macros?: MacrosData;
   recipeId?: string;
   recipeName?: string;
+  selectedRecipeId?: string;
+  selectedRecipeName?: string;
+  selectedRecipeSource?: "Original" | "Alternative";
+  selectedCalories?: number;
+  selectedMacros?: MacrosData;
   completionStatus: MealCompletionStatus;
   feedbackKey?: string | null;
   alternativeRecipeId?: string;
@@ -161,6 +166,17 @@ export async function alternativeMeal(
 /** DELETE /api/client/meals/{id}/complete — undo completion */
 export async function undoMealCompletion(mealItemId: string): Promise<void> {
   await apiClient.delete(`/api/client/meals/${mealItemId}/complete`);
+}
+
+export async function selectMealRecipe(
+  mealItemId: string,
+  selectionType: "Original" | "Alternative",
+  alternativeRecipeId?: string,
+): Promise<void> {
+  await apiClient.post(`/api/client/meals/${mealItemId}/selected-recipe`, {
+    selectionType,
+    alternativeRecipeId: selectionType === "Alternative" ? alternativeRecipeId : undefined,
+  });
 }
 
 /** POST /api/client/meals/{id}/feedback */

@@ -246,7 +246,7 @@ VALUES
  'ee00002e-0000-0000-0000-000000000000', 'ee00002f-0000-0000-0000-000000000000',
  'FamilyCompatible', 0.15, 'Baklagil ailesi alternatifleri — pişirme süresi farklı', true, NOW(), NOW())
 
-ON CONFLICT ("Id") DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 COMMIT;
 

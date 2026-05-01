@@ -10,15 +10,62 @@ export interface ShoppingListItem {
   isChecked: boolean;
   sourceType: string;
   sourceReferenceId?: string | null;
+  sourceMeals?: ShoppingSourceMeal[];
+  primaryMealTitle?: string | null;
+  primaryMealTime?: string | null;
+  ingredientRoleSummary?: string[];
+  generatedFromSelectedRecipe?: boolean;
   note?: string | null;
   createdAtUtc: string;
   updatedAtUtc: string;
+}
+
+export interface ShoppingSourceMeal {
+  mealItemId: string;
+  mealTitle: string;
+  mealTime: string;
+  category: "Mandatory" | "Optional" | "Flavoring" | string;
+  selectedRecipeName?: string | null;
+  generatedFromSelectedRecipe?: boolean;
 }
 
 export interface ShoppingListSummary {
   total: number;
   checkedCount: number;
   activeCount: number;
+}
+
+export interface ShoppingPlanIngredient {
+  ingredientId: string;
+  ingredientName: string;
+}
+
+export interface ShoppingIngredientGroups {
+  mandatory: ShoppingPlanIngredient[];
+  optional: ShoppingPlanIngredient[];
+  flavoring: ShoppingPlanIngredient[];
+}
+
+export interface ShoppingCategoryCounts {
+  mandatory: number;
+  optional: number;
+  flavoring: number;
+}
+
+export interface ShoppingPlanRecipeCard {
+  mealItemId: string;
+  mealTitle: string;
+  mealTime: string;
+  recipeId: string;
+  recipeName: string;
+  plannedRecipeName?: string | null;
+  selectedRecipeSource: "Original" | "Alternative" | string;
+  generatedFromSelectedRecipe: boolean;
+  missingGroups: ShoppingIngredientGroups;
+  pantryCoveredGroups: ShoppingIngredientGroups;
+  coveragePercent: number;
+  missingCount: number;
+  pantryCoveredCount: number;
 }
 
 export interface ShoppingListResponse {
@@ -29,6 +76,14 @@ export interface ShoppingListResponse {
     generatedCount: number;
     planDate: string;
     recipeCount?: number;
+    mealCount?: number;
+    mandatoryCount?: number;
+    optionalCount?: number;
+    flavoringCount?: number;
+    pantryCoveredCount?: number;
+    missingByCategory?: ShoppingCategoryCounts;
+    coveredByCategory?: ShoppingCategoryCounts;
+    recipeCards?: ShoppingPlanRecipeCard[];
     message: string;
   };
 }

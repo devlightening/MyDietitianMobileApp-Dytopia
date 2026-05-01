@@ -257,7 +257,7 @@ export default function BadgeUnlockOverlay({ badge, onDismiss }: Props) {
 
           {/* Texts */}
           <Animated.Text style={[s.eyebrow, { color: badge.color, opacity: eyebrowO, transform: [{ translateY: eyebrowTY }] }]}>
-            âœ¦  YENİ ROZET KAZANILDI  âœ¦
+            ✦  YENİ ROZET KAZANILDI  ✦
           </Animated.Text>
 
           <Animated.Text style={[s.badgeName, { opacity: titleO, transform: [{ translateY: titleTY }] }]}>

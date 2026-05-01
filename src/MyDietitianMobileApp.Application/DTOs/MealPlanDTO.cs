@@ -28,6 +28,13 @@ public class MealItemDTO
     /// <summary>Planned recipe name</summary>
     public string? RecipeName { get; set; }
 
+    /// <summary>Recipe currently selected for this meal flow.</summary>
+    public Guid? SelectedRecipeId { get; set; }
+    public string? SelectedRecipeName { get; set; }
+    public string SelectedRecipeSource { get; set; } = "Original";
+    public int? SelectedCalories { get; set; }
+    public MacrosDTO? SelectedMacros { get; set; }
+
     public string Title { get; set; } = string.Empty;
     public string? Note { get; set; }
     public int OrderIndex { get; set; }

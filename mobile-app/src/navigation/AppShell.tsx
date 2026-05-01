@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useNavigation } from "@react-navigation/native";
 import {
   View,
   StyleSheet,
@@ -9,6 +10,8 @@ import {
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { useTheme } from "../context/ThemeContext";
+import { useTranslation } from "../context/I18nContext";
+import { useInAppNotifications } from "../context/InAppNotificationContext";
 import ProduceBubble from "../components/decor/ProduceBubble";
 
 import BottomBar, { TabKey } from "../components/BottomBar";
@@ -23,7 +26,9 @@ import ProfileScreen from "../screens/ProfileScreen";
 import type { Ingredient } from "../types/alternative";
 import { getPantry, replacePantry } from "../api/pantry";
 import { pingGamification } from "../api/gamification";
+import { getCareThread } from "../api/care";
 import { useGamification } from "../queries/useGamification";
+import { useCareSignalR } from "../hooks/useCareSignalR";
 import {
   buildBadgeCollection,
   getToneColor,
@@ -32,12 +37,20 @@ import {
 
 import BadgeUnlockOverlay, { type BadgeInfo } from "../components/ui/BadgeUnlockOverlay";
 import StreakMilestoneToast, { STREAK_MILESTONES } from "../components/ui/StreakMilestoneToast";
+import { buildBadgeUnlockedBanner, buildStreakMilestoneBanner } from "../notifications/notificationEvents";
 
 const TAB_ORDER: TabKey[] = ["dashboard", "plans", "kitchen", "messages", "profile"];
 const SEEN_BADGES_KEY = "celebrated_badge_ids_v1";
 const SEEN_STREAKS_KEY = "celebrated_streak_milestones_v1";
 const TAB_SHIFT = 6;
 const TAB_EXIT_SHIFT = 4;
+
+function pantrySignature(items: Ingredient[]): string {
+  return items
+    .map((item) => `${item.id}:${item.canonicalName}`)
+    .sort()
+    .join("|");
+}
 
 type SceneAnimationState = {
   opacity: Animated.Value;
@@ -48,13 +61,24 @@ type SceneAnimationMap = Record<TabKey, SceneAnimationState>;
 
 export default function AppShell() {
   const { theme, isDark } = useTheme();
+  const { language } = useTranslation();
+  const { notify } = useInAppNotifications();
+  const navigation = useNavigation();
   const [active, setActive] = useState<TabKey>("dashboard");
   const [visitedTabs, setVisitedTabs] = useState<TabKey[]>(["dashboard"]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<Ingredient[]>([]);
+  const [messagesAttention, setMessagesAttention] = useState(false);
+  const [tabSwipeEnabled, setTabSwipeEnabled] = useState(true);
+  const tabSwipeEnabledRef = useRef(true);
   const pantryLoadedRef = useRef(false);
+  const pantryHydratingRef = useRef(true);
+  const lastSyncedPantryRef = useRef("");
   const pantrySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionLockRef = useRef(false);
+  const latestInboundMessageIdRef = useRef<string | null>(null);
+  const careSeededRef = useRef(false);
+  const careRefreshLockRef = useRef(false);
   const sceneAnimationsRef = useRef<SceneAnimationMap>({
     dashboard: { opacity: new Animated.Value(1), translateX: new Animated.Value(0) },
     plans: { opacity: new Animated.Value(0), translateX: new Animated.Value(0) },
@@ -114,6 +138,7 @@ export default function AppShell() {
         icon: badge.icon,
         color: getToneColor(theme, badge.tone),
       });
+      notify(buildBadgeUnlockedBanner(language, badge.title, badge.flavor, badge.id));
       unlocked.forEach(b => seenBadgesRef.current.add(b.id));
       void SecureStore.setItemAsync(SEEN_BADGES_KEY, JSON.stringify([...seenBadgesRef.current]));
       return; // Show badge first, streak toast will wait
@@ -126,6 +151,7 @@ export default function AppShell() {
     );
     if (newMilestone && !pendingStreak && !pendingBadge) {
       setPendingStreak(newMilestone);
+      notify(buildStreakMilestoneBanner(language, newMilestone));
       seenStreaksRef.current.add(newMilestone);
       void SecureStore.setItemAsync(SEEN_STREAKS_KEY, JSON.stringify([...seenStreaksRef.current]));
     }
@@ -134,6 +160,7 @@ export default function AppShell() {
   // ── Tab switching ────────────────────────────────────────────────────────
   const activeRef = useRef<TabKey>("dashboard");
   useEffect(() => { activeRef.current = active; }, [active]);
+  useEffect(() => { tabSwipeEnabledRef.current = tabSwipeEnabled; }, [tabSwipeEnabled]);
   const switchTabFn = useRef<(tab: TabKey) => void>(() => {});
 
   switchTabFn.current = useCallback((newTab: TabKey) => {
@@ -187,8 +214,10 @@ export default function AppShell() {
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) =>
+        tabSwipeEnabledRef.current &&
         Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 2.8,
       onPanResponderEnd: (_, gs) => {
+        if (!tabSwipeEnabledRef.current) return;
         const idx  = TAB_ORDER.indexOf(activeRef.current);
         const dist = Math.abs(gs.dx);
         const vel  = Math.abs(gs.vx);
@@ -200,13 +229,72 @@ export default function AppShell() {
   ).current;
 
   const handleTabChange = useCallback((tab: TabKey) => {
+    if (tab === "messages") setMessagesAttention(false);
     switchTabFn.current(tab);
+  }, []);
+
+  const handleTabSwipeEnabledChange = useCallback((enabled: boolean) => {
+    tabSwipeEnabledRef.current = enabled;
+    setTabSwipeEnabled(enabled);
   }, []);
 
   const openPlansTab = useCallback(() => switchTabFn.current("plans"), []);
   const openKitchenTab = useCallback(() => switchTabFn.current("kitchen"), []);
-  const openMessagesTab = useCallback(() => switchTabFn.current("messages"), []);
+  const openMessagesTab = useCallback(() => {
+    setMessagesAttention(false);
+    switchTabFn.current("messages");
+  }, []);
   const openQuickKitchen = useCallback(() => setSheetOpen(true), []);
+
+  const refreshCareAttention = useCallback(async () => {
+    if (careRefreshLockRef.current) return;
+    careRefreshLockRef.current = true;
+    try {
+      const thread = await getCareThread();
+      const latestInbound = [...thread.items]
+        .filter((item) => item.direction === "inbound")
+        .sort((left, right) => new Date(right.createdAtUtc).getTime() - new Date(left.createdAtUtc).getTime())[0];
+
+      const nextInboundId = latestInbound?.id ?? null;
+      if (!careSeededRef.current) {
+        latestInboundMessageIdRef.current = nextInboundId;
+        careSeededRef.current = true;
+        if (activeRef.current === "messages") setMessagesAttention(false);
+        return;
+      }
+
+      const hasNewInbound = !!nextInboundId && nextInboundId !== latestInboundMessageIdRef.current;
+      latestInboundMessageIdRef.current = nextInboundId;
+
+      if (activeRef.current === "messages") {
+        setMessagesAttention(false);
+        return;
+      }
+
+      if (hasNewInbound) {
+        setMessagesAttention(true);
+      }
+    } catch {
+      // Sessiz kal: alt bar dikkat işareti arka plan iyileştirmesidir.
+    } finally {
+      careRefreshLockRef.current = false;
+    }
+  }, []);
+
+  useCareSignalR(() => {
+    void refreshCareAttention();
+  }, true);
+
+  useEffect(() => {
+    void refreshCareAttention();
+  }, [refreshCareAttention]);
+
+  useEffect(() => {
+    if (active === "messages") {
+      setMessagesAttention(false);
+      void refreshCareAttention();
+    }
+  }, [active, refreshCareAttention]);
 
   // ── Pantry ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -216,27 +304,72 @@ export default function AppShell() {
         void pingGamification().catch(() => undefined);
         const pantryItems = await getPantry();
         if (!alive) return;
-        setSelected(pantryItems.map(item => ({ id: item.ingredientId, canonicalName: item.ingredientName })));
+        const normalized = pantryItems.map(item => ({
+          id: item.ingredientId,
+          canonicalName: item.ingredientName,
+        }));
+        setSelected(normalized);
+        lastSyncedPantryRef.current = pantrySignature(normalized);
       } catch {
         if (!alive) return;
         setSelected(current => current);
       } finally {
+        pantryHydratingRef.current = false;
         pantryLoadedRef.current = true;
       }
     }
     void hydratePantry();
     return () => {
       alive = false;
+      pantryHydratingRef.current = false;
       if (pantrySaveTimerRef.current) clearTimeout(pantrySaveTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
-    if (!pantryLoadedRef.current) return;
+    if (!pantryLoadedRef.current || pantryHydratingRef.current) return;
+    const signature = pantrySignature(selected);
+    if (signature === lastSyncedPantryRef.current) return;
+
     if (pantrySaveTimerRef.current) clearTimeout(pantrySaveTimerRef.current);
-    pantrySaveTimerRef.current = setTimeout(() => { void replacePantry(selected); }, 320);
+
+    pantrySaveTimerRef.current = setTimeout(() => {
+      // Re-check: by the time the timer fires, a focus re-hydration may have
+      // already synced lastSyncedPantryRef — skip the PUT if signatures match.
+      const currentSignature = pantrySignature(selected);
+      if (currentSignature === lastSyncedPantryRef.current) return;
+      void replacePantry(selected)
+        .then(() => {
+          lastSyncedPantryRef.current = currentSignature;
+        })
+        .catch(() => undefined);
+    }, 1500);
+
     return () => { if (pantrySaveTimerRef.current) clearTimeout(pantrySaveTimerRef.current); };
   }, [selected]);
+
+  // Re-hydrate pantry from backend whenever Shell regains focus after a
+  // stack-screen (PantryScreen, RecipeDetail, etc.) is popped.  This prevents
+  // the auto-save from overwriting changes made inside PantryScreen.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      if (!pantryLoadedRef.current) return; // Skip the very first focus (hydratePantry handles it)
+      void getPantry()
+        .then((items) => {
+          const normalized = items.map((item) => ({
+            id: item.ingredientId,
+            canonicalName: item.ingredientName,
+          }));
+          const newSig = pantrySignature(normalized);
+          if (newSig === lastSyncedPantryRef.current) return;
+          // Update ref FIRST so the auto-save effect sees a match and skips the PUT
+          lastSyncedPantryRef.current = newSig;
+          setSelected(normalized);
+        })
+        .catch(() => undefined);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   // ── Screens ──────────────────────────────────────────────────────────────
   const dashboardScene = useMemo(() => (
@@ -252,16 +385,18 @@ export default function AppShell() {
     <PlansScreen
       isActive={active === "plans"}
       onPressKitchen={openKitchenTab}
+      onTabSwipeEnabledChange={handleTabSwipeEnabledChange}
     />
-  ), [active, openKitchenTab]);
+  ), [active, handleTabSwipeEnabledChange, openKitchenTab]);
 
   const kitchenScene = useMemo(() => (
     <KitchenScreen
       selectedIngredients={selected}
       onChangeSelected={setSelected}
       openQuickSheet={openQuickKitchen}
+      isActive={active === "kitchen"}
     />
-  ), [openQuickKitchen, selected]);
+  ), [active, openQuickKitchen, selected]);
 
   const messagesScene = useMemo(() => (
     <MessagesScreen isActive={active === "messages"} />
@@ -311,7 +446,7 @@ export default function AppShell() {
         })}
       </View>
 
-      <BottomBar active={active} onChange={handleTabChange} />
+      <BottomBar active={active} onChange={handleTabChange} messagesAttention={messagesAttention} />
 
       <KitchenQuickSheet
         visible={sheetOpen}

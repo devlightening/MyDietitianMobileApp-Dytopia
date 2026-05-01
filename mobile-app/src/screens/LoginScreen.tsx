@@ -179,7 +179,7 @@ export default function LoginScreen() {
               <Ionicons name="lock-closed-outline" size={18} color={focusedField === 'password' ? theme.primary : theme.textMuted} />
               <TextInput
                 style={[s.input, { color: theme.text }]}
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                placeholder="••••••••"
                 placeholderTextColor={theme.textMuted}
                 secureTextEntry={!showPw}
                 autoCorrect={false}

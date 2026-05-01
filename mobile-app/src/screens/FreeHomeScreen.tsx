@@ -248,7 +248,7 @@ export default function FreeHomeScreen() {
                 </Text>
                 {step.done && (
                   <View style={[s.stepDoneBadge, { backgroundColor: `${theme.emerald}14` }]}>
-                    <Text style={[s.stepDoneText, { color: theme.emerald }]}>âœ“ Tamam</Text>
+                    <Text style={[s.stepDoneText, { color: theme.emerald }]}>✓ Tamam</Text>
                   </View>
                 )}
                 {!step.done && i === 1 && (

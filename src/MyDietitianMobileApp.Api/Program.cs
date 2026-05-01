@@ -748,6 +748,9 @@ using (var scope = app.Services.CreateScope())
             CREATE TABLE IF NOT EXISTS "ClientNotificationPreferences" (
                 "ClientId" uuid NOT NULL PRIMARY KEY,
                 "NotificationsEnabled" boolean NOT NULL DEFAULT TRUE,
+                "InAppCoachNotificationsEnabled" boolean NOT NULL DEFAULT TRUE,
+                "AchievementNotificationsEnabled" boolean NOT NULL DEFAULT TRUE,
+                "PantryActivityNotificationsEnabled" boolean NOT NULL DEFAULT TRUE,
                 "HydrationRemindersEnabled" boolean NOT NULL DEFAULT TRUE,
                 "HydrationIntervalMinutes" integer NOT NULL DEFAULT 120,
                 "HydrationStartLocalTime" time without time zone NOT NULL DEFAULT TIME '09:00',
@@ -772,6 +775,15 @@ using (var scope = app.Services.CreateScope())
 
             CREATE INDEX IF NOT EXISTS "IX_ClientNotificationPreferences_LastAppOpenAtUtc"
                 ON "ClientNotificationPreferences" ("LastAppOpenAtUtc");
+
+            ALTER TABLE "ClientNotificationPreferences"
+                ADD COLUMN IF NOT EXISTS "InAppCoachNotificationsEnabled" boolean NOT NULL DEFAULT TRUE;
+
+            ALTER TABLE "ClientNotificationPreferences"
+                ADD COLUMN IF NOT EXISTS "AchievementNotificationsEnabled" boolean NOT NULL DEFAULT TRUE;
+
+            ALTER TABLE "ClientNotificationPreferences"
+                ADD COLUMN IF NOT EXISTS "PantryActivityNotificationsEnabled" boolean NOT NULL DEFAULT TRUE;
 
             CREATE TABLE IF NOT EXISTS "ClientGoalPreferences" (
                 "ClientId" uuid NOT NULL PRIMARY KEY,
@@ -811,6 +823,30 @@ using (var scope = app.Services.CreateScope())
 
             CREATE INDEX IF NOT EXISTS "IX_ClientShoppingListItems_ClientId_IngredientId"
                 ON "ClientShoppingListItems" ("ClientId", "IngredientId");
+
+            ALTER TABLE IF EXISTS "ClientShoppingListItems"
+                ADD COLUMN IF NOT EXISTS "SourceMealsJson" text NULL;
+
+            ALTER TABLE IF EXISTS "ClientShoppingListItems"
+                ADD COLUMN IF NOT EXISTS "IngredientRoleSummaryJson" text NULL;
+
+            ALTER TABLE IF EXISTS "ClientShoppingListItems"
+                ADD COLUMN IF NOT EXISTS "PrimaryMealTitle" character varying(160) NULL;
+
+            ALTER TABLE IF EXISTS "ClientShoppingListItems"
+                ADD COLUMN IF NOT EXISTS "PrimaryMealTime" character varying(16) NULL;
+
+            ALTER TABLE IF EXISTS "ClientShoppingListItems"
+                ADD COLUMN IF NOT EXISTS "GeneratedFromSelectedRecipe" boolean NOT NULL DEFAULT FALSE;
+
+            ALTER TABLE IF EXISTS "PlanMealItems"
+                ADD COLUMN IF NOT EXISTS "SelectedRecipeId" uuid NULL;
+
+            ALTER TABLE IF EXISTS "PlanMealItems"
+                ADD COLUMN IF NOT EXISTS "SelectedRecipeSource" character varying(24) NOT NULL DEFAULT 'Original';
+
+            CREATE INDEX IF NOT EXISTS "IX_PlanMealItems_SelectedRecipeId"
+                ON "PlanMealItems" ("SelectedRecipeId");
 
             CREATE TABLE IF NOT EXISTS "ClientCareMessages" (
                 "Id" uuid NOT NULL PRIMARY KEY,

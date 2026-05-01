@@ -182,7 +182,7 @@ export default function ProfileMeasurementsScreen() {
 
         {/* Header */}
         <TouchableOpacity onPress={() => (nav as any).goBack()} style={s.backRow}>
-          <Text style={[s.backText, { color: theme.primary }]}>â† Geri</Text>
+          <Text style={[s.backText, { color: theme.primary }]}>← Geri</Text>
         </TouchableOpacity>
         <Text style={[s.title, { color: theme.text }]}>Ölçümlerim</Text>
         <Text style={[s.sub, { color: theme.textSub }]}>
@@ -303,8 +303,8 @@ export default function ProfileMeasurementsScreen() {
             <>
               <MeasurementField label="Boy (cm)" value={heightCm} onChange={setHeightCm} placeholder="Örn: 170" theme={theme} />
               <MeasurementField label="Yağ oranı (%)" value={bodyFat} onChange={setBodyFat} placeholder="Örn: 22.0" theme={theme} />
-              <MeasurementField label="Kas oranı (%) â€” opsiyonel" value={musclePercent} onChange={setMusclePercent} placeholder="Örn: 35.0" theme={theme} />
-              <MeasurementField label="Su oranı (%) â€” opsiyonel" value={waterPercent} onChange={setWaterPercent} placeholder="Örn: 55.0" theme={theme} />
+              <MeasurementField label="Kas oranı (%) — opsiyonel" value={musclePercent} onChange={setMusclePercent} placeholder="Örn: 35.0" theme={theme} />
+              <MeasurementField label="Su oranı (%) — opsiyonel" value={waterPercent} onChange={setWaterPercent} placeholder="Örn: 55.0" theme={theme} />
             </>
           )}
 

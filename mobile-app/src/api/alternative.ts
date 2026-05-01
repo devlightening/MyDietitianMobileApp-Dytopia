@@ -12,6 +12,14 @@ export interface RecipeIngredientItem {
   name: string;
 }
 
+export interface RecipeCoverageGroup {
+  matched: RecipeIngredientItem[];
+  missing: RecipeIngredientItem[];
+  total: number;
+  matchedCount: number;
+  missingCount: number;
+}
+
 export interface RecipePlanContext {
   recipeId: string;
   recipeName: string;
@@ -24,6 +32,31 @@ export interface RecipePlanContext {
   ingredients: {
     mandatory: RecipeIngredientItem[];
     optional: RecipeIngredientItem[];
+    flavoring?: RecipeIngredientItem[];
+  };
+  matchedGroups?: {
+    mandatory: RecipeIngredientItem[];
+    optional: RecipeIngredientItem[];
+    flavoring?: RecipeIngredientItem[];
+  };
+  missingGroups?: {
+    mandatory: RecipeIngredientItem[];
+    optional: RecipeIngredientItem[];
+    flavoring?: RecipeIngredientItem[];
+  };
+  coverage?: {
+    percent: number;
+    matchedCount: number;
+    missingCount: number;
+    mandatoryPercent: number;
+    optionalPercent: number;
+    flavoringPercent: number;
+    mandatoryWeight: number;
+    optionalWeight: number;
+    flavoringWeight: number;
+    mandatory: RecipeCoverageGroup;
+    optional: RecipeCoverageGroup;
+    flavoring: RecipeCoverageGroup;
   };
 }
 

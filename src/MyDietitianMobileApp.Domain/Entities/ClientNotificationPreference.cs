@@ -16,6 +16,9 @@ public class ClientNotificationPreference
     public Guid ClientId { get; private set; }
 
     public bool NotificationsEnabled { get; private set; } = true;
+    public bool InAppCoachNotificationsEnabled { get; private set; } = true;
+    public bool AchievementNotificationsEnabled { get; private set; } = true;
+    public bool PantryActivityNotificationsEnabled { get; private set; } = true;
 
     public bool HydrationRemindersEnabled { get; private set; } = true;
     public int HydrationIntervalMinutes { get; private set; } = 120;
@@ -40,6 +43,9 @@ public class ClientNotificationPreference
 
     public void Update(
         bool notificationsEnabled,
+        bool inAppCoachNotificationsEnabled,
+        bool achievementNotificationsEnabled,
+        bool pantryActivityNotificationsEnabled,
         bool hydrationRemindersEnabled,
         int hydrationIntervalMinutes,
         TimeOnly hydrationStartLocalTime,
@@ -54,6 +60,9 @@ public class ClientNotificationPreference
         string? timeZoneId)
     {
         NotificationsEnabled = notificationsEnabled;
+        InAppCoachNotificationsEnabled = inAppCoachNotificationsEnabled;
+        AchievementNotificationsEnabled = achievementNotificationsEnabled;
+        PantryActivityNotificationsEnabled = pantryActivityNotificationsEnabled;
         HydrationRemindersEnabled = hydrationRemindersEnabled;
         HydrationIntervalMinutes = hydrationIntervalMinutes;
         HydrationStartLocalTime = hydrationStartLocalTime;

@@ -15,6 +15,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
+import { useInAppNotifications } from "../context/InAppNotificationContext";
 import { spacing, radii } from "../theme/tokens";
 import { addIngredientsToShoppingList } from "../api/shopping-list";
 import { matchKitchen, type RecipeMatchResult } from "../api/kitchen";
@@ -29,6 +30,7 @@ import {
   normalizeCompatibilityPercent,
 } from "../utils/recipeMatchPresentation";
 import { prioritizeRecipeMatches, summarizeRecipePriority } from "../features/smartInsights";
+import { buildShoppingItemsAddedNotification } from "../notifications/notificationEvents";
 
 type ScreenRoute = RouteProp<{ params: { ingredientIds: string[]; ingredientNames: string[] } }, "params">;
 type TabKey = "all" | "full" | "partial" | "clinic";
@@ -64,6 +66,7 @@ export default function KitchenResultScreen() {
   const { ingredientIds, ingredientNames } = route.params;
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
+  const { notify } = useInAppNotifications();
   const insets = useSafeAreaInsets();
   const { data: gamification } = useGamification();
 
@@ -250,12 +253,11 @@ export default function KitchenResultScreen() {
         grouped.featured.recipeId,
         grouped.featured.name,
       );
-      Alert.alert(language === "tr" ? "Tamam" : "OK", copy.added, [
-        {
-          text: language === "tr" ? "Tamam" : "OK",
-          onPress: () => (navigation as any).navigate(Routes.App.ShoppingList),
-        },
-      ]);
+      notify({
+        ...buildShoppingItemsAddedNotification(language, missingIds.length),
+        ctaLabel: language === "tr" ? "Listeyi Aç" : "Open list",
+        onPress: () => (navigation as any).navigate(Routes.App.ShoppingList),
+      });
     } catch {
       Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Listeye ekleme başarısız." : "Could not add missing items.");
     } finally {

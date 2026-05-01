@@ -92,11 +92,11 @@ const badgeCatalog: Record<MotivationBadgeId, BadgeCatalogEntry> = {
     family: "nutrition",
     priority: 92,
     targetFallback: 70,
-    title: { tr: "Protein Canavari", en: "Protein Power" },
+    title: { tr: "Protein Canavarı", en: "Protein Power" },
     subtitle: { tr: "Günlük protein gücünü topladın.", en: "You stacked serious protein power today." },
     hint: { tr: "Bir günde 70 g protein hedefine ulaş.", en: "Reach 70 g of protein in a single day." },
     earnedDetail: { tr: "Gün içinde 70 g proteine ulaşarak rozeti açtın.", en: "You unlocked this by reaching 70 g of protein in one day." },
-    flavor: { tr: "Kaslar sahnede alkis tutuyor.", en: "Your muscles are giving a standing ovation." },
+    flavor: { tr: "Kaslar sahnede alkış tutuyor.", en: "Your muscles are giving a standing ovation." },
   },
   veggie_focus: {
     icon: "carrot",
@@ -108,7 +108,7 @@ const badgeCatalog: Record<MotivationBadgeId, BadgeCatalogEntry> = {
     subtitle: { tr: "Tabakta 3 sebze dokunuşu yakaladın.", en: "You landed 3 vegetable-forward moments." },
     hint: { tr: "Gün içinde 3 sebze sinyali topla.", en: "Collect 3 vegetable signals in one day." },
     earnedDetail: { tr: "Üç sebze odaklı seçimle bu rozeti açtın.", en: "You unlocked this with three vegetable-focused choices." },
-    flavor: { tr: "Mutfakta yesil ligine girdin.", en: "You made it into the green league." },
+    flavor: { tr: "Mutfakta yeşil ligine girdin.", en: "You made it into the green league." },
   },
   kitchen_spark: {
     icon: "chef-hat",

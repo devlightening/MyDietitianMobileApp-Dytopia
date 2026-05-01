@@ -1249,7 +1249,7 @@ function ActivePlanBlock({
             {(plan.startDate || plan.endDate) && (
               <Text style={[s.activePlanDates, { color: theme.textSub }]}>
                 {plan.startDate ? new Date(plan.startDate).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
-                {plan.startDate && plan.endDate ? ' â†’ ' : ''}
+          {plan.startDate && plan.endDate ? ' → ' : ''}
                 {plan.endDate ? new Date(plan.endDate).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
               </Text>
             )}

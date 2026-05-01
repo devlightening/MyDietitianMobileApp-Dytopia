@@ -6,12 +6,15 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from '../context/I18nContext';
 import { spacing, radii } from '../theme/tokens';
 import apiClient from '../api/client';
 import type { TodayPlan, MealItem } from '../data/plansRepo';
+import AnimatedCard from '../components/ui/AnimatedCard';
+import PulseBadge from '../components/ui/PulseBadge';
 
 interface WeekPlan extends TodayPlan {
   date: string;
@@ -170,7 +173,7 @@ export default function WeeklySummaryScreen() {
         ) : (
           <>
             {/* Week compliance summary card */}
-            <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <AnimatedCard delay={40} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Text style={[s.sectionLabel, { color: theme.textMuted }]}>{copy.compliance}</Text>
               <Text style={[s.bigPct, { color: weekPct >= 70 ? theme.emerald : theme.accentGold }]}>
                 {weekPct}%
@@ -182,10 +185,10 @@ export default function WeeklySummaryScreen() {
               <View style={[s.bar, { backgroundColor: theme.border }]}>
                 <View style={[s.barFill, { width: `${weekPct}%` as any, backgroundColor: barColor(weekPct) }]} />
               </View>
-            </View>
+            </AnimatedCard>
 
             {/* Day-by-day bar chart */}
-            <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <AnimatedCard delay={110} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Text style={[s.sectionLabel, { color: theme.textMuted }]}>
                 {lang === 'tr' ? 'Günlük Öğün Uyumu' : 'Daily Meal Compliance'}
               </Text>
@@ -198,7 +201,7 @@ export default function WeeklySummaryScreen() {
                   const totalH = plan ? Math.max((comp.total / barMax) * 100, 4) : 4;
 
                   return (
-                    <View key={date} style={s.dayCol}>
+                    <Animated.View key={date} entering={FadeInDown.delay(idx * 45).duration(260)} style={s.dayCol}>
                       <View style={[s.barTrack, { height: 100 }]}>
                         {/* Total (ghost) */}
                         {plan && (
@@ -224,15 +227,15 @@ export default function WeeklySummaryScreen() {
                       {plan && (
                         <Text style={[s.dayPct, { color: barColor(comp.pct) }]}>{comp.pct}%</Text>
                       )}
-                    </View>
+                    </Animated.View>
                   );
                 })}
               </View>
-            </View>
+            </AnimatedCard>
 
             {/* Macros card */}
             {macros.trackedMeals > 0 && (
-              <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <AnimatedCard delay={170} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[s.sectionLabel, { color: theme.textMuted }]}>{copy.macros}</Text>
                 <Text style={[s.macroCalories, { color: theme.text }]}>
                   {macros.cal.toLocaleString()} <Text style={{ color: theme.textMuted, fontSize: 14 }}>{copy.calories}</Text>
@@ -240,6 +243,13 @@ export default function WeeklySummaryScreen() {
                 <Text style={[s.subLabel, { color: theme.textMuted, marginBottom: spacing.sm }]}>
                   {macros.trackedMeals} {copy.trackedMeals}
                 </Text>
+                <PulseBadge
+                  active={weekPct >= 70}
+                  color={weekPct >= 70 ? theme.emerald : theme.accentGold}
+                  backgroundColor={weekPct >= 70 ? `${theme.emerald}12` : `${theme.accentGold}12`}
+                  borderColor={weekPct >= 70 ? `${theme.emerald}26` : `${theme.accentGold}26`}
+                  label={lang === 'tr' ? `Haftalık uyum %${weekPct}` : `Weekly compliance ${weekPct}%`}
+                />
                 <View style={s.macroRow}>
                   {[
                     { label: copy.protein, val: macros.protein, color: theme.primary },
@@ -252,7 +262,7 @@ export default function WeeklySummaryScreen() {
                     </View>
                   ))}
                 </View>
-              </View>
+              </AnimatedCard>
             )}
 
             {/* Day list */}
@@ -262,7 +272,7 @@ export default function WeeklySummaryScreen() {
               const comp = calcCompliance(plan);
               const isToday = date === todayIso;
               return (
-                <View key={date} style={[s.dayCard, { backgroundColor: theme.surface, borderColor: isToday ? `${theme.primary}40` : theme.border }]}>
+                <AnimatedCard key={date} delay={210 + idx * 35} style={[s.dayCard, { backgroundColor: theme.surface, borderColor: isToday ? `${theme.primary}40` : theme.border }]}>
                   <View style={s.dayCardHeader}>
                     <Text style={[s.dayCardDate, { color: isToday ? theme.primary : theme.text }]}>
                       {dayLabels[idx]} {date.slice(8, 10)}/{date.slice(5, 7)}
@@ -294,15 +304,15 @@ export default function WeeklySummaryScreen() {
                       )}
                     </View>
                   ))}
-                </View>
+                </AnimatedCard>
               );
             })}
 
             {allPlans.length === 0 && (
-              <View style={[s.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <AnimatedCard delay={120} style={[s.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Ionicons name="calendar-outline" size={36} color={theme.textMuted} />
                 <Text style={[s.emptyTxt, { color: theme.textMuted }]}>{copy.noData}</Text>
-              </View>
+              </AnimatedCard>
             )}
           </>
         )}

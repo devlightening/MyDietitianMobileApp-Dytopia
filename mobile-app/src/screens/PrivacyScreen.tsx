@@ -13,7 +13,7 @@ export default function PrivacyScreen() {
 
   const copy = language === "tr"
     ? {
-        back: "â† Geri",
+        back: "← Geri",
         title: "Gizlilik",
         subtitle: "Verilerinin uygulama içinde nasıl kullanıldığını açık şekilde gör.",
         items: [
@@ -36,7 +36,7 @@ export default function PrivacyScreen() {
         ],
       }
     : {
-        back: "â† Back",
+        back: "← Back",
         title: "Privacy",
         subtitle: "See clearly how your data is used inside the app.",
         items: [

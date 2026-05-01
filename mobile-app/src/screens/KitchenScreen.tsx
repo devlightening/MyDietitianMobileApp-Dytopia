@@ -838,10 +838,12 @@ export default function KitchenScreen({
   selectedIngredients,
   onChangeSelected,
   openQuickSheet,
+  isActive = true,
 }: {
   selectedIngredients: Ingredient[];
   onChangeSelected: (v: Ingredient[]) => void;
   openQuickSheet: () => void;
+  isActive?: boolean;
 }) {
   const nav = useNavigation();
   const insets = useSafeAreaInsets();
@@ -1097,7 +1099,7 @@ export default function KitchenScreen({
     if (!hasIngredients || searchTransitioning) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     handleMerge();
-  }, hasIngredients && !searchTransitioning);
+  }, isActive && hasIngredients && !searchTransitioning);
 
   function handlePantryPress() {
     (nav as any).navigate(Routes.App.Pantry, {

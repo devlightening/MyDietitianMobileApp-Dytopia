@@ -16,7 +16,7 @@ export default function RateAppScreen() {
 
   const copy = language === "tr"
     ? {
-        back: "â† Geri",
+        back: "← Geri",
         title: "Uygulamayı Değerlendir",
         subtitle: "Deneyimini puanla, paylaş veya mağaza bağlantısını aç.",
         openStore: "Mağaza Sayfasını Aç",
@@ -25,7 +25,7 @@ export default function RateAppScreen() {
         storeError: "Mağaza bağlantısı açılamadı.",
       }
     : {
-        back: "â† Back",
+        back: "← Back",
         title: "Rate the App",
         subtitle: "Rate your experience, share the app, or open the store page.",
         openStore: "Open Store Page",

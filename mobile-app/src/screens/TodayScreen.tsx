@@ -79,6 +79,106 @@ function statusConfig(status: MealCompletionStatus, theme: any) {
   }
 }
 
+type TodayDecisionCardModel = {
+  title: string;
+  body: string;
+  cta: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  route: string;
+  params?: Record<string, unknown>;
+  tone: 'primary' | 'emerald' | 'gold' | 'cyan';
+};
+
+function minutesUntilMeal(time?: string | null): number | null {
+  if (!time) return null;
+  const [hourRaw, minuteRaw] = time.split(':');
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hour, minute, 0, 0);
+  return Math.ceil((target.getTime() - now.getTime()) / 60_000);
+}
+
+function buildTodayDecisionCard(
+  plan: TodayPlan | null,
+  tracking: TodayTracking | null,
+  progressPct: number,
+  lang: 'tr' | 'en',
+): TodayDecisionCardModel {
+  const pendingMeals = plan?.items.filter((item) => item.completionStatus === 'Planned') ?? [];
+  const nextMeal = pendingMeals
+    .slice()
+    .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))[0];
+  const minutesLeft = minutesUntilMeal(nextMeal?.time);
+
+  if (nextMeal) {
+    const mealLabel = mealTypeLabel(nextMeal.mealType, lang);
+    const timeLabel =
+      minutesLeft !== null && minutesLeft > 0 && minutesLeft <= 90
+        ? (lang === 'tr' ? `${minutesLeft} dk kaldı` : `${minutesLeft} min left`)
+        : nextMeal.time;
+
+    return {
+      title: lang === 'tr' ? 'Bugün küçük karar' : 'Small decision today',
+      body: lang === 'tr'
+        ? `${mealLabel} için ${timeLabel}. Malzemeleri şimdiden kontrol edip günü rahatlatabilirsin.`
+        : `${mealLabel} is at ${timeLabel}. Check ingredients early and make the day easier.`,
+      cta: lang === 'tr' ? 'Malzemeleri Kontrol Et' : 'Check Ingredients',
+      icon: 'sparkles-outline',
+      route: nextMeal.recipeId ? Routes.App.CheckIngredients : Routes.App.ShoppingList,
+      params: nextMeal.recipeId
+        ? {
+            mealId: nextMeal.id,
+            plannedRecipeId: nextMeal.recipeId,
+            mealType: nextMeal.mealType,
+            recipeName: nextMeal.recipeName ?? nextMeal.title,
+          }
+        : undefined,
+      tone: 'primary',
+    };
+  }
+
+  const waterGlasses = tracking?.waterGlasses ?? 0;
+  if (waterGlasses < DEFAULT_HYDRATION_GOAL_GLASSES) {
+    return {
+      title: lang === 'tr' ? 'Su hedefi yakında kapanır' : 'Hydration is within reach',
+      body: lang === 'tr'
+        ? `${DEFAULT_HYDRATION_GOAL_GLASSES - waterGlasses} bardak kaldı. Küçük bir ekleme bugünün ritmini toparlar.`
+        : `${DEFAULT_HYDRATION_GOAL_GLASSES - waterGlasses} glasses left. A small update keeps today's rhythm clean.`,
+      cta: lang === 'tr' ? 'Su Ekle' : 'Add Water',
+      icon: 'water-outline',
+      route: Routes.App.Hydration,
+      tone: 'cyan',
+    };
+  }
+
+  if (progressPct >= 100) {
+    return {
+      title: lang === 'tr' ? 'Bugün güçlü kapandı' : 'Today is wrapped well',
+      body: lang === 'tr'
+        ? 'Plan tamam. İstersen rozet kasasında sıradaki hedefe bir göz at.'
+        : 'Plan complete. You can peek at the next badge target now.',
+      cta: lang === 'tr' ? 'Rozetlere Bak' : 'View Badges',
+      icon: 'shield-checkmark-outline',
+      route: Routes.App.BadgeVault,
+      tone: 'emerald',
+    };
+  }
+
+  return {
+    title: lang === 'tr' ? 'Dolap ve liste hazır mı?' : 'Pantry and list ready?',
+    body: lang === 'tr'
+      ? 'Bugünün planına göre eksikleri alışveriş listesinde hızlıca toparlayabilirsin.'
+      : "You can quickly collect today's missing items from the shopping list.",
+    cta: lang === 'tr' ? 'Alışverişe Git' : 'Open Shopping',
+    icon: 'basket-outline',
+    route: Routes.App.ShoppingList,
+    tone: 'gold',
+  };
+}
+
 export default function TodayScreen() {
   const { theme, isDark } = useTheme();
   const { language }      = useTranslation();
@@ -190,6 +290,10 @@ export default function TodayScreen() {
   const doneCount   = plan?.items.filter(i => i.completionStatus === 'Done' || i.completionStatus === 'Alternative').length ?? 0;
   const totalCount  = plan?.items.length ?? 0;
   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  const todayDecision = React.useMemo(
+    () => buildTodayDecisionCard(plan, tracking, progressPct, lang),
+    [lang, plan, progressPct, tracking],
+  );
 
   // Progress bar animasyonu
   const barWidthAnim = useSharedValue(0);
@@ -310,6 +414,15 @@ export default function TodayScreen() {
           </TouchableOpacity>
         </View>
 
+        <TodayDecisionCard
+          decision={todayDecision}
+          theme={theme}
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            (navigation as any).navigate(todayDecision.route, todayDecision.params);
+          }}
+        />
+
         {plan ? (
           <>
             {/* Progress card */}
@@ -345,7 +458,7 @@ export default function TodayScreen() {
                 entering={FadeInDown.delay(80).duration(400)}
                 style={[s.celebrateBanner, { backgroundColor: `${theme.emerald}15`, borderColor: `${theme.emerald}40` }]}
               >
-                <Text style={s.celebrateEmoji}>ğŸ‰</Text>
+                <Text style={s.celebrateEmoji}>✦</Text>
                 <Text style={[s.celebrateTxt, { color: theme.emerald }]}>
                   {lang === 'tr' ? 'Tüm öğünler tamamlandı! Harika iş!' : 'All meals complete! Great job!'}
                 </Text>
@@ -421,6 +534,54 @@ export default function TodayScreen() {
   );
 }
 
+function TodayDecisionCard({
+  decision,
+  theme,
+  onPress,
+}: {
+  decision: TodayDecisionCardModel;
+  theme: any;
+  onPress: () => void;
+}) {
+  const toneColor =
+    decision.tone === 'emerald'
+      ? theme.emerald
+      : decision.tone === 'gold'
+        ? theme.accentGold
+        : decision.tone === 'cyan'
+          ? theme.accentCyan
+          : theme.primary;
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(24).duration(300)}
+      style={[
+        s.decisionCard,
+        {
+          backgroundColor: theme.surface,
+          borderColor: `${toneColor}34`,
+        },
+      ]}
+    >
+      <View style={[s.decisionIcon, { backgroundColor: `${toneColor}14`, borderColor: `${toneColor}30` }]}>
+        <Ionicons name={decision.icon} size={18} color={toneColor} />
+      </View>
+      <View style={s.decisionText}>
+        <Text style={[s.decisionTitle, { color: theme.text }]}>{decision.title}</Text>
+        <Text style={[s.decisionBody, { color: theme.textMuted }]}>{decision.body}</Text>
+      </View>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.82}
+        style={[s.decisionCta, { backgroundColor: `${toneColor}12`, borderColor: `${toneColor}30` }]}
+      >
+        <Text style={[s.decisionCtaText, { color: toneColor }]}>{decision.cta}</Text>
+        <Ionicons name="chevron-forward" size={13} color={toneColor} />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 // â”€â”€â”€ SwipeToComplete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SwipeToComplete({
@@ -478,7 +639,7 @@ function SwipeToComplete({
           },
         ]}
       >
-        <Text style={[sw.revealIcon, { color: theme.emerald }]}>âœ“</Text>
+        <Text style={[sw.revealIcon, { color: theme.emerald }]}>✓</Text>
       </RNAnimated.View>
 
       <RNAnimated.View {...pan.panHandlers} style={{ transform: [{ translateX: tx }] }}>
@@ -582,11 +743,11 @@ function MealCard({
             </View>
 
             <Text style={[s.backFaceFrom, { color: theme.textMuted }]} numberOfLines={1}>
-              {meal.recipeName ?? meal.title} â†’
+              {meal.recipeName ?? meal.title} →
             </Text>
 
             <Text style={[s.backFaceName, { color: theme.text }]}>
-              {meal.alternativeRecipeName ?? 'â€”'}
+              {meal.alternativeRecipeName ?? '—'}
             </Text>
 
             {(meal.alternativeMacros || meal.alternativeCalories != null) && (
@@ -701,7 +862,7 @@ function MealCard({
 
             {blocked && meal.completionStatus === 'Planned' && (
               <Text style={[s.blockedHint, { color: theme.textMuted }]}>
-                {lang === 'tr' ? `â° ${meal.actionBlockedUntilTime ?? ''} itibarıyla açılır` : `â° Opens at ${meal.actionBlockedUntilTime ?? ''}`}
+                {lang === 'tr' ? `${meal.actionBlockedUntilTime ?? ''} itibarıyla açılır` : `Opens at ${meal.actionBlockedUntilTime ?? ''}`}
               </Text>
             )}
 
@@ -951,6 +1112,36 @@ const s = StyleSheet.create({
   dateLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
   pageTitle: { fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
   iconBtn:   { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+
+  decisionCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  decisionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  decisionText: { flex: 1, gap: 3 },
+  decisionTitle: { fontSize: 14, fontWeight: '900' },
+  decisionBody: { fontSize: 12, fontWeight: '600', lineHeight: 17 },
+  decisionCta: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  decisionCtaText: { fontSize: 11, fontWeight: '900' },
 
   progressCard: { borderRadius: radii.xl, borderWidth: 1, padding: spacing.md, gap: 8 },
   progressTop:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
