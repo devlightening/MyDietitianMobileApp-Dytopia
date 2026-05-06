@@ -17,6 +17,28 @@ public class DietitianRecipesController : ControllerBase
     private readonly AuthDbContext _authDb;
     private readonly RecipeMatchService _matchService;
     private readonly ILogger<DietitianRecipesController> _logger;
+    private static readonly HashSet<string> AllowedRecipeUnits = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "g",
+        "kg",
+        "mg",
+        "ml",
+        "L",
+        "adet",
+        "dilim",
+        "bardak",
+        "su bardağı",
+        "çay bardağı",
+        "yemek kaşığı",
+        "tatlı kaşığı",
+        "çay kaşığı",
+        "kase",
+        "avuç",
+        "tutam",
+        "paket",
+        "porsiyon",
+        "demet"
+    };
 
     public DietitianRecipesController(
         AppDbContext appDb,
@@ -624,22 +646,95 @@ public class DietitianRecipesController : ControllerBase
         return ids.ToHashSet();
     }
 
+    private static List<SaveRecipeIngredientRequest> GetRecipeIngredientInputs(SaveRecipeRequest request)
+    {
+        if (request.Ingredients is { Count: > 0 })
+        {
+            return request.Ingredients
+                .Select(item => item with
+                {
+                    Role = NormalizeRole(item.Role),
+                    Unit = NormalizeUnit(item.Unit)
+                })
+                .ToList();
+        }
+
+        var result = new List<SaveRecipeIngredientRequest>();
+        result.AddRange((request.MandatoryIngredients ?? new List<Guid>())
+            .Select(id => new SaveRecipeIngredientRequest(id, RecipeIngredient.MandatoryRole, null, null)));
+        result.AddRange((request.OptionalIngredients ?? new List<Guid>())
+            .Select(id => new SaveRecipeIngredientRequest(id, RecipeIngredient.OptionalRole, null, null)));
+        result.AddRange((request.FlavoringIngredients ?? new List<Guid>())
+            .Select(id => new SaveRecipeIngredientRequest(id, RecipeIngredient.FlavoringRole, null, null)));
+        result.AddRange((request.Prohibitions ?? new List<Guid>())
+            .Select(id => new SaveRecipeIngredientRequest(id, RecipeIngredient.ProhibitedRole, null, null)));
+
+        return result;
+    }
+
+    private static string NormalizeRole(string? role)
+        => role?.Trim().ToLowerInvariant() switch
+        {
+            "mandatory" or "zorunlu" => RecipeIngredient.MandatoryRole,
+            "optional" or "opsiyonel" => RecipeIngredient.OptionalRole,
+            "flavoring" or "lezzetlendirici" => RecipeIngredient.FlavoringRole,
+            "prohibited" or "yasak" or "yasaklı" => RecipeIngredient.ProhibitedRole,
+            _ => RecipeIngredient.OptionalRole
+        };
+
+    private static string? NormalizeUnit(string? unit)
+        => unit?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => null,
+            "gram" or "gr" => "g",
+            "litre" or "liter" or "lt" => "L",
+            var value => unit.Trim()
+        };
+
+    private static string? FormatDisplayAmount(decimal? quantity, string? unit)
+    {
+        if (!quantity.HasValue || string.IsNullOrWhiteSpace(unit))
+            return null;
+
+        var formatted = quantity.Value % 1 == 0
+            ? quantity.Value.ToString("0")
+            : quantity.Value.ToString("0.##");
+
+        return $"{formatted} {unit.Trim()}";
+    }
+
     private static string? ValidateRecipeRequest(SaveRecipeRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length < 4)
             return "Tarif adı en az 4 karakter olmalıdır.";
 
-        if (request.MandatoryIngredients == null || request.MandatoryIngredients.Count == 0)
+        var ingredientInputs = GetRecipeIngredientInputs(request);
+
+        if (!ingredientInputs.Any(item => item.Role == RecipeIngredient.MandatoryRole))
             return "En az 1 zorunlu malzeme seçilmelidir.";
 
-        var allIds = request.MandatoryIngredients
-            .Concat(request.OptionalIngredients ?? Enumerable.Empty<Guid>())
-            .Concat(request.FlavoringIngredients ?? Enumerable.Empty<Guid>())
-            .Concat(request.Prohibitions ?? Enumerable.Empty<Guid>())
-            .ToList();
+        if (ingredientInputs.Any(item => item.IngredientId == Guid.Empty))
+            return "Lütfen tüm malzemeleri seçin.";
+
+        var allIds = ingredientInputs.Select(item => item.IngredientId).ToList();
 
         if (allIds.Count != allIds.Distinct().Count())
             return "Aynı malzeme birden fazla rolde kullanılamaz.";
+
+        if (request.Ingredients is { Count: > 0 })
+        {
+            foreach (var input in ingredientInputs.Where(item => item.Role != RecipeIngredient.ProhibitedRole))
+            {
+                if (!input.Quantity.HasValue || input.Quantity.Value <= 0)
+                    return "Zorunlu, opsiyonel ve lezzetlendirici malzemeler için miktar girilmelidir.";
+
+                if (string.IsNullOrWhiteSpace(input.Unit))
+                    return "Zorunlu, opsiyonel ve lezzetlendirici malzemeler için birim seçilmelidir.";
+
+                if (!AllowedRecipeUnits.Contains(input.Unit.Trim()))
+                    return $"Geçersiz birim seçildi: {input.Unit}";
+            }
+        }
 
         if (request.CaloriesKcal.HasValue && request.CaloriesKcal.Value < 0)
             return "Kalori değeri negatif olamaz.";
@@ -655,10 +750,8 @@ public class DietitianRecipesController : ControllerBase
 
     private async Task<IngredientMapResult> ResolveIngredientMapAsync(SaveRecipeRequest request)
     {
-        var allIngredientIds = request.MandatoryIngredients
-            .Concat(request.OptionalIngredients ?? Enumerable.Empty<Guid>())
-            .Concat(request.FlavoringIngredients ?? Enumerable.Empty<Guid>())
-            .Concat(request.Prohibitions ?? Enumerable.Empty<Guid>())
+        var allIngredientIds = GetRecipeIngredientInputs(request)
+            .Select(item => item.IngredientId)
             .Distinct()
             .ToList();
 
@@ -695,29 +788,31 @@ public class DietitianRecipesController : ControllerBase
         IReadOnlyDictionary<Guid, Ingredient> ingredientMap,
         SaveRecipeRequest request)
     {
-        foreach (var ingredientId in request.MandatoryIngredients.Distinct())
+        var ingredientInputs = GetRecipeIngredientInputs(request);
+
+        foreach (var ingredientId in ingredientInputs.Where(item => item.Role == RecipeIngredient.MandatoryRole).Select(item => item.IngredientId).Distinct())
             recipe.AddMandatoryIngredient(ingredientMap[ingredientId]);
 
-        foreach (var ingredientId in (request.OptionalIngredients ?? Enumerable.Empty<Guid>()).Distinct())
+        foreach (var ingredientId in ingredientInputs.Where(item => item.Role == RecipeIngredient.OptionalRole).Select(item => item.IngredientId).Distinct())
             recipe.AddOptionalIngredient(ingredientMap[ingredientId]);
-        foreach (var ingredientId in (request.FlavoringIngredients ?? Enumerable.Empty<Guid>()).Distinct())
+        foreach (var ingredientId in ingredientInputs.Where(item => item.Role == RecipeIngredient.FlavoringRole).Select(item => item.IngredientId).Distinct())
             recipe.AddOptionalIngredient(ingredientMap[ingredientId]);
 
-        foreach (var ingredientId in (request.Prohibitions ?? Enumerable.Empty<Guid>()).Distinct())
+        foreach (var ingredientId in ingredientInputs.Where(item => item.Role == RecipeIngredient.ProhibitedRole).Select(item => item.IngredientId).Distinct())
             recipe.AddProhibitedIngredient(ingredientMap[ingredientId]);
     }
 
     private async Task SyncExplicitRecipeIngredientsAsync(Guid recipeId, SaveRecipeRequest request)
     {
-        foreach (var ingredientId in request.MandatoryIngredients.Distinct())
-            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.MandatoryRole));
-
-        foreach (var ingredientId in (request.OptionalIngredients ?? Enumerable.Empty<Guid>()).Distinct())
-            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.OptionalRole));
-        foreach (var ingredientId in (request.FlavoringIngredients ?? Enumerable.Empty<Guid>()).Distinct())
-            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.FlavoringRole));
-        foreach (var ingredientId in (request.Prohibitions ?? Enumerable.Empty<Guid>()).Distinct())
-            _appDb.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.ProhibitedRole));
+        foreach (var input in GetRecipeIngredientInputs(request))
+        {
+            _appDb.RecipeIngredients.Add(new RecipeIngredient(
+                recipeId,
+                input.IngredientId,
+                input.Role,
+                input.Role == RecipeIngredient.ProhibitedRole ? null : input.Quantity,
+                input.Role == RecipeIngredient.ProhibitedRole ? null : NormalizeUnit(input.Unit)));
+        }
 
         await Task.CompletedTask;
     }
@@ -748,7 +843,13 @@ public class DietitianRecipesController : ControllerBase
                 _appDb.Ingredients.AsNoTracking(),
                 item => item.IngredientId,
                 ingredient => ingredient.Id,
-                (item, ingredient) => new RecipeIngredientRow(item.RecipeId, ingredient.Id, ingredient.CanonicalName, item.Role))
+                (item, ingredient) => new RecipeIngredientRow(
+                    item.RecipeId,
+                    ingredient.Id,
+                    ingredient.CanonicalName,
+                    item.Role,
+                    item.Quantity,
+                    item.Unit))
             .ToListAsync();
 
         var rowsByRecipe = rows
@@ -1209,7 +1310,13 @@ public class DietitianRecipesController : ControllerBase
         Archive
     }
 
-    private sealed record RecipeIngredientRow(Guid RecipeId, Guid IngredientId, string IngredientName, string Role);
+    private sealed record RecipeIngredientRow(
+        Guid RecipeId,
+        Guid IngredientId,
+        string IngredientName,
+        string Role,
+        decimal? Quantity,
+        string? Unit);
 
     private sealed record RecipeIngredientBuckets(
         List<RecipeIngredientDto> MandatoryIngredients,
@@ -1263,7 +1370,12 @@ public class DietitianRecipesController : ControllerBase
         {
             return rows
                 .Where(row => string.Equals(row.Role, role, StringComparison.OrdinalIgnoreCase))
-                .Select(row => new RecipeIngredientDto(row.IngredientId, row.IngredientName))
+                .Select(row => new RecipeIngredientDto(
+                    row.IngredientId,
+                    row.IngredientName,
+                    row.Quantity,
+                    row.Unit,
+                    FormatDisplayAmount(row.Quantity, row.Unit)))
                 .ToList();
         }
     }
@@ -1277,7 +1389,8 @@ public record SaveRecipeRequest(
     string Name,
     string? Description,
     bool IsPublic,
-    List<Guid> MandatoryIngredients,
+    List<SaveRecipeIngredientRequest>? Ingredients,
+    List<Guid>? MandatoryIngredients,
     List<Guid>? OptionalIngredients,
     List<Guid>? FlavoringIngredients,
     List<Guid>? Prohibitions,
@@ -1292,7 +1405,18 @@ public record SaveRecipeRequest(
     decimal? CarbsGrams,
     decimal? FatGrams);
 
-public record RecipeIngredientDto(Guid Id, string Name);
+public record SaveRecipeIngredientRequest(
+    Guid IngredientId,
+    string Role,
+    decimal? Quantity,
+    string? Unit);
+
+public record RecipeIngredientDto(
+    Guid Id,
+    string Name,
+    decimal? Quantity = null,
+    string? Unit = null,
+    string? DisplayAmount = null);
 
 public record RecipeAnalyticsPreviewDto(
     int AssignmentCount,

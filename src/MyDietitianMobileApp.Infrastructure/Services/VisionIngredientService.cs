@@ -104,7 +104,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
                     operationName,
                     approxBytes,
                     _options.MaxImageBytes);
-                return VisionDetectionResult.Empty;
+                return VisionDetectionResult.ImageTooLarge;
             }
 
             var dataUri = $"data:{mediaType};base64,{base64Image}";

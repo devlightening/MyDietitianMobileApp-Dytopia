@@ -81,4 +81,13 @@ public class AnalyzeIngredientImageResult
 
     /// <summary>Completion tokens consumed by the GPT-4o vision call (0 when feature is not active).</summary>
     public int CompletionTokens { get; init; }
+
+    /// <summary>
+    /// Machine-readable failure reason. Null on success.
+    /// "image_too_large" — image exceeded the configured MaxImageBytes limit.
+    /// </summary>
+    public string? Reason { get; init; }
+
+    /// <summary>User-facing Turkish message when Reason is set. Null on success.</summary>
+    public string? UserMessage { get; init; }
 }

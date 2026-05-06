@@ -39,6 +39,7 @@ export type MealType =
 
 /** One of four status values. "Planned" is the default (not acted on yet). */
 export type MealCompletionStatus = "Planned" | "Done" | "Skipped" | "Alternative";
+export type MealCompletionTarget = "Original" | "Alternative";
 
 export interface MealItem {
   id: string;
@@ -142,8 +143,12 @@ export async function getNextMeal(): Promise<NextMeal | null> {
 }
 
 /** POST /api/client/meals/{id}/complete */
-export async function completeMeal(mealItemId: string, note?: string): Promise<void> {
-  await apiClient.post(`/api/client/meals/${mealItemId}/complete`, { note });
+export async function completeMeal(
+  mealItemId: string,
+  note?: string,
+  completionTarget?: MealCompletionTarget,
+): Promise<void> {
+  await apiClient.post(`/api/client/meals/${mealItemId}/complete`, { note, completionTarget });
 }
 
 /** POST /api/client/meals/{id}/skip */
@@ -180,6 +185,10 @@ export async function selectMealRecipe(
 }
 
 /** POST /api/client/meals/{id}/feedback */
-export async function saveMealFeedback(mealItemId: string, feedbackKey: string): Promise<void> {
-  await apiClient.post(`/api/client/meals/${mealItemId}/feedback`, { feedbackKey });
+export async function saveMealFeedback(
+  mealItemId: string,
+  feedbackKey: string,
+  recipeSource?: MealCompletionTarget,
+): Promise<void> {
+  await apiClient.post(`/api/client/meals/${mealItemId}/feedback`, { feedbackKey, recipeSource });
 }

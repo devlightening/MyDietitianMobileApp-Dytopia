@@ -1,7 +1,9 @@
-﻿import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -12,68 +14,166 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 
+import IngredientSearch from '../components/IngredientSearch';
 import { useTheme } from '../context/ThemeContext';
-import { logIngredientAcquisition, resolveBarcode, type AcquisitionCandidate, type ResolveBarcodeResponse } from '../api/acquisition';
+import { useTranslation } from '../context/I18nContext';
+import { logIngredientAcquisition } from '../api/acquisition';
+import { confirmBarcodeMapping, resolveBarcode, type BarcodeResolveResponse } from '../api/barcodes';
 import { radii, spacing } from '../theme/tokens';
 import type { Ingredient } from '../types/alternative';
 
 type BarcodeScanParams = {
   BarcodeScan: {
+    usageContext?: 'kitchen' | 'pantry';
     onConfirm: (ingredients: Ingredient[]) => void;
     onUseSearchTerm?: (term: string) => void;
   };
 };
 
-type Phase = 'scanner' | 'analyzing' | 'results';
+type Phase = 'scanner' | 'resolving' | 'result';
 
 export default function BarcodeScanScreen() {
   const { theme } = useTheme();
+  const { language } = useTranslation();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<BarcodeScanParams, 'BarcodeScan'>>();
+  const usageContext = route.params?.usageContext ?? 'kitchen';
   const [permission, requestPermission] = useCameraPermissions();
 
   const [phase, setPhase] = useState<Phase>('scanner');
+  const [result, setResult] = useState<BarcodeResolveResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ResolveBarcodeResponse | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [startedAt, setStartedAt] = useState<number>(Date.now());
-  const [scanned, setScanned] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [lastScannedBarcode, setLastScannedBarcode] = useState<string | null>(null);
+  const startedAtRef = useRef(Date.now());
 
-  const candidates = result?.candidates ?? [];
+  const copy = language === 'tr'
+    ? {
+        title: 'Barkodu kameraya göster',
+        subtitle: 'Ürün barkodunu çerçeve içine getir.',
+        permissionTitle: 'Kamera izni gerekiyor',
+        permissionBody: 'Paketli ürün barkodlarını okumak için kameraya erişim vermelisin.',
+        allow: 'İzin ver',
+        resolving: 'Barkod çözümleniyor...',
+        found: 'Ürün bulundu',
+        matched: 'Eşleşen malzeme',
+        add: usageContext === 'pantry' ? 'Dolabıma Ekle' : 'Kazana Ekle',
+        rescan: 'Yeniden Tara',
+        unknown: 'Bu barkodu tanıyamadık',
+        choose: 'Lütfen hangi malzemeye karşılık geldiğini seç:',
+        saved: 'Barkod kaydedildi',
+        fallback: 'Metin aramasına geç',
+      }
+    : {
+        title: 'Show the barcode',
+        subtitle: 'Place the product barcode inside the frame.',
+        permissionTitle: 'Camera permission required',
+        permissionBody: 'Camera access is required to scan packaged product barcodes.',
+        allow: 'Allow',
+        resolving: 'Resolving barcode...',
+        found: 'Product found',
+        matched: 'Matched ingredient',
+        add: usageContext === 'pantry' ? 'Add to Pantry' : 'Add to Pot',
+        rescan: 'Scan Again',
+        unknown: 'We could not identify this barcode',
+        choose: 'Select the ingredient this product maps to:',
+        saved: 'Barcode saved',
+        fallback: 'Use text search',
+      };
 
   async function handleBarcodeScanned(event: { data?: string }) {
     const barcode = event.data?.trim();
-    if (!barcode || scanned) {
+    if (!barcode || isResolving || barcode === lastScannedBarcode) {
       return;
     }
 
-    setScanned(true);
-    setStartedAt(Date.now());
-    setPhase('analyzing');
+    setIsResolving(true);
+    setLastScannedBarcode(barcode);
     setError(null);
+    setResult(null);
+    setPhase('resolving');
+    startedAtRef.current = Date.now();
 
     try {
       const response = await resolveBarcode(barcode);
       setResult(response);
-      const autoCandidate = response.candidates.find(candidate => !candidate.requiresConfirmation);
-      setSelectedId(autoCandidate?.ingredientId ?? response.candidates[0]?.ingredientId ?? null);
-      setPhase('results');
+      setPhase('result');
     } catch (err: any) {
-      setError(
-        err?.response?.data?.error ??
-          'Barkod çözümlenemedi. Farklı bir ürün veya metin araması deneyin.',
-      );
+      setError(err?.response?.data?.error ?? err?.message ?? 'Barkod çözümlenemedi.');
       setPhase('scanner');
-      setScanned(false);
+      setLastScannedBarcode(null);
+    } finally {
+      setIsResolving(false);
     }
   }
 
-  function handleRetry() {
+  function resetScan() {
     setResult(null);
-    setSelectedId(null);
     setError(null);
-    setScanned(false);
+    setIsResolving(false);
+    setIsConfirming(false);
+    setLastScannedBarcode(null);
     setPhase('scanner');
+  }
+
+  function addResolvedIngredient(response: BarcodeResolveResponse) {
+    if (!response.canonicalIngredientId || !response.canonicalIngredientName) {
+      return;
+    }
+
+    route.params.onConfirm([
+      {
+        id: response.canonicalIngredientId,
+        canonicalName: response.canonicalIngredientName,
+      },
+    ]);
+
+    void logIngredientAcquisition({
+      source: 'Barcode',
+      rawInput: response.barcode,
+      selectedIngredients: [
+        {
+          ingredientId: response.canonicalIngredientId,
+          mappingType: 'ExactIngredient',
+          confidence: response.confidence ?? 1,
+        },
+      ],
+      mappingType: 'ExactIngredient',
+      requiredConfirmation: response.requiresManualMapping,
+      confirmedByUser: true,
+      interactionCount: 1,
+      latencyMs: Math.max(0, Date.now() - startedAtRef.current),
+      startedAtUtc: new Date(startedAtRef.current).toISOString(),
+      completedAtUtc: new Date().toISOString(),
+      productName: response.productName ?? undefined,
+      brand: response.brand ?? undefined,
+    }).catch(() => undefined);
+
+    navigation.goBack();
+  }
+
+  async function handleManualIngredientSelect(ingredient: Ingredient) {
+    if (!result || isConfirming) {
+      return;
+    }
+
+    setIsConfirming(true);
+    try {
+      const confirmed = await confirmBarcodeMapping({
+        barcode: result.barcode,
+        ingredientId: ingredient.id,
+        productName: result.productName,
+        brand: result.brand,
+      });
+
+      Alert.alert(copy.saved, confirmed.message ?? `${result.barcode} -> ${ingredient.canonicalName}`);
+      addResolvedIngredient(confirmed);
+    } catch (err: any) {
+      Alert.alert('Hata', err?.response?.data?.error ?? err?.message ?? 'Barkod eşleştirmesi kaydedilemedi.');
+    } finally {
+      setIsConfirming(false);
+    }
   }
 
   function handleSearchFallback() {
@@ -82,43 +182,6 @@ export default function BarcodeScanScreen() {
       route.params.onUseSearchTerm?.(fallbackText);
     }
 
-    navigation.goBack();
-  }
-
-  function handleConfirm() {
-    const selectedCandidate = candidates.find(candidate => candidate.ingredientId === selectedId);
-    if (!selectedCandidate || !result) {
-      return;
-    }
-
-    void logIngredientAcquisition({
-      sessionId: result.sessionId,
-      source: 'Barcode',
-      rawInput: result.barcode,
-      selectedIngredients: [
-        {
-          ingredientId: selectedCandidate.ingredientId,
-          mappingType: selectedCandidate.mappingType,
-          confidence: selectedCandidate.confidence,
-        },
-      ],
-      mappingType: selectedCandidate.mappingType,
-      requiredConfirmation: selectedCandidate.requiresConfirmation,
-      confirmedByUser: true,
-      interactionCount: 1,
-      latencyMs: Math.max(0, Date.now() - startedAt),
-      startedAtUtc: new Date(startedAt).toISOString(),
-      completedAtUtc: new Date().toISOString(),
-      productName: result.productName ?? undefined,
-      brand: result.brand ?? undefined,
-    }).catch(() => undefined);
-
-    route.params.onConfirm([
-      {
-        id: selectedCandidate.ingredientId,
-        canonicalName: selectedCandidate.canonicalName,
-      },
-    ]);
     navigation.goBack();
   }
 
@@ -137,22 +200,22 @@ export default function BarcodeScanScreen() {
       <SafeAreaView style={[s.root, { backgroundColor: theme.bg }]}>
         <StatusBar barStyle="light-content" />
         <View style={s.centered}>
-          <Ionicons name="barcode-outline" size={40} color={theme.primary} />
-          <Text style={[s.title, { color: theme.text }]}>Barkod tarayıcı izni gerekiyor</Text>
-          <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Paketli ürünleri kanonik malzeme ailesine çevirmek için kameraya erişim vermelisin.
-          </Text>
+          <Ionicons name="barcode-outline" size={42} color={theme.primary} />
+          <Text style={[s.title, { color: theme.text }]}>{copy.permissionTitle}</Text>
+          <Text style={[s.subtitle, { color: theme.textMuted }]}>{copy.permissionBody}</Text>
           <TouchableOpacity
             style={[s.primaryButton, { backgroundColor: theme.primary }]}
             onPress={() => requestPermission()}
             activeOpacity={0.85}
           >
-            <Text style={[s.primaryButtonText, { color: theme.bg }]}>İzin ver</Text>
+            <Text style={[s.primaryButtonText, { color: theme.bg }]}>{copy.allow}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
+
+  const canAddDirectly = result?.found && result.canonicalIngredientId && result.canonicalIngredientName;
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: theme.bg }]}>
@@ -162,140 +225,122 @@ export default function BarcodeScanScreen() {
         <TouchableOpacity style={s.headerIcon} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <Ionicons name="chevron-down" size={22} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: theme.text }]}>Barkod tara</Text>
+        <Text style={[s.headerTitle, { color: theme.text }]}>Barkod Tara</Text>
         <View style={s.headerIcon} />
       </View>
 
       {phase === 'scanner' && (
         <View style={s.scannerWrap}>
-          <Text style={[s.title, { color: theme.text }]}>Paketli ürün barkodunu okut</Text>
-          <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Sistem önce yerel eşleme önbelleğine, sonra Open Food Facts yardımcı verisine bakar.
-          </Text>
+          <Text style={[s.title, { color: theme.text }]}>{copy.title}</Text>
+          <Text style={[s.subtitle, { color: theme.textMuted }]}>{copy.subtitle}</Text>
 
           <View style={[s.cameraShell, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}>
             <CameraView
               style={StyleSheet.absoluteFill}
               barcodeScannerSettings={{
-                barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
+                barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128'],
               }}
               onBarcodeScanned={handleBarcodeScanned}
             />
             <View style={[s.scanFrame, { borderColor: theme.primary }]} />
           </View>
 
-          {error && (
+          {error ? (
             <View style={[s.alert, { backgroundColor: `${theme.error}12`, borderColor: `${theme.error}30` }]}>
               <Ionicons name="alert-circle-outline" size={16} color={theme.error} />
               <Text style={[s.alertText, { color: theme.error }]}>{error}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       )}
 
-      {phase === 'analyzing' && (
+      {phase === 'resolving' && (
         <View style={s.centered}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[s.title, { color: theme.text, marginTop: spacing.lg }]}>Barkod çözülüyor</Text>
-          <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Ürün adı kanonik malzeme ailesine eşleniyor.
-          </Text>
+          <Text style={[s.title, { color: theme.text, marginTop: spacing.lg }]}>{copy.resolving}</Text>
         </View>
       )}
 
-      {phase === 'results' && result && (
-        <View style={s.resultsWrap}>
+      {phase === 'result' && result && (
+        <ScrollView contentContainerStyle={s.resultsWrap} keyboardShouldPersistTaps="handled">
           <View style={[s.resultCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+            <Text style={[s.resultKicker, { color: result.found ? theme.emerald : theme.warning }]}>
+              {result.found ? copy.found : copy.unknown}
+            </Text>
             <Text style={[s.resultTitle, { color: theme.text }]}>{result.productName || result.barcode}</Text>
             <Text style={[s.resultMeta, { color: theme.textMuted }]}>
               {result.brand ? `${result.brand} • ` : ''}
-              {result.sourceProvider} • {Math.round(result.confidence * 100)}%
+              {result.source ?? 'manual'}{result.confidence != null ? ` • ${Math.round(result.confidence * 100)}%` : ''}
             </Text>
-            <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-              {result.mappingType}
-              {result.requiresConfirmation ? ' • kullanıcı onayı gerekli' : ' • güvenli otomatik eşleşme'}
-            </Text>
+            {result.message ? <Text style={[s.resultMeta, { color: theme.textMuted }]}>{result.message}</Text> : null}
           </View>
 
-          {candidates.length > 0 ? (
-            candidates.map((candidate: AcquisitionCandidate) => {
-              const selected = selectedId === candidate.ingredientId;
-              return (
+          {canAddDirectly ? (
+            <>
+              <View style={[s.resultCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[s.resultKicker, { color: theme.textMuted }]}>{copy.matched}</Text>
+                <Text style={[s.resultTitle, { color: theme.text }]}>{result.canonicalIngredientName}</Text>
+              </View>
+
+              <View style={s.actions}>
                 <TouchableOpacity
-                  key={candidate.ingredientId}
-                  style={[
-                    s.candidateCard,
-                    {
-                      backgroundColor: selected ? theme.surfaceElevated : theme.surface,
-                      borderColor: selected ? theme.primary : theme.border,
-                    },
-                  ]}
-                  onPress={() => setSelectedId(candidate.ingredientId)}
-                  activeOpacity={0.82}
+                  style={[s.primaryButton, { backgroundColor: theme.primary }]}
+                  onPress={() => addResolvedIngredient(result)}
+                  activeOpacity={0.85}
                 >
-                  <View style={s.candidateMain}>
-                    <Text style={[s.candidateTitle, { color: theme.text }]}>{candidate.canonicalName}</Text>
-                    <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-                      {candidate.mappingType} • {Math.round(candidate.confidence * 100)}%
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      s.checkbox,
-                      {
-                        borderColor: selected ? theme.primary : theme.border,
-                        backgroundColor: selected ? theme.primary : 'transparent',
-                      },
-                    ]}
-                  >
-                    {selected && <Ionicons name="checkmark" size={14} color={theme.bg} />}
-                  </View>
+                  <Text style={[s.primaryButtonText, { color: theme.bg }]}>{copy.add}</Text>
                 </TouchableOpacity>
-              );
-            })
+                <TouchableOpacity
+                  style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
+                  onPress={resetScan}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="refresh-outline" size={18} color={theme.text} />
+                  <Text style={[s.secondaryButtonText, { color: theme.text }]}>{copy.rescan}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           ) : (
-            <View style={[s.resultCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={[s.resultTitle, { color: theme.text }]}>Doğrudan malzeme adayı bulunamadı</Text>
-              <Text style={[s.resultMeta, { color: theme.textMuted }]}>
-                Ürünü metin aramasıyla doğrulamak daha güvenli olacak.
-              </Text>
-            </View>
+            <>
+              <View style={[s.resultCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[s.resultTitle, { color: theme.text }]}>{copy.choose}</Text>
+                <Text style={[s.resultMeta, { color: theme.textMuted }]}>Barkod: {result.barcode}</Text>
+              </View>
+
+              <IngredientSearch
+                onSelect={handleManualIngredientSelect}
+                initialQuery={result.productName ?? undefined}
+                initialQueryKey={result.barcode.length}
+              />
+
+              {isConfirming ? (
+                <View style={s.confirmingRow}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={[s.resultMeta, { color: theme.textMuted }]}>Eşleştirme kaydediliyor...</Text>
+                </View>
+              ) : null}
+
+              <View style={s.actions}>
+                <TouchableOpacity
+                  style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
+                  onPress={handleSearchFallback}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="search-outline" size={18} color={theme.text} />
+                  <Text style={[s.secondaryButtonText, { color: theme.text }]}>{copy.fallback}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
+                  onPress={resetScan}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="refresh-outline" size={18} color={theme.text} />
+                  <Text style={[s.secondaryButtonText, { color: theme.text }]}>{copy.rescan}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
-
-          <View style={s.actions}>
-            <TouchableOpacity
-              style={[
-                s.primaryButton,
-                { backgroundColor: selectedId ? theme.primary : theme.surfaceElevated },
-              ]}
-              disabled={!selectedId}
-              onPress={handleConfirm}
-              activeOpacity={0.85}
-            >
-              <Text style={[s.primaryButtonText, { color: selectedId ? theme.bg : theme.textMuted }]}>
-                Seçili malzemeyi ekle
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
-              onPress={handleSearchFallback}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="search-outline" size={18} color={theme.text} />
-              <Text style={[s.secondaryButtonText, { color: theme.text }]}>Metin aramasına geç</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surfaceElevated }]}
-              onPress={handleRetry}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="refresh-outline" size={18} color={theme.text} />
-              <Text style={[s.secondaryButtonText, { color: theme.text }]}>Tekrar tara</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -354,7 +399,7 @@ const s = StyleSheet.create({
   },
   alertText: { flex: 1, fontSize: 13, fontWeight: '600' },
   resultsWrap: {
-    flex: 1,
+    flexGrow: 1,
     padding: spacing.base,
     gap: spacing.md,
   },
@@ -364,25 +409,15 @@ const s = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.xs,
   },
-  resultTitle: { fontSize: 16, fontWeight: '800' },
+  resultKicker: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  resultTitle: { fontSize: 17, fontWeight: '800' },
   resultMeta: { fontSize: 13, lineHeight: 18 },
-  candidateCard: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    padding: spacing.md,
+  confirmingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
-  candidateMain: { flex: 1, gap: 4 },
-  candidateTitle: { fontSize: 15, fontWeight: '800' },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   actions: { gap: spacing.sm, marginTop: 'auto' },
   primaryButton: {
@@ -405,4 +440,3 @@ const s = StyleSheet.create({
   },
   secondaryButtonText: { fontSize: 15, fontWeight: '700' },
 });
-

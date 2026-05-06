@@ -91,6 +91,24 @@ public class ClientNotificationPreferencesController : ControllerBase
             request.ReengagementDelayHours,
             request.TimeZoneId);
 
+        _appDb.ClientActivities.Add(new ClientActivity(
+            identity.Value.clientId,
+            await GetActiveDietitianIdAsync(identity.Value.clientId),
+            "notification_preferences_updated",
+            new
+            {
+                notificationsEnabled = request.NotificationsEnabled,
+                inAppCoachNotificationsEnabled = request.InAppCoachNotificationsEnabled,
+                achievementNotificationsEnabled = request.AchievementNotificationsEnabled,
+                pantryActivityNotificationsEnabled = request.PantryActivityNotificationsEnabled,
+                hydrationRemindersEnabled = request.HydrationRemindersEnabled,
+                mealPlanRemindersEnabled = request.MealPlanRemindersEnabled,
+                measurementRemindersEnabled = request.MeasurementRemindersEnabled,
+                reengagementRemindersEnabled = request.ReengagementRemindersEnabled,
+                hydrationIntervalMinutes = request.HydrationIntervalMinutes,
+                mealReminderLeadMinutes = request.MealReminderLeadMinutes
+            }));
+
         await _appDb.SaveChangesAsync();
         await PublishNotificationUpdateAsync(identity.Value.clientId, "preferences");
         return Ok(ToResponse(preference));
@@ -176,11 +194,7 @@ public class ClientNotificationPreferencesController : ControllerBase
 
     private async Task PublishNotificationUpdateAsync(Guid clientId, string source)
     {
-        var activeDietitianId = await _appDb.Clients
-            .AsNoTracking()
-            .Where(x => x.Id == clientId)
-            .Select(x => x.ActiveDietitianId)
-            .FirstOrDefaultAsync();
+        var activeDietitianId = await GetActiveDietitianIdAsync(clientId);
 
         if (!activeDietitianId.HasValue)
             return;
@@ -190,6 +204,15 @@ public class ClientNotificationPreferencesController : ControllerBase
             clientId,
             source,
         });
+    }
+
+    private async Task<Guid?> GetActiveDietitianIdAsync(Guid clientId)
+    {
+        return await _appDb.Clients
+            .AsNoTracking()
+            .Where(x => x.Id == clientId)
+            .Select(x => x.ActiveDietitianId)
+            .FirstOrDefaultAsync();
     }
 }
 

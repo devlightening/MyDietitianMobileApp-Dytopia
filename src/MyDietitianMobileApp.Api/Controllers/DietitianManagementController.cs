@@ -1193,6 +1193,18 @@ public class DietitianManagementController : ControllerBase
     private static string MapActivityType(string raw) => raw?.ToLowerInvariant() switch
     {
         "meal_done" or "meal_completed"           => "meal_logged",
+        "meal_recipe_selected"                    => "meal_selection",
+        "meal_feedback_saved"                     => "meal_feedback",
+        "meal_alternative"                        => "meal_alternative",
+        "meal_skipped"                            => "meal_skipped",
+        "shopping_list_generated"
+            or "shopping_items_added"
+            or "shopping_item_added"
+            or "shopping_item_checked"
+            or "shopping_item_removed"
+            or "shopping_checked_cleared"         => "shopping_list",
+        "pantry_updated" or "pantry_item_removed" => "pantry",
+        "notification_preferences_updated"        => "notification_preferences",
         "measurement_logged" or "weight_update"   => "weight_update",
         "badge_earned" or "badge_unlocked"         => "badge_unlocked",
         "streak_increased" or "streak_milestone"  => "streak_milestone",

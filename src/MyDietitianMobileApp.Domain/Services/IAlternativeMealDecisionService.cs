@@ -80,7 +80,19 @@ namespace MyDietitianMobileApp.Domain.Services
         /// <summary>Nutritional proximity score 0-100 (Protein 40%, Calories 25%, Fat 25%, Carbs 10%).</summary>
         public decimal NutritionalScore { get; }
 
-        /// <summary>Combined score used for ranking: ingredient 40% + nutrition 60%.</summary>
+        /// <summary>
+        /// Protein alignment score 0-100. Combines both protein-source similarity
+        /// (e.g., red meat vs poultry vs legumes) and protein-amount proximity.
+        /// </summary>
+        public decimal ProteinScore { get; }
+
+        /// <summary>
+        /// Combined score used for ranking (0-100):
+        /// - Ingredient coverage (weighted, condiments downweighted): 30%
+        /// - Macro/calorie proximity: 50%
+        /// - Protein alignment (source + amount): 15%
+        /// - Cookability (missing-mandatory penalty): 5%
+        /// </summary>
         public decimal CombinedScore { get; }
 
         public AlternativeRecipeRecommendation(
@@ -97,7 +109,7 @@ namespace MyDietitianMobileApp.Domain.Services
             decimal? carbsGrams,
             decimal? fatGrams,
             decimal nutritionalScore,
-            bool isCookable = false)
+            decimal proteinScore)
         {
             RecipeId = recipeId;
             RecipeName = recipeName;
@@ -114,11 +126,21 @@ namespace MyDietitianMobileApp.Domain.Services
             CarbsGrams = carbsGrams;
             FatGrams = fatGrams;
             NutritionalScore = nutritionalScore;
-            // Fully-cookable recipes get a 20-point bonus so they rank above partial matches
-            // even when nutritional similarity is slightly lower.
-            // Formula: ingredient 40% + nutrition 45% + cookability 15% (max 100).
-            var cookabilityBonus = isCookable ? 20m : 0m;
-            CombinedScore = Math.Min(100m, matchPercentage * 0.40m + nutritionalScore * 0.45m + cookabilityBonus);
+            ProteinScore = proteinScore;
+
+            // Cookability score (0-100): penalize missing mandatory ingredients smoothly
+            // instead of hard-prioritizing "fully cookable" side dishes over nutritionally
+            // similar main meals that may require 1 item purchase.
+            var missingCount = MissingIngredientsForAlternative.Count;
+            var cookabilityScore = Math.Max(0m, 100m - missingCount * 25m); // 0 missing=100, 1=75, 2=50, 3=25
+
+            var combined =
+                matchPercentage * 0.30m +
+                nutritionalScore * 0.50m +
+                proteinScore * 0.15m +
+                cookabilityScore * 0.05m;
+
+            CombinedScore = Math.Round(Math.Min(100m, combined), 1);
         }
     }
 

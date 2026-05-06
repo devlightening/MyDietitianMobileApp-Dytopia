@@ -8,10 +8,41 @@ import { SaveRecipeRequest } from '@/lib/api/recipes';
 
 type RecipeIngredientRole = 'mandatory' | 'optional' | 'flavoring' | 'prohibited';
 
+const UNIT_OPTIONS = [
+  'g',
+  'kg',
+  'mg',
+  'ml',
+  'L',
+  'adet',
+  'dilim',
+  'bardak',
+  'su bardağı',
+  'çay bardağı',
+  'yemek kaşığı',
+  'tatlı kaşığı',
+  'çay kaşığı',
+  'kase',
+  'avuç',
+  'tutam',
+  'paket',
+  'porsiyon',
+  'demet',
+];
+
+const ROLE_TO_API = {
+  mandatory: 'Mandatory',
+  optional: 'Optional',
+  flavoring: 'Flavoring',
+  prohibited: 'Prohibited',
+} as const;
+
 export interface RecipeIngredientEntry {
   ingredientId: string;
   ingredientName: string;
   role: RecipeIngredientRole;
+  quantity?: string;
+  unit?: string;
 }
 
 export interface RecipeFormInitialValue {
@@ -51,8 +82,24 @@ const DEFAULT_VALUE: RecipeFormInitialValue = {
   proteinGrams: null,
   carbsGrams: null,
   fatGrams: null,
-  ingredients: [{ ingredientId: '', ingredientName: '', role: 'mandatory' }],
+  ingredients: [{ ingredientId: '', ingredientName: '', role: 'mandatory', quantity: '', unit: 'g' }],
 };
+
+function parseAmount(value?: string): number | null {
+  if (!value?.trim()) return null;
+  const normalized = value.trim().replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatInitialQuantity(value?: number | null): string {
+  if (value == null) return '';
+  return String(value).replace('.', ',');
+}
+
+function requiresAmount(role: RecipeIngredientRole) {
+  return role !== 'prohibited';
+}
 
 export function RecipeEditorForm({
   initialValue,
@@ -85,9 +132,9 @@ export function RecipeEditorForm({
     setCookTimeMinutes(next.cookTimeMinutes ? String(next.cookTimeMinutes) : '');
     setServings(next.servings ? String(next.servings) : '');
     setCaloriesKcal(next.caloriesKcal != null ? String(next.caloriesKcal) : '');
-    setProteinGrams(next.proteinGrams != null ? String(next.proteinGrams) : '');
-    setCarbsGrams(next.carbsGrams != null ? String(next.carbsGrams) : '');
-    setFatGrams(next.fatGrams != null ? String(next.fatGrams) : '');
+    setProteinGrams(next.proteinGrams != null ? String(next.proteinGrams).replace('.', ',') : '');
+    setCarbsGrams(next.carbsGrams != null ? String(next.carbsGrams).replace('.', ',') : '');
+    setFatGrams(next.fatGrams != null ? String(next.fatGrams).replace('.', ',') : '');
     setIngredients(next.ingredients.length > 0 ? next.ingredients : DEFAULT_VALUE.ingredients);
     setFormError(null);
   }, [initialValue]);
@@ -95,16 +142,27 @@ export function RecipeEditorForm({
   const validationState = useMemo(() => {
     const mandatoryCount = ingredients.filter((item) => item.role === 'mandatory' && item.ingredientId).length;
     const hasAllIngredients = ingredients.every((item) => item.ingredientId);
+    const hasAmounts = ingredients.every((item) => {
+      if (!requiresAmount(item.role)) return true;
+      const amount = parseAmount(item.quantity);
+      return amount != null && amount > 0 && Boolean(item.unit);
+    });
     const stepCount = stepsInput.split('\n').map((item) => item.trim()).filter(Boolean).length;
     return {
       hasName: name.trim().length >= 4,
       hasAllIngredients,
+      hasAmounts,
       hasMandatory: mandatoryCount > 0,
       hasSteps: stepCount > 0,
     };
   }, [ingredients, name, stepsInput]);
 
-  const canSubmit = validationState.hasName && validationState.hasAllIngredients && validationState.hasMandatory && validationState.hasSteps;
+  const canSubmit =
+    validationState.hasName &&
+    validationState.hasAllIngredients &&
+    validationState.hasAmounts &&
+    validationState.hasMandatory &&
+    validationState.hasSteps;
 
   const updateIngredient = (index: number, patch: Partial<RecipeIngredientEntry>) => {
     setIngredients((current) => current.map((item, itemIndex) => (
@@ -140,15 +198,37 @@ export function RecipeEditorForm({
       return;
     }
 
+    const invalidMeasuredIngredient = ingredients.find((item) => {
+      if (!requiresAmount(item.role)) return false;
+      const amount = parseAmount(item.quantity);
+      return amount == null || amount <= 0 || !item.unit;
+    });
+
+    if (invalidMeasuredIngredient) {
+      setFormError('Zorunlu, opsiyonel ve lezzetlendirici malzemeler için miktar ve birim girin.');
+      return;
+    }
+
     if (steps.length === 0) {
       setFormError('En az 1 yapılış adımı girin.');
       return;
     }
 
+    const measuredIngredients = ingredients.map((item) => {
+      const amount = parseAmount(item.quantity);
+      return {
+        ingredientId: item.ingredientId,
+        role: ROLE_TO_API[item.role],
+        quantity: requiresAmount(item.role) ? amount : null,
+        unit: requiresAmount(item.role) ? item.unit ?? null : null,
+      };
+    });
+
     await onSubmit({
       name: name.trim(),
       description: description.trim(),
       isPublic: false,
+      ingredients: measuredIngredients,
       mandatoryIngredients: ingredients.filter((item) => item.role === 'mandatory').map((item) => item.ingredientId),
       optionalIngredients: ingredients.filter((item) => item.role === 'optional').map((item) => item.ingredientId),
       flavoringIngredients: ingredients.filter((item) => item.role === 'flavoring').map((item) => item.ingredientId),
@@ -159,9 +239,9 @@ export function RecipeEditorForm({
       cookTimeMinutes: cookTimeMinutes ? Number(cookTimeMinutes) : undefined,
       servings: servings ? Number(servings) : undefined,
       caloriesKcal: caloriesKcal ? Number(caloriesKcal) : undefined,
-      proteinGrams: proteinGrams ? Number(proteinGrams) : undefined,
-      carbsGrams: carbsGrams ? Number(carbsGrams) : undefined,
-      fatGrams: fatGrams ? Number(fatGrams) : undefined,
+      proteinGrams: proteinGrams ? Number(proteinGrams.replace(',', '.')) : undefined,
+      carbsGrams: carbsGrams ? Number(carbsGrams.replace(',', '.')) : undefined,
+      fatGrams: fatGrams ? Number(fatGrams.replace(',', '.')) : undefined,
     });
   };
 
@@ -209,15 +289,15 @@ export function RecipeEditorForm({
           </label>
           <label className="space-y-2 text-sm font-medium text-foreground">
             <span>Protein (g)</span>
-            <input className="input-sfcos" type="number" min="0" step="0.1" value={proteinGrams} onChange={(event) => setProteinGrams(event.target.value)} />
+            <input className="input-sfcos" inputMode="decimal" value={proteinGrams} onChange={(event) => setProteinGrams(event.target.value)} />
           </label>
           <label className="space-y-2 text-sm font-medium text-foreground">
             <span>Karb (g)</span>
-            <input className="input-sfcos" type="number" min="0" step="0.1" value={carbsGrams} onChange={(event) => setCarbsGrams(event.target.value)} />
+            <input className="input-sfcos" inputMode="decimal" value={carbsGrams} onChange={(event) => setCarbsGrams(event.target.value)} />
           </label>
           <label className="space-y-2 text-sm font-medium text-foreground">
             <span>Yağ (g)</span>
-            <input className="input-sfcos" type="number" min="0" step="0.1" value={fatGrams} onChange={(event) => setFatGrams(event.target.value)} />
+            <input className="input-sfcos" inputMode="decimal" value={fatGrams} onChange={(event) => setFatGrams(event.target.value)} />
           </label>
         </div>
       </div>
@@ -225,44 +305,79 @@ export function RecipeEditorForm({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-foreground">Malzemeler</p>
-            <p className="text-xs text-muted-foreground">Her malzemeyi doğru rolde işaretleyin.</p>
+            <p className="text-sm font-semibold text-foreground">Malzemeler ve Ölçüler</p>
+            <p className="text-xs text-muted-foreground">Her kullanılan malzeme için miktar ve birim seçin. Yasaklı malzemelerde ölçü gerekmez.</p>
           </div>
-          <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => setIngredients((current) => [...current, { ingredientId: '', ingredientName: '', role: 'optional' }])}>
+          <Button type="button" variant="ghost" className="h-9 px-3" onClick={() => setIngredients((current) => [...current, { ingredientId: '', ingredientName: '', role: 'optional', quantity: '', unit: 'g' }])}>
             <Plus className="h-4 w-4" />
             Malzeme ekle
           </Button>
         </div>
 
         <div className="space-y-3">
-          {ingredients.map((ingredient, index) => (
-            <div key={`${ingredient.ingredientId}-${index}`} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                <IngredientAutocomplete
-                  value={ingredient.ingredientId ? { id: ingredient.ingredientId, canonicalName: ingredient.ingredientName } : null}
-                  onSelect={(selected: IngredientOption) => updateIngredient(index, { ingredientId: selected.id, ingredientName: selected.canonicalName })}
-                  onClear={() => updateIngredient(index, { ingredientId: '', ingredientName: '' })}
-                  placeholder="Malzeme ara"
-                />
+          {ingredients.map((ingredient, index) => {
+            const amountDisabled = !requiresAmount(ingredient.role);
+            return (
+              <div key={`${ingredient.ingredientId}-${index}`} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <div className="grid gap-3 lg:grid-cols-[1fr_150px_130px_170px_auto]">
+                  <IngredientAutocomplete
+                    value={ingredient.ingredientId ? { id: ingredient.ingredientId, canonicalName: ingredient.ingredientName } : null}
+                    onSelect={(selected: IngredientOption) => updateIngredient(index, { ingredientId: selected.id, ingredientName: selected.canonicalName })}
+                    onClear={() => updateIngredient(index, { ingredientId: '', ingredientName: '' })}
+                    placeholder="Malzeme ara"
+                  />
 
-                <select className="input-sfcos md:w-[160px]" value={ingredient.role} onChange={(event) => updateIngredient(index, { role: event.target.value as RecipeIngredientRole })}>
-                  <option value="mandatory">Zorunlu</option>
-                  <option value="optional">Opsiyonel</option>
-                  <option value="flavoring">Lezzetlendirici</option>
-                  <option value="prohibited">Yasaklı</option>
-                </select>
+                  <select
+                    className="select-sfcos h-11"
+                    value={ingredient.role}
+                    onChange={(event) => {
+                      const role = event.target.value as RecipeIngredientRole;
+                      updateIngredient(index, {
+                        role,
+                        quantity: requiresAmount(role) ? ingredient.quantity : '',
+                        unit: requiresAmount(role) ? ingredient.unit || 'g' : '',
+                      });
+                    }}
+                  >
+                    <option value="mandatory">Zorunlu</option>
+                    <option value="optional">Opsiyonel</option>
+                    <option value="flavoring">Lezzetlendirici</option>
+                    <option value="prohibited">Yasaklı</option>
+                  </select>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-11 w-11 rounded-2xl px-0 text-destructive"
-                  onClick={() => setIngredients((current) => current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index))}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                  <input
+                    className="input-sfcos"
+                    inputMode="decimal"
+                    disabled={amountDisabled}
+                    value={ingredient.quantity ?? ''}
+                    onChange={(event) => updateIngredient(index, { quantity: event.target.value })}
+                    placeholder="örn. 2"
+                  />
+
+                  <select
+                    className="select-sfcos h-11"
+                    disabled={amountDisabled}
+                    value={ingredient.unit ?? ''}
+                    onChange={(event) => updateIngredient(index, { unit: event.target.value })}
+                  >
+                    <option value="">Birim seç</option>
+                    {UNIT_OPTIONS.map((unit) => (
+                      <option key={unit} value={unit}>{unit}</option>
+                    ))}
+                  </select>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-11 w-11 rounded-2xl px-0 text-destructive"
+                    onClick={() => setIngredients((current) => current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -292,8 +407,8 @@ export function RecipeEditorForm({
 
       <div className={`rounded-2xl border px-4 py-3 text-sm ${canSubmit ? 'border-action/30 bg-action/10 text-action' : 'border-border bg-secondary text-muted-foreground'}`}>
         {canSubmit
-          ? 'Form kayda hazır. “Tarifi oluştur” butonu aktif.'
-          : 'Kaydetmek için: tarif adı (min 4), tüm malzemeler, en az 1 zorunlu malzeme ve en az 1 yapılış adımı gerekli.'}
+          ? 'Form kayda hazır. Ölçülü tarif bilgileri mobilde ve alışveriş listesinde kullanılacak.'
+          : 'Kaydetmek için: tarif adı, tüm malzemeler, ölçü-birim bilgileri, en az 1 zorunlu malzeme ve en az 1 yapılış adımı gerekli.'}
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
@@ -315,3 +430,5 @@ export function RecipeEditorForm({
     </form>
   );
 }
+
+export { UNIT_OPTIONS as RECIPE_UNIT_OPTIONS, formatInitialQuantity };

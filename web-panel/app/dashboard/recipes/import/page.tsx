@@ -516,7 +516,7 @@ export default function RecipeImportPage() {
                     <select
                       value={recipe.isPublic ? 'public' : 'private'}
                       onChange={(e) => patchRecipe(recipe.id, { isPublic: e.target.value === 'public' })}
-                      className="input-sfcos h-11"
+                      className="select-sfcos h-11"
                     >
                       <option value="private">Sadece klinik</option>
                       <option value="public">Genel kütüphane</option>
@@ -570,7 +570,7 @@ export default function RecipeImportPage() {
                     <select
                       value={recipe.duplicateResolutionMode}
                       onChange={(e) => patchRecipe(recipe.id, { duplicateResolutionMode: e.target.value as DuplicateResolutionMode })}
-                      className="input-sfcos h-11"
+                      className="select-sfcos h-11"
                     >
                       <option value="CreateNew">Yeni oluştur</option>
                       <option value="UpdateExisting">Mevcut tarifi güncelle</option>
@@ -615,7 +615,7 @@ export default function RecipeImportPage() {
                             <select
                               value={ingredient.role}
                               onChange={(e) => patchIngredient(recipe.id, ingredient.id, { role: e.target.value as ImportIngredient['role'] })}
-                              className="input-sfcos h-11"
+                              className="select-sfcos h-11"
                             >
                               <option value="Mandatory">Zorunlu</option>
                               <option value="Optional">Opsiyonel</option>

@@ -168,6 +168,8 @@ public class IngredientController : ControllerBase
             totalDetected = result.TotalDetected,
             promptTokens     = result.PromptTokens,
             completionTokens = result.CompletionTokens,
+            reason      = result.Reason,
+            userMessage = result.UserMessage,
             matched = result.Matched.Select(m => new
             {
                 ingredientId         = m.IngredientId,

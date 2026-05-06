@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigation } from "@react-navigation/native";
 import { Routes } from "../navigation/routes";
@@ -24,6 +25,7 @@ import { useDashboard } from "../queries/useDashboard";
 import { useGamification } from "../queries/useGamification";
 import apiClient from "../api/client";
 import { getMyProfile, updateMyProfile } from "../api/profile";
+import { getFavoriteRecipesSummary, type FavoriteRecipesSummaryDto } from "../api/favorites";
 import { useHeroEntrance, useFadeRise, dur, spring } from "../hooks/useAuraMotion";
 import ProduceBubble from "../components/decor/ProduceBubble";
 import ProfileEditCard from "../components/profile/ProfileEditCard";
@@ -45,6 +47,7 @@ interface ProfileData {
 }
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+const BRAND_LOGO = require("../../assets/dytopia-logo.png");
 
 function getProfilePhotoStorageKey(publicUserId?: string) {
   return `profile_photo_uri_${publicUserId ?? "anonymous"}`;
@@ -67,13 +70,17 @@ function ProfileAvatar({
 }) {
   const haloA = useSharedValue(1);
   const haloB = useSharedValue(1);
+  const logoScale = useSharedValue(1);
+  const logoGlow = useSharedValue(0);
+  const logoLift = useSharedValue(0);
   const opaA  = useSharedValue(0);
   const opaB  = useSharedValue(0);
 
   useEffect(() => {
-    if (!isPremium) return;
-    opaA.value = withTiming(0.45, { duration: dur.medium });
-    opaB.value = withDelay(400, withTiming(0.22, { duration: dur.medium }));
+    const baseHaloA = isPremium ? 0.45 : 0.24;
+    const baseHaloB = isPremium ? 0.22 : 0.12;
+    opaA.value = withTiming(baseHaloA, { duration: dur.medium });
+    opaB.value = withDelay(400, withTiming(baseHaloB, { duration: dur.medium }));
     haloA.value = withRepeat(
       withSequence(
         withTiming(1.18, { duration: 1300, easing: Easing.inOut(Easing.ease) }),
@@ -86,33 +93,72 @@ function ProfileAvatar({
         withTiming(1,    { duration: 1600, easing: Easing.inOut(Easing.ease) }),
       ), -1, false,
     ));
-  }, [isPremium]);
+  }, [isPremium, haloA, haloB, opaA, opaB]);
+
+  useEffect(() => {
+    if (photoUri) {
+      logoScale.value = withTiming(1, { duration: dur.fast });
+      logoGlow.value = withTiming(0, { duration: dur.fast });
+      logoLift.value = withTiming(0, { duration: dur.fast });
+      return;
+    }
+
+    logoGlow.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+    logoScale.value = withRepeat(
+      withSequence(
+        withTiming(1.06, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+    logoLift.value = withRepeat(
+      withSequence(
+        withTiming(-3, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+  }, [photoUri, logoGlow, logoLift, logoScale]);
 
   const ring1 = useAnimatedStyle(() => ({ transform: [{ scale: haloA.value }], opacity: opaA.value }));
   const ring2 = useAnimatedStyle(() => ({ transform: [{ scale: haloB.value }], opacity: opaB.value }));
+  const logoStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: logoLift.value }, { scale: logoScale.value }],
+  }));
+  const logoAuraStyle = useAnimatedStyle(() => ({
+    opacity: 0.16 + logoGlow.value * 0.2,
+    transform: [{ scale: 0.9 + logoGlow.value * 0.18 }],
+  }));
 
   return (
     <View style={av.wrap}>
-      {isPremium && (
-        <>
-          <Animated.View style={[av.halo, av.halo1, { borderColor: theme.emerald }, ring1]} />
-          <Animated.View style={[av.halo, av.halo2, { borderColor: theme.emerald }, ring2]} />
-        </>
-      )}
+      <Animated.View style={[av.halo, av.halo1, { borderColor: isPremium ? theme.emerald : theme.primary }, ring1]} />
+      <Animated.View style={[av.halo, av.halo2, { borderColor: isPremium ? theme.emerald : theme.primary }, ring2]} />
       <View style={[av.outer, {
         borderColor:  isPremium ? theme.emerald     : theme.border,
         shadowColor:  isPremium ? theme.emeraldGlow : "#000",
       }]}>
-        <View style={[av.inner, { backgroundColor: hasInitials ? theme.primary : theme.surfaceElevated }]}>
+        <View style={[av.inner, { backgroundColor: photoUri ? theme.surfaceElevated : theme.surface }]}>
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={av.photo} />
           ) : (
             <>
-              <View style={[av.innerGlow, { backgroundColor: theme.primaryGlow }]} />
-              {hasInitials
-                ? <Text style={av.letter}>{initials}</Text>
-                : <Ionicons name="person" size={38} color={theme.textMuted} />
-              }
+              <Animated.View style={[av.logoAura, { backgroundColor: theme.primaryGlow, borderColor: theme.borderEmerald }, logoAuraStyle]} />
+              <Animated.Image source={BRAND_LOGO} resizeMode="contain" style={[av.brandLogo, logoStyle]} />
+              {hasInitials ? (
+                <View style={[av.initialBadge, { backgroundColor: theme.primary, borderColor: theme.surface }]}>
+                  <Text style={av.initialBadgeText}>{initials.slice(0, 1)}</Text>
+                </View>
+              ) : null}
             </>
           )}
         </View>
@@ -151,6 +197,34 @@ const av = StyleSheet.create({
   innerGlow: {
     position: "absolute", top: 0, right: 0,
     width: 36, height: 36, borderRadius: 18, opacity: 0.3,
+  },
+  logoAura: {
+    position: "absolute",
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 1,
+  },
+  brandLogo: {
+    width: 66,
+    height: 66,
+    borderRadius: 18,
+  },
+  initialBadge: {
+    position: "absolute",
+    right: 4,
+    bottom: 4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
   },
   letter: { color: "#FFF", fontSize: 34, fontWeight: "900" },
 });
@@ -834,21 +908,27 @@ function HubHero({
 function QuickAccessGrid({
   theme,
   language,
+  isPremium,
+  favoriteCount,
   onMeasurements,
   onNotifications,
   onGoals,
   onShopping,
   onPantry,
+  onFavorites,
 }: {
   theme: Theme;
   language: Language;
+  isPremium: boolean;
+  favoriteCount: number;
   onMeasurements: () => void;
   onNotifications: () => void;
   onGoals: () => void;
   onShopping: () => void;
   onPantry: () => void;
+  onFavorites: () => void;
 }) {
-  const items = language === "tr"
+  const baseItems = language === "tr"
       ? [
           { key: "measurements", icon: "analytics-outline" as const, label: "Ölçümler", sub: "Takibini gör", color: theme.accentCyan, onPress: onMeasurements },
           { key: "notifications", icon: "notifications-outline" as const, label: "Bildirimler", sub: "Ritmi yönet", color: theme.accentGold, onPress: onNotifications },
@@ -863,6 +943,28 @@ function QuickAccessGrid({
           { key: "shopping", icon: "cart-outline" as const, label: "Shopping", sub: "Collect missing items", color: theme.emerald, onPress: onShopping },
           { key: "pantry", icon: "basket-outline" as const, label: "Pantry", sub: "Prep your kitchen", color: theme.primaryDark, onPress: onPantry },
         ];
+  const items = isPremium
+    ? [
+        ...baseItems,
+        language === "tr"
+          ? {
+              key: "favorites",
+              icon: "heart-outline" as const,
+              label: "Favorilerim",
+              sub: favoriteCount > 0 ? `${favoriteCount} tarif hazır` : "Sevdiğin tarifleri aç",
+              color: theme.accentCoral,
+              onPress: onFavorites,
+            }
+          : {
+              key: "favorites",
+              icon: "heart-outline" as const,
+              label: "Favorites",
+              sub: favoriteCount > 0 ? `${favoriteCount} saved recipes` : "Open your saved recipes",
+              color: theme.accentCoral,
+              onPress: onFavorites,
+            },
+      ]
+    : baseItems;
 
   return (
     <View style={ps.quickGrid}>
@@ -884,6 +986,77 @@ function QuickAccessGrid({
   );
 }
 
+function FavoritesDigestCard({
+  theme,
+  language,
+  summary,
+  onPress,
+}: {
+  theme: Theme;
+  language: Language;
+  summary?: FavoriteRecipesSummaryDto;
+  onPress: () => void;
+}) {
+  const totalFavorites = summary?.totalFavorites ?? 0;
+  const bestMatched = summary?.bestMatchedFavorite;
+  const recent = summary?.recentFavorites ?? [];
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      style={[ps.favoriteDigestCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+    >
+      <View style={ps.favoriteDigestTop}>
+        <View>
+          <Text style={[ps.favoriteDigestEyebrow, { color: theme.accentCoral }]}>
+            {language === "tr" ? "FAVORİLERİM" : "MY FAVORITES"}
+          </Text>
+          <Text style={[ps.favoriteDigestTitle, { color: theme.text }]}>
+            {language === "tr" ? "Sevdiğin tarifleri burada yeniden aç" : "Reopen the recipes you love"}
+          </Text>
+        </View>
+        <View style={[ps.favoriteDigestBadge, { backgroundColor: `${theme.accentCoral}10`, borderColor: `${theme.accentCoral}24` }]}>
+          <Ionicons name="heart" size={16} color={theme.accentCoral} />
+          <Text style={[ps.favoriteDigestBadgeText, { color: theme.accentCoral }]}>{totalFavorites}</Text>
+        </View>
+      </View>
+
+      <Text style={[ps.favoriteDigestBody, { color: theme.textMuted }]}>
+        {bestMatched
+          ? (language === "tr"
+            ? `${bestMatched.name} şu an dolabına %${bestMatched.pantryCoverage.percent} uyum gösteriyor.`
+            : `${bestMatched.name} currently matches your pantry by ${bestMatched.pantryCoverage.percent}%.`)
+          : (language === "tr"
+            ? "Premium favorilerin burada saklanır ve premium tekrar aktif olduğunda geri görünür."
+            : "Your premium favorites stay here and return when premium becomes active again.")}
+      </Text>
+
+      <View style={ps.favoriteDigestRecentRow}>
+        {recent.slice(0, 2).map((item) => (
+          <View key={item.recipeId} style={[ps.favoriteDigestChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
+            <Text style={[ps.favoriteDigestChipText, { color: theme.text }]} numberOfLines={1}>{item.name}</Text>
+          </View>
+        ))}
+        {recent.length === 0 ? (
+          <View style={[ps.favoriteDigestChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
+            <Text style={[ps.favoriteDigestChipText, { color: theme.textMuted }]}>
+              {language === "tr" ? "İlk favorin burada görünür" : "Your first favorite appears here"}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={ps.favoriteDigestFooter}>
+        <Text style={[ps.favoriteDigestLink, { color: theme.primaryDark }]}>
+          {language === "tr" ? "Favorilerimi aç" : "Open favorites"}
+        </Text>
+        <Ionicons name="chevron-forward" size={16} color={theme.primaryDark} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
@@ -893,6 +1066,13 @@ export default function ProfileScreen() {
   const { t, language, setLanguage }  = useTranslation();
   const { data: dashboardData }       = useDashboard();
   const { data: gamification }        = useGamification();
+  const isPremium = user?.isPremium === true;
+  const { data: favoriteSummary } = useQuery({
+    queryKey: ["favorite-recipes-summary"],
+    queryFn: getFavoriteRecipesSummary,
+    enabled: isPremium,
+    staleTime: 60_000,
+  });
   const motivation                    = mapGamificationToMotivation(gamification);
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -1059,13 +1239,11 @@ export default function ProfileScreen() {
     if (!user?.publicUserId) return;
     await Share.share({
       message: language === "tr"
-        ? `MyDietitian kullanıcı kimliğim: ${user.publicUserId}`
-        : `MyDietitian user ID: ${user.publicUserId}`,
+        ? `Dytopia kullanıcı kimliğim: ${user.publicUserId}`
+        : `Dytopia user ID: ${user.publicUserId}`,
       title: language === "tr" ? "Kullanıcı kimliğimi paylaş" : "Share my user ID",
     });
   }
-
-  const isPremium = user?.isPremium === true;
 
   function getInitials(name?: string): string {
     if (!name?.trim()) return "__icon__";
@@ -1151,12 +1329,23 @@ export default function ProfileScreen() {
           <QuickAccessGrid
             theme={theme}
             language={language}
+            isPremium={isPremium}
+            favoriteCount={favoriteSummary?.totalFavorites ?? 0}
             onMeasurements={() => (navigation as any).navigate(Routes.App.ProfileMeasurements)}
             onNotifications={() => (navigation as any).navigate(Routes.App.ProfileNotifications)}
             onGoals={() => (navigation as any).navigate(Routes.App.GoalPreferences)}
             onShopping={() => (navigation as any).navigate(Routes.App.ShoppingList)}
             onPantry={() => (navigation as any).navigate(Routes.App.Pantry)}
+            onFavorites={() => (navigation as any).navigate(Routes.App.Favorites)}
           />
+          {isPremium ? (
+            <FavoritesDigestCard
+              theme={theme}
+              language={language}
+              summary={favoriteSummary}
+              onPress={() => (navigation as any).navigate(Routes.App.Favorites)}
+            />
+          ) : null}
         </Animated.View>
 
         <Animated.View style={section1}>
@@ -1291,6 +1480,14 @@ export default function ProfileScreen() {
               label={language === "tr" ? "Bildirimler" : "Notifications"}
               sub={language === "tr" ? "Öğün, seri ve hatırlatıcı ayarları" : "Meal, streak and reminder settings"}
               onPress={() => (navigation as any).navigate(Routes.App.ProfileNotifications)}
+            />
+            <GlassTile
+              theme={theme}
+              icon="sparkles-outline"
+              iconColor={theme.primary}
+              label={language === "tr" ? "Bildirim ve His" : "Feedback Center"}
+              sub={language === "tr" ? "Toast, haptic ve timer davranışı" : "Toast, haptics and timer behavior"}
+              onPress={() => (navigation as any).navigate(Routes.App.ProfileFeedback)}
             />
             <GlassTile
               theme={theme}
@@ -1624,6 +1821,75 @@ const ps = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "500",
     marginTop: 2,
+  },
+  favoriteDigestCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  favoriteDigestTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  favoriteDigestEyebrow: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  favoriteDigestTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    lineHeight: 22,
+    maxWidth: 250,
+  },
+  favoriteDigestBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  favoriteDigestBadgeText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  favoriteDigestBody: {
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  favoriteDigestRecentRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  favoriteDigestChip: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxWidth: "100%",
+  },
+  favoriteDigestChipText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+  },
+  favoriteDigestFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 2,
+  },
+  favoriteDigestLink: {
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   // Theme picker row (inside GlassTile group)

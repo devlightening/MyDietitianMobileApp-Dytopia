@@ -48,12 +48,12 @@ export default function RateAppScreen() {
 
   async function handleShare() {
     await Share.share({
-      message: `MyDietitian: https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`,
+      message: `Dytopia: https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`,
     });
   }
 
   async function handleSupport() {
-    const url = `mailto:support@mydietitian.app?subject=${encodeURIComponent("MyDietitian Feedback")}`;
+    const url = `mailto:support@dytopia.app?subject=${encodeURIComponent("Dytopia Feedback")}`;
     try {
       await Linking.openURL(url);
     } catch {

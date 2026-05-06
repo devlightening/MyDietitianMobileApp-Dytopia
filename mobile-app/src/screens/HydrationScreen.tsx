@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useState } from "react";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -50,6 +51,16 @@ export default function HydrationScreen() {
         decrease: "-1 bardak",
         increase: "+1 bardak",
         saving: "Su güncellemesi kaydediliyor...",
+        completed: "Hedef tamam",
+        completedBody: "Bugünün su ritmi kapandı. İstersen koruma bardağı ekleyebilirsin.",
+        strong: "Ritim güçleniyor",
+        strongBody: "Az kaldı; birkaç küçük yudumla hedefe ulaşırsın.",
+        start: "Mini seri başlat",
+        startBody: "İlk 3 bardak günün en kolay kazanımı. Hadi ritmi açalım.",
+        remaining: "kaldı",
+        bonus: "bonus",
+        mission: "Mini görev",
+        nextReward: "Sıradaki eşik",
       }
     : {
         loadErrorTitle: "Hydration unavailable",
@@ -62,6 +73,16 @@ export default function HydrationScreen() {
         decrease: "-1 glass",
         increase: "+1 glass",
         saving: "Saving hydration update...",
+        completed: "Goal complete",
+        completedBody: "Today's hydration rhythm is done. Add a bonus glass if you want.",
+        strong: "Rhythm is building",
+        strongBody: "Almost there; a few small sips will close the goal.",
+        start: "Start a mini streak",
+        startBody: "The first 3 glasses are today's easiest win. Let's open the rhythm.",
+        remaining: "left",
+        bonus: "bonus",
+        mission: "Mini mission",
+        nextReward: "Next checkpoint",
       };
 
   const loadTracking = useCallback(async (silent = false) => {
@@ -107,9 +128,57 @@ export default function HydrationScreen() {
 
   const goalGlasses = DEFAULT_HYDRATION_GOAL_GLASSES;
   const currentGlasses = tracking?.waterGlasses ?? 0;
+  const remainingGlasses = Math.max(goalGlasses - currentGlasses, 0);
+  const bonusGlasses = Math.max(currentGlasses - goalGlasses, 0);
   const progressPercent = Math.min(
     100,
     Math.round((currentGlasses / goalGlasses) * 100),
+  );
+  const gameState = useMemo(() => {
+    if (currentGlasses >= goalGlasses) {
+      return {
+        title: copy.completed,
+        body: copy.completedBody,
+        icon: "trophy-outline" as const,
+        accent: theme.emerald,
+      };
+    }
+
+    if (currentGlasses >= Math.ceil(goalGlasses * 0.6)) {
+      return {
+        title: copy.strong,
+        body: copy.strongBody,
+        icon: "sparkles-outline" as const,
+        accent: theme.primary,
+      };
+    }
+
+    return {
+      title: copy.start,
+      body: copy.startBody,
+      icon: "flag-outline" as const,
+      accent: theme.accentGold,
+    };
+  }, [
+    copy.completed,
+    copy.completedBody,
+    copy.start,
+    copy.startBody,
+    copy.strong,
+    copy.strongBody,
+    currentGlasses,
+    goalGlasses,
+    theme.accentGold,
+    theme.emerald,
+    theme.primary,
+  ]);
+  const glassSlots = useMemo(
+    () => Array.from({ length: goalGlasses }, (_, index) => index < currentGlasses),
+    [currentGlasses, goalGlasses],
+  );
+  const nextCheckpoint = Math.min(
+    goalGlasses,
+    currentGlasses < 3 ? 3 : currentGlasses < 6 ? 6 : goalGlasses,
   );
 
   if (isLoading) {
@@ -177,6 +246,62 @@ export default function HydrationScreen() {
                 },
               ]}
             />
+          </View>
+
+          <View style={[styles.gameCard, { backgroundColor: `${gameState.accent}0F`, borderColor: `${gameState.accent}30` }]}>
+            <View style={styles.gameHeader}>
+              <View style={[styles.gameIcon, { backgroundColor: `${gameState.accent}18` }]}>
+                <Ionicons name={gameState.icon} size={19} color={gameState.accent} />
+              </View>
+              <View style={styles.gameTextWrap}>
+                <Text style={[styles.gameTitle, { color: theme.text }]}>{gameState.title}</Text>
+                <Text style={[styles.gameBody, { color: theme.textMuted }]}>{gameState.body}</Text>
+              </View>
+              <View style={[styles.remainingPill, { backgroundColor: theme.surface, borderColor: `${gameState.accent}28` }]}>
+                <Text style={[styles.remainingValue, { color: gameState.accent }]}>
+                  {remainingGlasses > 0 ? remainingGlasses : `+${bonusGlasses}`}
+                </Text>
+                <Text style={[styles.remainingLabel, { color: theme.textMuted }]}>
+                  {remainingGlasses > 0 ? copy.remaining : copy.bonus}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.glassGrid}>
+              {glassSlots.map((isFilled, index) => (
+                <View
+                  key={`glass-${index}`}
+                  style={[
+                    styles.glassToken,
+                    {
+                      backgroundColor: isFilled ? `${theme.primary}18` : theme.surface,
+                      borderColor: isFilled ? `${theme.primary}55` : theme.border,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={isFilled ? "water" : "water-outline"}
+                    size={15}
+                    color={isFilled ? theme.primary : theme.textMuted}
+                  />
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.missionRow}>
+              <View style={[styles.missionChip, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="sparkles-outline" size={14} color={gameState.accent} />
+                <Text style={[styles.missionChipText, { color: theme.text }]}>
+                  {copy.mission}: {currentGlasses}/{nextCheckpoint}
+                </Text>
+              </View>
+              <View style={[styles.missionChip, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="ribbon-outline" size={14} color={theme.accentGold} />
+                <Text style={[styles.missionChipText, { color: theme.text }]}>
+                  {copy.nextReward}: {Math.max(nextCheckpoint - currentGlasses, 0)}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <View style={styles.buttonRow}>
@@ -274,6 +399,88 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     opacity: 0.8,
+  },
+  gameCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
+    marginTop: 18,
+  },
+  gameHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  gameIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gameTextWrap: {
+    flex: 1,
+  },
+  gameTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  gameBody: {
+    marginTop: 3,
+    fontSize: 11.5,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
+  remainingPill: {
+    minWidth: 56,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  remainingValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 18,
+  },
+  remainingLabel: {
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  glassGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
+  },
+  glassToken: {
+    width: 31,
+    height: 31,
+    borderRadius: 15.5,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  missionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 13,
+  },
+  missionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  missionChipText: {
+    fontSize: 10.5,
+    fontWeight: "800",
   },
   buttonRow: {
     flexDirection: "row",

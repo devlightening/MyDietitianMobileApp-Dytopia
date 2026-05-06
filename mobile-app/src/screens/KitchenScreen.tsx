@@ -10,6 +10,7 @@ import {
   StatusBar,
   Keyboard,
   Alert,
+  Image,
 } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -47,7 +48,8 @@ import {
   useSweepScan,
 } from '../hooks/useAuraMotion';
 import IngredientSearch from '../components/IngredientSearch';
-import ProduceBubble from '../components/decor/ProduceBubble';
+import DytopiaWatermark from '../components/decor/DytopiaWatermark';
+import DytopiaLogoBubble from '../components/decor/DytopiaLogoBubble';
 import KitchenStreakRail from '../components/gamification/KitchenStreakRail';
 import RecipeSearchStage from '../components/kitchen/RecipeSearchStage';
 import { Routes } from '../navigation/routes';
@@ -62,6 +64,7 @@ import CreatePackSheet from '../components/CreatePackSheet';
 
 const CHIP_COLLAPSE_AT = 8;
 const BOTTOM_NAV_CLEARANCE = Platform.OS === 'ios' ? 112 : 96;
+const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 
 const MERGE_TEXTS = {
   tr: ['Malzemeler tencerede', 'Aromalar yükseliyor', 'Tarif servis ediliyor'],
@@ -600,8 +603,8 @@ function KitchenPotComposer({
             },
           ]}
         >
-          <View style={[s.composerGlowA, { backgroundColor: `${theme.primary}0F` }]} />
-          <View style={[s.composerGlowB, { backgroundColor: `${theme.emerald}10` }]} />
+          <DytopiaLogoBubble size={168} opacity={0.18} logoOpacity={0.34} style={s.composerGlowA} />
+          <DytopiaLogoBubble size={136} opacity={0.14} logoOpacity={0.32} style={s.composerGlowB} />
           <View style={[s.composerCounterGlow, { backgroundColor: `${theme.primary}14` }]} />
 
           <View
@@ -698,6 +701,10 @@ function KitchenPotComposer({
                   { backgroundColor: `${theme.surfaceElevated}D0` },
                 ]}
               />
+              <View style={s.composerLidBrand}>
+                <Image source={BRAND_LOGO} resizeMode="contain" style={s.composerLidBrandLogo} />
+                <Text style={[s.composerLidBrandText, { color: theme.primaryDark }]}>DYTOPIA</Text>
+              </View>
             </Animated.View>
 
             <Animated.View style={[s.composerSteamWrap, steamStyle]}>
@@ -837,19 +844,31 @@ function KitchenPotComposer({
 export default function KitchenScreen({
   selectedIngredients,
   onChangeSelected,
+  pantryIngredients = [],
+  onChangePantry,
   openQuickSheet,
   isActive = true,
+  onTabSwipeEnabledChange,
 }: {
   selectedIngredients: Ingredient[];
   onChangeSelected: (v: Ingredient[]) => void;
+  pantryIngredients?: Ingredient[];
+  onChangePantry?: (v: Ingredient[]) => void;
   openQuickSheet: () => void;
   isActive?: boolean;
+  onTabSwipeEnabledChange?: (enabled: boolean) => void;
 }) {
   const nav = useNavigation();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { t, language } = useTranslation();
   const { data: gamification } = useGamification();
+  const lockTabSwipe = React.useCallback(() => {
+    onTabSwipeEnabledChange?.(false);
+  }, [onTabSwipeEnabledChange]);
+  const releaseTabSwipe = React.useCallback(() => {
+    onTabSwipeEnabledChange?.(true);
+  }, [onTabSwipeEnabledChange]);
 
   const copy = language === 'en'
     ? {
@@ -1067,6 +1086,7 @@ export default function KitchenScreen({
 
   function handleBarcodeScanPress() {
     (nav as any).navigate(Routes.App.BarcodeScan, {
+      usageContext: 'kitchen',
       onConfirm: (ingredients: Ingredient[]) => {
         appendIngredients(ingredients);
       },
@@ -1103,8 +1123,9 @@ export default function KitchenScreen({
 
   function handlePantryPress() {
     (nav as any).navigate(Routes.App.Pantry, {
-      selectedIngredients,
+      selectedIngredients: pantryIngredients,
       onConfirm: (ingredients: Ingredient[]) => {
+        onChangePantry?.(ingredients);
         onChangeSelected(ingredients);
       },
     });
@@ -1117,18 +1138,9 @@ export default function KitchenScreen({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 16}
     >
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
-      <ProduceBubble
-        icon="food-apple-outline"
-        iconSize={32}
-        iconColor={`${theme.primary}42`}
-        style={[s.screenGlowA, { backgroundColor: theme.primaryGlow }]}
-      />
-      <ProduceBubble
-        icon="carrot"
-        iconSize={28}
-        iconColor={`${theme.emerald}42`}
-        style={[s.screenGlowB, { backgroundColor: theme.emeraldGlow }]}
-      />
+      <DytopiaWatermark position="center" size={315} opacity={0.036} />
+      <DytopiaLogoBubble size={158} opacity={0.34} logoOpacity={0.42} style={s.screenGlowA} />
+      <DytopiaLogoBubble size={150} opacity={0.28} logoOpacity={0.38} style={s.screenGlowB} />
 
       <ScrollView
         style={s.scrollFlex}
@@ -1152,18 +1164,8 @@ export default function KitchenScreen({
             headerStyle,
           ]}
         >
-          <ProduceBubble
-            icon="fruit-pear"
-            iconSize={22}
-            iconColor={`${theme.primary}34`}
-            style={[s.wsHeaderGlow, { backgroundColor: `${theme.primary}14` }]}
-          />
-          <ProduceBubble
-            icon="leaf"
-            iconSize={18}
-            iconColor={`${theme.emerald}34`}
-            style={[s.wsHeaderGlowB, { backgroundColor: `${theme.emerald}10` }]}
-          />
+          <DytopiaLogoBubble size={84} opacity={0.18} logoOpacity={0.5} style={s.wsHeaderGlow} />
+          <DytopiaLogoBubble size={68} opacity={0.16} logoOpacity={0.48} style={s.wsHeaderGlowB} />
           <View style={[s.wsBar, { backgroundColor: theme.emerald }]} />
           <View style={s.wsHeaderPad}>
             <View style={s.wsHeaderRow}>
@@ -1244,6 +1246,7 @@ export default function KitchenScreen({
           theme={theme}
           language={language}
           summary={gamification}
+          onTabSwipeEnabledChange={onTabSwipeEnabledChange}
         />
 
         <Animated.View
@@ -1405,6 +1408,12 @@ export default function KitchenScreen({
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={s.recentChipRow}
+              onTouchStart={lockTabSwipe}
+              onTouchEnd={releaseTabSwipe}
+              onTouchCancel={releaseTabSwipe}
+              onScrollBeginDrag={lockTabSwipe}
+              onScrollEndDrag={releaseTabSwipe}
+              onMomentumScrollEnd={releaseTabSwipe}
             >
               {recentIngredients.map(ingredient => {
                 const isSelected = selectedIngredients.some(sel => sel.id === ingredient.id);
@@ -1488,7 +1497,15 @@ export default function KitchenScreen({
                 decelerationRate="fast"
                 snapToInterval={148}
                 snapToAlignment="start"
-                onScrollBeginDrag={dismissActivePack}
+                onTouchStart={lockTabSwipe}
+                onTouchEnd={releaseTabSwipe}
+                onTouchCancel={releaseTabSwipe}
+                onScrollBeginDrag={() => {
+                  lockTabSwipe();
+                  dismissActivePack();
+                }}
+                onScrollEndDrag={releaseTabSwipe}
+                onMomentumScrollEnd={releaseTabSwipe}
               >
                 {packs.map((pack, index) => (
                   <PackTile
@@ -2554,6 +2571,26 @@ const s = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     opacity: 0.9,
+  },
+  composerLidBrand: {
+    position: 'absolute',
+    top: 30,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    opacity: 0.55,
+    zIndex: 8,
+  },
+  composerLidBrandLogo: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+  },
+  composerLidBrandText: {
+    fontSize: 6.5,
+    fontWeight: '900',
+    letterSpacing: 1.5,
   },
   composerSteamWrap: {
     position: 'absolute',

@@ -6,91 +6,116 @@ try { Constants = require('expo-constants'); } catch { }
 let Device: any = null;
 try { Device = require('expo-device'); } catch { }
 
-// Populated during resolution; exported only for diagnostic reads (never mutate externally).
+const LOCAL_API_PORT = '5000';
+const PRODUCTION_API_BASE_URL = 'https://api.mydietitian.com';
+
+// Populated during resolution; exported only for diagnostic reads.
 export let API_BASE_URL_SOURCE = 'unknown';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// URL STRATEGY
+// URL strategy:
+// 1. EXPO_PUBLIC_API_BASE_URL_FORCE=1 + EXPO_PUBLIC_API_BASE_URL
+// 2. EXPO_PUBLIC_API_BASE_URL
+// 3. expo.extra.apiBaseUrl (injected by app.config.ts)
+// 4. Dev auto-detect for emulators/simulators only
+// 5. Production fallback
 //
-// Priority order:
-//   1. EXPO_PUBLIC_API_BASE_URL_FORCE=1 + EXPO_PUBLIC_API_BASE_URL → use as-is
-//   2. EXPO_PUBLIC_API_BASE_URL (no force) → use as-is
-//   3. Auto-detect (dev only):
-//      • Android emulator  → http://10.0.2.2:5000
-//        (10.0.2.2 is Android's special alias for the host machine loopback.)
-//      • iOS simulator     → http://127.0.0.1:5000
-//      • Physical device   → warns; must set FORCE + URL in .env or eas.json
-//
-// Supported URL forms:
-//   • http://10.0.2.2:5000            — Android emulator / adb reverse
-//   • http://192.168.x.x:5000         — LAN (same Wi-Fi)
-//   • https://xxx.trycloudflare.com   — Cloudflare Tunnel (no port needed)
-//   • https://api.mydietitian.com     — production
-// ─────────────────────────────────────────────────────────────────────────────
+// Physical devices must use a device-reachable URL:
+// - http://PC_HOTSPOT_OR_LAN_IPV4:5000
+// - https://YOUR_TUNNEL.trycloudflare.com
+// - https://api.mydietitian.com
 
-/**
- * Validates and normalises a URL.
- * - HTTPS URLs without an explicit port are left untouched (port 443 is implicit).
- * - HTTP URLs without an explicit port are auto-corrected to :5000 so the app
- *   never silently connects to :80 during local development.
- */
+function getExpoExtraApiBaseUrl(): string | undefined {
+  const value =
+    Constants?.expoConfig?.extra?.apiBaseUrl ??
+    Constants?.manifest?.extra?.apiBaseUrl;
+
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
 function validateAndNormalizeUrl(rawUrl: string, source: string): string {
-  let url = rawUrl.replace(/\/+$/, '');
+  let url = rawUrl.trim().replace(/\/+$/, '');
 
   try {
-    const u = new URL(url);
+    const parsed = new URL(url);
 
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-      console.error(`❌ [API Config] Unexpected protocol in URL from "${source}": ${url}`);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      console.error(`[API Config] Unexpected protocol from ${source}: ${url}`);
     }
 
-    // HTTPS without an explicit port is valid (implicit 443). Only auto-correct HTTP.
-    if (!u.port && u.protocol === 'http:') {
-      console.error(`❌ [API Config] HTTP URL from "${source}" has no explicit port: ${url}`);
-      console.error(`   HTTP defaults to :80 — almost certainly wrong for local dev.`);
-      url = `http://${u.hostname}:5000`;
-      console.warn(`⚠️  [API Config] Auto-corrected URL → ${url} (added :5000)`);
+    // HTTPS tunnel/production URLs usually omit the port. For local HTTP, missing
+    // port almost always means the backend port was forgotten.
+    if (parsed.protocol === 'http:' && !parsed.port) {
+      parsed.port = LOCAL_API_PORT;
+      url = parsed.toString().replace(/\/+$/, '');
+      console.warn(`[API Config] Added :${LOCAL_API_PORT} to HTTP API URL from ${source}: ${url}`);
     }
 
     return url;
   } catch {
-    console.error(`❌ [API Config] Invalid URL from "${source}": ${rawUrl}`);
+    console.error(`[API Config] Invalid URL from ${source}: ${rawUrl}`);
     return url;
   }
 }
 
+export function isLoopbackApiBaseUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+export function isPhysicalDeviceUnsafeApiBaseUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return isLoopbackApiBaseUrl(url) || host === '10.0.2.2';
+  } catch {
+    return true;
+  }
+}
+
+function resolveConfiguredUrl(rawUrl: string | undefined, source: string): string | undefined {
+  if (!rawUrl) {
+    return undefined;
+  }
+
+  API_BASE_URL_SOURCE = source;
+  return validateAndNormalizeUrl(rawUrl, source);
+}
+
 function resolveDevBaseUrl(): string {
   const isForced = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
-  const envUrl   = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-  // ── FORCE mode ────────────────────────────────────────────────────────────
-  // Use the env URL exactly as configured.  No auto-detection, no runtime
-  // override.  This is the authoritative path for adb reverse dev workflow.
   if (isForced && envUrl) {
-    API_BASE_URL_SOURCE = 'FORCED env (EXPO_PUBLIC_API_BASE_URL)';
-    return validateAndNormalizeUrl(envUrl, 'EXPO_PUBLIC_API_BASE_URL (FORCED)');
+    return resolveConfiguredUrl(envUrl, 'FORCED env (EXPO_PUBLIC_API_BASE_URL)')!;
   }
 
-  // ── Non-force: env URL if provided ────────────────────────────────────────
-  if (envUrl) {
-    API_BASE_URL_SOURCE = 'env (EXPO_PUBLIC_API_BASE_URL)';
-    return validateAndNormalizeUrl(envUrl, 'EXPO_PUBLIC_API_BASE_URL');
+  const configuredUrl =
+    resolveConfiguredUrl(envUrl, 'env (EXPO_PUBLIC_API_BASE_URL)') ??
+    resolveConfiguredUrl(getExpoExtraApiBaseUrl(), 'expo.extra.apiBaseUrl');
+
+  if (configuredUrl) {
+    return configuredUrl;
   }
 
-  // ── Auto-detect by platform ───────────────────────────────────────────────
-  // Physical device check: if running on a real device, localhost will not work.
-  const isPhysicalDevice = Device?.isDevice ?? false;
+  const isPhysicalDevice = Device?.isDevice === true;
 
-  if (Platform.OS === 'android' && !isPhysicalDevice) {
-    // Android emulator: 10.0.2.2 routes to the host machine's 127.0.0.1.
-    // No adb reverse needed — works immediately after `expo run:android`.
-    API_BASE_URL_SOURCE = 'auto (Android emulator → 10.0.2.2)';
-    return 'http://10.0.2.2:5000';
+  if (isPhysicalDevice) {
+    API_BASE_URL_SOURCE = 'missing physical-device dev URL';
+    console.error('[API Config] Physical device detected, but EXPO_PUBLIC_API_BASE_URL is not set.');
+    console.error('[API Config] Set it to http://YOUR_PC_IPV4:5000 or a Cloudflare Tunnel URL, then restart Metro with --clear.');
+    return PRODUCTION_API_BASE_URL;
   }
 
-  // iOS simulator shares the host network — localhost works directly.
-  API_BASE_URL_SOURCE = 'auto (iOS simulator / default)';
-  return 'http://127.0.0.1:5000';
+  if (Platform.OS === 'android') {
+    API_BASE_URL_SOURCE = 'auto (Android emulator -> 10.0.2.2)';
+    return `http://10.0.2.2:${LOCAL_API_PORT}`;
+  }
+
+  API_BASE_URL_SOURCE = 'auto (iOS simulator / local dev)';
+  return `http://127.0.0.1:${LOCAL_API_PORT}`;
 }
 
 function getApiBaseUrl(): string {
@@ -98,32 +123,37 @@ function getApiBaseUrl(): string {
     return resolveDevBaseUrl();
   }
 
-  // Production
-  return (
-    process.env.EXPO_PUBLIC_API_BASE_URL ||
-    Constants?.expoConfig?.extra?.apiBaseUrl ||
-    'https://api.mydietitian.com'
-  );
+  const productionUrl =
+    resolveConfiguredUrl(process.env.EXPO_PUBLIC_API_BASE_URL, 'env (production)') ??
+    resolveConfiguredUrl(getExpoExtraApiBaseUrl(), 'expo.extra.apiBaseUrl') ??
+    PRODUCTION_API_BASE_URL;
+
+  if (API_BASE_URL_SOURCE === 'unknown') {
+    API_BASE_URL_SOURCE = 'hardcoded production fallback';
+  }
+
+  return validateAndNormalizeUrl(productionUrl, API_BASE_URL_SOURCE);
 }
 
 export const API_BASE_URL = getApiBaseUrl();
 
-// ── Startup log ──────────────────────────────────────────────────────────────
 if (__DEV__) {
-  const isForced  = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
+  const isForced = process.env.EXPO_PUBLIC_API_BASE_URL_FORCE === '1';
   const rawEnvUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const isPhysicalDevice = Device?.isDevice === true;
 
   console.log('=== API Configuration ===');
   console.log('Resolved URL  :', API_BASE_URL);
   console.log('Source        :', API_BASE_URL_SOURCE);
   console.log('Platform      :', Platform.OS);
+  console.log('Physical      :', isPhysicalDevice);
   console.log('FORCE=1       :', isForced);
-  console.log('Raw env URL   :', rawEnvUrl ?? '(not set — using auto-detect)');
+  console.log('Raw env URL   :', rawEnvUrl ?? '(not set; using fallback)');
   console.log('=========================');
 
-  // Warn about missing port only for HTTP URLs — HTTPS tunnel URLs have no port by design.
-  if (rawEnvUrl && rawEnvUrl.startsWith('http://') && !rawEnvUrl.match(/:\d+\/?$/)) {
-    console.error('❌ EXPO_PUBLIC_API_BASE_URL is HTTP but has no port — stale bundle? Run: npx expo start --clear');
+  if (isPhysicalDevice && isPhysicalDeviceUnsafeApiBaseUrl(API_BASE_URL)) {
+    console.error('[API Config] Physical device cannot reach localhost, 127.0.0.1, or 10.0.2.2 on the laptop.');
+    console.error('[API Config] Use your current PC IPv4 or a Cloudflare Tunnel URL in mobile-app/.env.');
   }
 }
 

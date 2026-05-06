@@ -23,7 +23,7 @@ export interface AlternativeRecipe {
   fatGrams?: number;
   /** Nutritional proximity score 0-100 (Protein 40%, Calories 25%, Fat 25%, Carbs 10%) */
   nutritionalScore?: number;
-  /** Combined ranking score (ingredient 40% + nutrition 60%) */
+  /** Combined ranking score (ingredient 30% + nutrition 50% + protein 15% + cookability 5%) */
   combinedScore?: number;
 }
 

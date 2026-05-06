@@ -337,6 +337,87 @@ public class DietitianPlanController : ControllerBase
     }
 
     /// <summary>
+    /// Delete a client meal plan (and all its meals).
+    /// </summary>
+    [HttpDelete("{planId:guid}")]
+    public async Task<IActionResult> DeleteClientPlan(Guid planId)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var dietitianId = user.LinkedDietitianId.Value;
+
+        var plan = await _appDb.ClientMealPlans
+            .Include(p => p.Meals)
+            .FirstOrDefaultAsync(p => p.Id == planId && p.DietitianId == dietitianId);
+
+        if (plan == null)
+            return NotFound(ApiProblems.NotFound("PLAN_NOT_FOUND", "Plan bulunamadı"));
+
+        _appDb.ClientMealPlans.Remove(plan);
+        await _appDb.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Deactivate a client meal plan.
+    /// </summary>
+    [HttpPost("{planId:guid}/deactivate")]
+    public async Task<IActionResult> DeactivateClientPlan(Guid planId)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var plan = await _appDb.ClientMealPlans
+            .FirstOrDefaultAsync(p => p.Id == planId && p.DietitianId == user.LinkedDietitianId.Value);
+
+        if (plan == null)
+            return NotFound(ApiProblems.NotFound("PLAN_NOT_FOUND", "Plan bulunamadı"));
+
+        plan.Deactivate();
+        await _appDb.SaveChangesAsync();
+
+        return Ok(new { id = plan.Id, isActive = plan.IsActive });
+    }
+
+    /// <summary>
+    /// Reactivate a client meal plan.
+    /// </summary>
+    [HttpPost("{planId:guid}/reactivate")]
+    public async Task<IActionResult> ReactivateClientPlan(Guid planId)
+    {
+        var userId = User.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var user = await _authDb.UserAccounts.FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
+        if (user?.LinkedDietitianId == null)
+            return Forbid();
+
+        var plan = await _appDb.ClientMealPlans
+            .FirstOrDefaultAsync(p => p.Id == planId && p.DietitianId == user.LinkedDietitianId.Value);
+
+        if (plan == null)
+            return NotFound(ApiProblems.NotFound("PLAN_NOT_FOUND", "Plan bulunamadı"));
+
+        plan.Reactivate();
+        await _appDb.SaveChangesAsync();
+
+        return Ok(new { id = plan.Id, isActive = plan.IsActive });
+    }
+
+    /// <summary>
     /// Get dashboard summary (KPIs)
     /// </summary>
     [HttpGet("~/api/dietitian/dashboard/summary")]

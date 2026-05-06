@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   ChefHat,
   Clock,
+  Heart,
   Key,
   MapPin,
   Sparkles,
@@ -17,7 +18,7 @@ import {
   Video,
 } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { getDashboardStats } from '@/lib/api/dashboard';
+import { getDashboardStats, getDietitianFavoriteOverview, type DietitianFavoriteOverview } from '@/lib/api/dashboard';
 import { getCareHubSummary, type CareHubSummaryResponse } from '@/lib/api/care-hub';
 import { getDietitianGamificationSummary } from '@/lib/api/gamification';
 import { getDietitianAppointments, type DietitianAppointment } from '@/lib/api/appointments';
@@ -402,6 +403,95 @@ function MotivationCard({ motivation }: { motivation?: any }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+function FavoriteInsightsCard({ favorites }: { favorites?: DietitianFavoriteOverview }) {
+  const topRecipes = favorites?.topRecipes ?? [];
+  const recentActivity = favorites?.recentActivity ?? [];
+
+  return (
+    <section className="card-sfcos p-5">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/80">Danışan favorileri</p>
+          <h2 className="mt-2 text-lg font-semibold text-foreground">Tarif bağlılığı</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Hangi tariflerin daha çok kaydedildiğini ve hangi danışanların bu alanı aktif kullandığını görün.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-rose-500/15 bg-rose-500/10 px-3 py-2 text-right">
+          <p className="text-2xl font-bold text-rose-500">{favorites?.totalActiveFavorites ?? 0}</p>
+          <p className="text-[11px] font-semibold text-rose-400">aktif kalp</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-surface-overlay px-3 py-3">
+          <p className="text-xs text-muted-foreground">Favori kullanan</p>
+          <p className="mt-1 text-xl font-semibold text-foreground">{favorites?.uniqueClientCount ?? 0}</p>
+        </div>
+        <div className="rounded-2xl bg-surface-overlay px-3 py-3">
+          <p className="text-xs text-muted-foreground">En güçlü tarif</p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground">
+            {topRecipes[0]?.recipeName ?? 'Henüz veri yok'}
+          </p>
+        </div>
+      </div>
+
+      {topRecipes.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          {topRecipes.slice(0, 3).map((recipe) => (
+            <Link
+              key={recipe.recipeId}
+              href={`/dashboard/recipes/${recipe.slug}`}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-border/80 bg-[var(--surface-glass)] px-4 py-3 transition hover:border-primary/15 hover:bg-primary/5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">{recipe.recipeName}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {recipe.sourceType === 'clinic' ? 'Klinik tarifi' : 'Genel tarif'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-500">
+                <Heart className="h-3.5 w-3.5" />
+                {recipe.favoriteCount}
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface-overlay px-4 py-5 text-sm text-muted-foreground">
+          Danışanlar tarifleri favoriledikçe burada öne çıkan eğilimleri göreceksiniz.
+        </div>
+      )}
+
+      {recentActivity.length > 0 ? (
+        <div className="mt-4 rounded-2xl border border-border/70 bg-surface-overlay px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/75">Son hareketler</p>
+          <div className="mt-3 space-y-2">
+            {recentActivity.slice(0, 3).map((entry) => (
+              <Link
+                key={`${entry.clientId}-${entry.recipeId}-${entry.favoritedAtUtc}`}
+                href={`/dashboard/clients/${entry.clientId}`}
+                className="flex items-center justify-between gap-3 text-sm transition hover:text-primary"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-foreground">{entry.clientName}</p>
+                  <p className="truncate text-xs text-muted-foreground">{entry.recipeName}</p>
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {new Date(entry.favoritedAtUtc).toLocaleDateString('tr-TR', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function DashboardPage() {
   const { data: stats, isLoading, isError } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -422,6 +512,12 @@ export default function DashboardPage() {
     queryFn: () => getDietitianGamificationSummary(6),
     refetchInterval: 20000,
     staleTime: 10000,
+  });
+  const { data: favoriteOverview } = useQuery({
+    queryKey: ['dietitian-favorite-overview', 'dashboard'],
+    queryFn: getDietitianFavoriteOverview,
+    refetchInterval: 30000,
+    staleTime: 15000,
   });
 
   // Fetch upcoming appointments for the next 14 days
@@ -606,6 +702,7 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <CareSummaryCard careHub={careHub} />
           <MotivationCard motivation={motivation} />
+          <FavoriteInsightsCard favorites={favoriteOverview} />
         </div>
       </section>
     </div>

@@ -1,4 +1,4 @@
-export const APP_DEEP_LINK_SCHEME = "mydietitian";
+export const APP_DEEP_LINK_SCHEME = "dytopia";
 
 export type WidgetDeepLinkTarget = "hydration" | "today";
 

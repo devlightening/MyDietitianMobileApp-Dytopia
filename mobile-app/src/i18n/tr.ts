@@ -43,7 +43,7 @@ export const tr = {
 
   // â”€â”€ Welcome â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   welcome: {
-    tagline:     'Klinik kalitesinde kişisel beslenme',
+    tagline:     'Dytopia ile klinik kalitesinde kişisel beslenme',
     signUp:      'Ücretsiz Başla',
     signIn:      'Giriş Yap',
     terms:       'Kullanım Koşulları',
@@ -56,10 +56,10 @@ export const tr = {
 
   // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   auth: {
-    loginTitle:         'Tekrar Hoş Geldiniz',
-    loginSubtitle:      'Hesabınıza giriş yapın',
-    registerTitle:      'Hesap Oluşturun',
-    registerSubtitle:   'Sağlıklı bir yaşama adım atın',
+    loginTitle:         'Dytopia\'ya hoş geldiniz',
+    loginSubtitle:      'Planın, dolabın ve diyetisyen notların tek yerde.',
+    registerTitle:      'Dytopia hesabını oluştur',
+    registerSubtitle:   'Sağlıklı ritmini kişisel planınla başlat.',
     email:              'E-posta',
     password:           'Şifre',
     fullName:           'Ad Soyad',

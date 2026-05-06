@@ -2,6 +2,7 @@ import type { Language } from "../context/I18nContext";
 import type { InAppNotificationPayload } from "./notificationTypes";
 
 type MealFeedbackKey = "filling" | "light" | "repeat" | "hard";
+type MealFeedbackSource = "Original" | "Alternative";
 
 const feedbackLabelMap: Record<Language, Record<MealFeedbackKey, string>> = {
   tr: {
@@ -38,14 +39,27 @@ export function buildMealFeedbackNotification(
   mealTitle: string,
   feedbackKey: MealFeedbackKey,
 ): InAppNotificationPayload {
+  return buildMealFeedbackNotificationForSource(language, mealTitle, feedbackKey, "Original");
+}
+
+export function buildMealFeedbackNotificationForSource(
+  language: Language,
+  mealTitle: string,
+  feedbackKey: MealFeedbackKey,
+  recipeSource: MealFeedbackSource,
+): InAppNotificationPayload {
   const label = feedbackLabelMap[language][feedbackKey];
+  const sourceLabel = language === "tr"
+    ? (recipeSource === "Alternative" ? "alternatif tarif" : "planlanan tarif")
+    : (recipeSource === "Alternative" ? "alternative recipe" : "planned recipe");
+
   return {
     type: "meal_feedback_saved",
-    dedupKey: `meal_feedback:${mealTitle}:${feedbackKey}`,
+    dedupKey: `meal_feedback:${mealTitle}:${feedbackKey}:${recipeSource}`,
     title: language === "tr" ? "Öğün değerlendirmesi kaydedildi" : "Meal feedback saved",
     body: language === "tr"
-      ? `${mealTitle} için "${label}" notu eklendi.`
-      : `"${label}" note was saved for ${mealTitle}.`,
+      ? `${mealTitle} için ${sourceLabel} adına "${label}" notu eklendi.`
+      : `"${label}" note was saved for the ${sourceLabel} in ${mealTitle}.`,
     icon: "chatbubble-ellipses-outline",
     tone: "primary",
     haptic: "light",

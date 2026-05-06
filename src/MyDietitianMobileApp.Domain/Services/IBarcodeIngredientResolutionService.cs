@@ -16,8 +16,10 @@ public sealed class BarcodeProductContext
 {
     public string Barcode { get; init; } = string.Empty;
     public string? ProductName { get; init; }
+    public string? GenericName { get; init; }
     public string? Brand { get; init; }
     public string? CategoriesText { get; init; }
+    public string? IngredientsText { get; init; }
     public string SourceProvider { get; init; } = "unknown";
 }
 

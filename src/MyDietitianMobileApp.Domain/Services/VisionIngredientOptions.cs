@@ -22,11 +22,18 @@ public class VisionDetectionResult
 {
     public static readonly VisionDetectionResult Empty = new();
 
+    public static readonly VisionDetectionResult ImageTooLarge = new()
+    {
+        Reason = "image_too_large",
+    };
+
     public IReadOnlyList<string> Items { get; init; } = Array.Empty<string>();
     /// <summary>Prompt tokens consumed by the vision call (0 when not applicable).</summary>
     public int PromptTokens { get; init; }
     /// <summary>Completion tokens consumed by the vision call (0 when not applicable).</summary>
     public int CompletionTokens { get; init; }
+    /// <summary>Machine-readable failure reason. Null on success. "image_too_large" when image exceeds size limit.</summary>
+    public string? Reason { get; init; }
 }
 
 /// <summary>

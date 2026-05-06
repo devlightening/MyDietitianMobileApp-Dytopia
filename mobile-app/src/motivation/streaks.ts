@@ -13,13 +13,14 @@ export type MotivationBadgeId =
   | "water_keeper"
   | "flex_saver"
   | "plan_keeper"
+  | "game_monster"
   | "streak_3"
   | "perfect_day"
   | "streak_7"
   | "streak_14";
 
 type BadgeTone = "emerald" | "gold" | "coral" | "cyan";
-type BadgeFamily = "nutrition" | "hydration" | "streak" | "planner" | "kitchen" | "pantry";
+type BadgeFamily = "nutrition" | "hydration" | "streak" | "planner" | "kitchen" | "pantry" | "games";
 
 interface LocalizedBadgeCopy {
   en: string;
@@ -183,6 +184,18 @@ const badgeCatalog: Record<MotivationBadgeId, BadgeCatalogEntry> = {
     earnedDetail: { tr: "Haftalık planda 5 güçlü gün biriktirerek açtın.", en: "You unlocked this by stacking five strong planning days in a week." },
     flavor: { tr: "Takvim sana gizli bir yıldız ödülü verdi.", en: "Your calendar quietly handed you an MVP award." },
   },
+  game_monster: {
+    icon: "gamepad-variant-outline",
+    tone: "cyan",
+    family: "games",
+    priority: 95,
+    targetFallback: 3,
+    title: { tr: "Oyun Canavarı", en: "Game Monster" },
+    subtitle: { tr: "Günün 3 mini oyununu bitirdin.", en: "You finished all 3 daily mini games." },
+    hint: { tr: "Aynı gün kart eşleştirme, mini test ve kelime oyununu tamamla.", en: "Complete memory, quiz, and word games on the same day." },
+    earnedDetail: { tr: "Üç farklı mini oyunu aynı gün tamamlayarak oyun rozetini açtın.", en: "You unlocked this by completing three different mini games in one day." },
+    flavor: { tr: "Mutfak arcade makinesi adını tabloya yazdı.", en: "The kitchen arcade just wrote your name on the board." },
+  },
   streak_3: {
     icon: "fire",
     tone: "coral",
@@ -240,6 +253,7 @@ const familyLabels: Record<BadgeFamily, LocalizedBadgeCopy> = {
   planner: { tr: "Plan", en: "Planning" },
   kitchen: { tr: "Mutfak", en: "Kitchen" },
   pantry: { tr: "Dolap", en: "Pantry" },
+  games: { tr: "Oyun", en: "Games" },
 };
 
 const badgeIds = Object.keys(badgeCatalog) as MotivationBadgeId[];

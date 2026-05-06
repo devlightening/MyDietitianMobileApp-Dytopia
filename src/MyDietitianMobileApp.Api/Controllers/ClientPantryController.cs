@@ -100,6 +100,11 @@ public class ClientPantryController : ControllerBase
             .ToListAsync();
 
         var incomingByIngredient = incoming.ToDictionary(x => x.IngredientId, x => x);
+        var removedCount = existing.Count(x => !incomingByIngredient.ContainsKey(x.IngredientId));
+        var addedCount = incoming.Count(x => existing.All(e => e.IngredientId != x.IngredientId));
+        var updatedCount = incoming.Count - addedCount;
+        var sourceType = NormalizePantrySource(request.SourceType);
+
         foreach (var stale in existing.Where(x => !incomingByIngredient.ContainsKey(x.IngredientId)).ToList())
             _appDb.ClientPantryItems.Remove(stale);
 
@@ -118,6 +123,19 @@ public class ClientPantryController : ControllerBase
 
             current.SetQuantity(item.Quantity, item.Unit);
         }
+
+        _appDb.ClientActivities.Add(new ClientActivity(
+            identity.Value.clientId,
+            await GetActiveDietitianIdAsync(identity.Value.clientId),
+            "pantry_updated",
+            new
+            {
+                activeCount = incoming.Count,
+                addedCount,
+                updatedCount,
+                removedCount,
+                sourceType
+            }));
 
         await _appDb.SaveChangesAsync();
         var items = await QueryPantryAsync(identity.Value.clientId);
@@ -156,6 +174,8 @@ public class ClientPantryController : ControllerBase
             totalDetected = result.TotalDetected,
             promptTokens = result.PromptTokens,
             completionTokens = result.CompletionTokens,
+            reason = result.Reason,
+            userMessage = result.UserMessage,
             matched = result.Matched.Select(m => new
             {
                 ingredientId = m.IngredientId,
@@ -181,12 +201,24 @@ public class ClientPantryController : ControllerBase
             return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Client hesabi bulunamadi."));
 
         var current = await _appDb.ClientPantryItems
+            .Include(x => x.Ingredient)
             .FirstOrDefaultAsync(x => x.ClientId == identity.Value.clientId && x.IngredientId == ingredientId);
 
         if (current == null)
             return NotFound(ApiProblems.NotFound("PANTRY_ITEM_NOT_FOUND", "Pantry malzemesi bulunamadi."));
 
         _appDb.ClientPantryItems.Remove(current);
+        _appDb.ClientActivities.Add(new ClientActivity(
+            identity.Value.clientId,
+            await GetActiveDietitianIdAsync(identity.Value.clientId),
+            "pantry_item_removed",
+            new
+            {
+                ingredientId,
+                ingredientName = current.Ingredient?.CanonicalName,
+                quantity = current.Quantity,
+                unit = current.Unit
+            }));
         await _appDb.SaveChangesAsync();
         return NoContent();
     }
@@ -210,10 +242,31 @@ public class ClientPantryController : ControllerBase
 
         return items.Cast<object>().ToList();
     }
+
+    private async Task<Guid?> GetActiveDietitianIdAsync(Guid clientId)
+    {
+        return await _appDb.Clients
+            .AsNoTracking()
+            .Where(x => x.Id == clientId)
+            .Select(x => x.ActiveDietitianId)
+            .FirstOrDefaultAsync();
+    }
+
+    private static string NormalizePantrySource(string? sourceType)
+    {
+        var normalized = sourceType?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "barcode" => "barcode",
+            "photo" => "photo",
+            "receipt" => "receipt",
+            _ => "manual"
+        };
+    }
 }
 
 public sealed record PantryItemRequest(Guid IngredientId, decimal? Quantity, string? Unit);
 
-public sealed record ReplacePantryRequest(IReadOnlyList<PantryItemRequest> Items);
+public sealed record ReplacePantryRequest(IReadOnlyList<PantryItemRequest> Items, string? SourceType = null);
 
 public sealed record AnalyzeReceiptRequest(string? Base64Image, string? MediaType = "image/jpeg");

@@ -25,8 +25,8 @@ export default ({ config }: ConfigContext) => {
 
   const base = {
     ...config,
-    name: config.name ?? "MyDietitian",
-    slug: config.slug ?? "mydietitian-mobile",
+    name: config.name ?? "Dytopia",
+    slug: config.slug ?? "dytopia-mobile",
     extra: {
       ...(config.extra || {}),
       apiBaseUrl: apiBaseUrl ?? undefined,

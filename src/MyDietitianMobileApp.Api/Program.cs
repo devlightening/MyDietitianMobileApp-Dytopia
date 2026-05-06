@@ -170,6 +170,186 @@ static Uri SafeOpenAiBaseAddress(string? configuredUrl, string fallback = "https
     return new Uri(fallback);
 }
 
+static bool WantsHtml(HttpContext context)
+    => context.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase);
+
+static string BuildOpenAiPingHtml(
+    bool apiKeyConfigured,
+    bool llmEnabled,
+    bool visionEnabled,
+    string model,
+    string baseUrl,
+    string timestamp)
+{
+    var overall = apiKeyConfigured && (llmEnabled || visionEnabled);
+    var statusText = overall ? "Hazır" : apiKeyConfigured ? "Anahtar var · özellik kapalı" : "API key eksik";
+    var statusClass = overall ? "ok" : apiKeyConfigured ? "warn" : "bad";
+    var llmClass = llmEnabled ? "ok" : "muted";
+    var visionClass = visionEnabled ? "ok" : "muted";
+    var keyClass = apiKeyConfigured ? "ok" : "bad";
+
+    return $$"""
+    <!doctype html>
+    <html lang="tr">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Dytopia · OpenAI Durumu</title>
+      <style>
+        :root {
+          --bg: #f3fbf6;
+          --card: rgba(255,255,255,.88);
+          --text: #123829;
+          --muted: #6f8179;
+          --green: #2fbf71;
+          --green-dark: #16844b;
+          --gold: #d8b33f;
+          --red: #e86f61;
+          --line: rgba(47,191,113,.22);
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          color: var(--text);
+          background:
+            radial-gradient(circle at 82% 12%, rgba(47,191,113,.18), transparent 28rem),
+            radial-gradient(circle at 8% 86%, rgba(108,211,162,.18), transparent 24rem),
+            var(--bg);
+          padding: 28px;
+        }
+        .shell {
+          width: min(880px, 100%);
+          border: 1px solid var(--line);
+          border-radius: 34px;
+          background: var(--card);
+          box-shadow: 0 24px 70px rgba(18,56,41,.12);
+          overflow: hidden;
+        }
+        .hero {
+          padding: 34px;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 24px;
+          align-items: start;
+          border-bottom: 1px solid var(--line);
+        }
+        .eyebrow { color: var(--green); letter-spacing: .18em; font-weight: 900; font-size: 13px; }
+        h1 { margin: 8px 0 10px; font-size: clamp(34px, 7vw, 64px); line-height: .96; letter-spacing: -.05em; }
+        p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.55; max-width: 620px; }
+        .status {
+          min-width: 146px;
+          border-radius: 26px;
+          padding: 18px 20px;
+          text-align: center;
+          border: 1px solid var(--line);
+          background: rgba(47,191,113,.08);
+        }
+        .status strong { display:block; font-size: 28px; line-height: 1; }
+        .status span { display:block; margin-top: 6px; color: var(--muted); font-weight: 800; }
+        .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 24px 34px 8px; }
+        .tile {
+          border: 1px solid var(--line);
+          border-radius: 24px;
+          background: rgba(255,255,255,.72);
+          padding: 18px;
+          min-height: 126px;
+        }
+        .label { color: var(--muted); font-weight: 900; letter-spacing:.08em; font-size: 12px; text-transform: uppercase; }
+        .value { margin-top: 12px; font-size: 24px; font-weight: 950; word-break: break-word; }
+        .pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-radius: 999px;
+          padding: 8px 12px;
+          margin-top: 10px;
+          font-weight: 900;
+          border: 1px solid currentColor;
+          background: rgba(47,191,113,.08);
+        }
+        .ok { color: var(--green-dark); }
+        .warn { color: var(--gold); }
+        .bad { color: var(--red); }
+        .muted { color: var(--muted); }
+        .footer {
+          display:flex;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 24px 34px 34px;
+          color: var(--muted);
+          font-weight: 800;
+          flex-wrap: wrap;
+        }
+        code {
+          border-radius: 12px;
+          background: rgba(18,56,41,.06);
+          padding: 6px 9px;
+          color: var(--text);
+        }
+        @media (max-width: 720px) {
+          body { padding: 16px; place-items: start center; }
+          .hero { grid-template-columns: 1fr; padding: 24px; }
+          .grid { grid-template-columns: 1fr; padding: 18px 24px 6px; }
+          .footer { padding: 20px 24px 28px; }
+        }
+      </style>
+    </head>
+    <body>
+      <main class="shell">
+        <section class="hero">
+          <div>
+            <div class="eyebrow">DYTOPIA · OPENAI</div>
+            <h1>AI bağlantı durumu</h1>
+            <p>Bu sayfa API anahtarını asla göstermez; sadece Dytopia'nın OpenAI destekli oyun, barkod/malzeme eşleştirme ve görsel tanıma akışlarına hazır olup olmadığını kontrol eder.</p>
+          </div>
+          <div class="status {{statusClass}}">
+            <strong>{{statusText}}</strong>
+            <span>genel durum</span>
+          </div>
+        </section>
+        <section class="grid">
+          <article class="tile">
+            <div class="label">API Key</div>
+            <div class="value {{keyClass}}">{{(apiKeyConfigured ? "Tanımlı" : "Eksik")}}</div>
+            <div class="pill {{keyClass}}">● {{(apiKeyConfigured ? "Gizli şekilde yüklendi" : "OpenAI:ApiKey gerekli")}}</div>
+          </article>
+          <article class="tile">
+            <div class="label">Oyun & Barkod LLM</div>
+            <div class="value {{llmClass}}">{{(llmEnabled ? "Aktif" : "Kapalı")}}</div>
+            <div class="pill {{llmClass}}">● IngredientLlm</div>
+          </article>
+          <article class="tile">
+            <div class="label">Vision</div>
+            <div class="value {{visionClass}}">{{(visionEnabled ? "Aktif" : "Kapalı")}}</div>
+            <div class="pill {{visionClass}}">● Görsel tanıma</div>
+          </article>
+          <article class="tile">
+            <div class="label">Model</div>
+            <div class="value">{{System.Net.WebUtility.HtmlEncode(model)}}</div>
+          </article>
+          <article class="tile">
+            <div class="label">Base URL</div>
+            <div class="value">{{System.Net.WebUtility.HtmlEncode(baseUrl)}}</div>
+          </article>
+          <article class="tile">
+            <div class="label">Saat</div>
+            <div class="value">{{System.Net.WebUtility.HtmlEncode(timestamp)}}</div>
+          </article>
+        </section>
+        <footer class="footer">
+          <span>JSON için: <code>Accept: application/json</code></span>
+          <span>Key değeri bilinçli olarak maskelenir.</span>
+        </footer>
+      </main>
+    </body>
+    </html>
+    """;
+}
+
 // ── LLM Normalization Layer (opt-in, disabled by default) ──────────────────
 var llmOptions = builder.Configuration.GetSection("IngredientLlm").Get<LlmNormalizationOptions>()
                  ?? new LlmNormalizationOptions();
@@ -177,6 +357,11 @@ llmOptions.ApiKey = ResolveOpenAiKey(builder.Configuration, llmOptions.ApiKeyEnv
 var llmProvider = llmOptions.ResolveProvider();
 builder.Services.AddSingleton(llmOptions);
 builder.Services.AddScoped<IngredientLlmCandidateBuilder>();
+builder.Services.AddHttpClient("openai-games", c =>
+{
+    c.BaseAddress = SafeOpenAiBaseAddress(llmOptions.BaseUrl);
+    c.Timeout = TimeSpan.FromSeconds(25);
+});
 if (llmProvider == IngredientLlmProvider.OpenAi)
 {
     // Timeout: 35s covers both LLM (15s) and Vision (gpt-4o up to 30s + buffer)
@@ -231,6 +416,8 @@ builder.Services.AddHttpClient("openfoodfacts", client =>
 {
     client.BaseAddress = new Uri((openFoodFactsOptions.BaseUrl?.TrimEnd('/') ?? "https://world.openfoodfacts.org") + "/");
     client.Timeout = TimeSpan.FromSeconds(Math.Max(1, openFoodFactsOptions.TimeoutSeconds));
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("DytopiaBarcodeResolver/1.0");
+    client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("tr-TR,tr;q=0.9,en;q=0.8");
 });
 
 builder.Services.AddScoped<IBarcodeIngredientResolutionService, BarcodeIngredientResolutionService>();
@@ -249,6 +436,8 @@ builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IKitchenNar
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientIdentityResolver, MyDietitianMobileApp.Application.Services.ClientIdentityResolver>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientActivityWriter, MyDietitianMobileApp.Application.Services.ClientActivityWriter>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientGamificationService, MyDietitianMobileApp.Application.Services.ClientGamificationService>();
+builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IDailyGameContentGenerator, MyDietitianMobileApp.Application.Services.DailyGameContentGenerator>();
+builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IClientGameService, MyDietitianMobileApp.Application.Services.ClientGameService>();
 builder.Services.AddScoped<MyDietitianMobileApp.Application.Services.IComplianceService, MyDietitianMobileApp.Application.Services.ComplianceService>();
 builder.Services.AddScoped<MyDietitianMobileApp.Infrastructure.Services.Import.RecipeImportOrchestrator>();
 builder.Services.AddSignalR();
@@ -970,6 +1159,54 @@ using (var scope = app.Services.CreateScope())
 
             CREATE INDEX IF NOT EXISTS "IX_ClientGamificationSnapshots_Date_QualifiedForStreak"
                 ON "ClientGamificationSnapshots" ("Date", "QualifiedForStreak");
+
+            CREATE TABLE IF NOT EXISTS "DailyGameChallenges" (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "Date" date NOT NULL,
+                "Language" character varying(10) NOT NULL DEFAULT 'tr',
+                "GameType" character varying(32) NOT NULL,
+                "Title" character varying(160) NOT NULL,
+                "Subtitle" character varying(240) NOT NULL DEFAULT '',
+                "Difficulty" character varying(24) NOT NULL DEFAULT 'easy',
+                "EstimatedSeconds" integer NOT NULL DEFAULT 60,
+                "PayloadJson" jsonb NOT NULL,
+                "AnswerKeyJson" jsonb NOT NULL,
+                "SourceProvider" character varying(32) NOT NULL DEFAULT 'fallback',
+                "IsFallback" boolean NOT NULL DEFAULT TRUE,
+                "GeneratedAtUtc" timestamp with time zone NOT NULL DEFAULT NOW()
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_DailyGameChallenges_Date_Language_GameType"
+                ON "DailyGameChallenges" ("Date", "Language", "GameType");
+
+            CREATE TABLE IF NOT EXISTS "ClientGameSessions" (
+                "Id" uuid NOT NULL PRIMARY KEY,
+                "ClientId" uuid NOT NULL,
+                "ChallengeId" uuid NOT NULL,
+                "GameDate" date NOT NULL,
+                "GameType" character varying(32) NOT NULL,
+                "CompletedAtUtc" timestamp with time zone NOT NULL DEFAULT NOW(),
+                "Score" integer NOT NULL DEFAULT 0,
+                "MaxScore" integer NOT NULL DEFAULT 100,
+                "DurationSeconds" integer NOT NULL DEFAULT 0,
+                "Moves" integer NOT NULL DEFAULT 0,
+                "CorrectCount" integer NOT NULL DEFAULT 0,
+                "Perfect" boolean NOT NULL DEFAULT FALSE,
+                "ResultJson" jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+                CONSTRAINT "FK_ClientGameSessions_Clients_ClientId"
+                    FOREIGN KEY ("ClientId") REFERENCES "Clients" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_ClientGameSessions_DailyGameChallenges_ChallengeId"
+                    FOREIGN KEY ("ChallengeId") REFERENCES "DailyGameChallenges" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ClientGameSessions_ClientId_ChallengeId"
+                ON "ClientGameSessions" ("ClientId", "ChallengeId");
+
+            CREATE INDEX IF NOT EXISTS "IX_ClientGameSessions_ClientId_GameDate_GameType"
+                ON "ClientGameSessions" ("ClientId", "GameDate", "GameType");
+
+            CREATE INDEX IF NOT EXISTS "IX_ClientGameSessions_CompletedAtUtc"
+                ON "ClientGameSessions" ("CompletedAtUtc");
             """);
     }
 
@@ -1101,11 +1338,19 @@ app.MapGet("/health", () => Results.Ok(new
 // OPENAI PING — key ve config kontrolü (key değerini asla döndürmez)
 // GET /api/openai/ping  |  GET /api/openai/vision/ping
 // ====================
-app.MapGet("/api/openai/ping", (VisionIngredientOptions vopts, LlmNormalizationOptions llmopts) =>
+app.MapGet("/api/openai/ping", (HttpContext http, VisionIngredientOptions vopts, LlmNormalizationOptions llmopts) =>
 {
     var key     = vopts.ApiKey ?? llmopts.ApiKey ?? Environment.GetEnvironmentVariable(vopts.ApiKeyEnvVar);
     var keySet  = !string.IsNullOrWhiteSpace(key);
     var baseUrl = SafeOpenAiBaseAddress(llmopts.BaseUrl).ToString();
+    var timestamp = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    if (WantsHtml(http))
+    {
+        return Results.Content(
+            BuildOpenAiPingHtml(keySet, llmopts.Enabled, vopts.Enabled, vopts.ModelName, baseUrl, timestamp),
+            "text/html; charset=utf-8");
+    }
+
     return Results.Ok(new
     {
         visionEnabled    = vopts.Enabled,
@@ -1113,7 +1358,7 @@ app.MapGet("/api/openai/ping", (VisionIngredientOptions vopts, LlmNormalizationO
         apiKeyConfigured = keySet,
         model            = vopts.ModelName,
         baseUrl,
-        timestamp        = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+        timestamp,
     });
 })
 .AllowAnonymous()
@@ -1121,11 +1366,17 @@ app.MapGet("/api/openai/ping", (VisionIngredientOptions vopts, LlmNormalizationO
 .WithMetadata(new ApiExplorerSettingsAttribute { IgnoreApi = true });
 
 // /api/openai/vision/ping — detaylı vision diagnostik (doc requirement)
-app.MapGet("/api/openai/vision/ping", (VisionIngredientOptions vopts, LlmNormalizationOptions llmopts) =>
+app.MapGet("/api/openai/vision/ping", (HttpContext http, VisionIngredientOptions vopts, LlmNormalizationOptions llmopts) =>
 {
     var key     = vopts.ApiKey ?? llmopts.ApiKey ?? Environment.GetEnvironmentVariable(vopts.ApiKeyEnvVar);
     var keySet  = !string.IsNullOrWhiteSpace(key);
     var baseUrl = SafeOpenAiBaseAddress(llmopts.BaseUrl).ToString();
+    if (WantsHtml(http))
+    {
+        return Results.Content(
+            BuildOpenAiPingHtml(keySet, llmopts.Enabled, vopts.Enabled, vopts.ModelName, baseUrl, DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")),
+            "text/html; charset=utf-8");
+    }
 
     if (!vopts.Enabled)
         return Results.Ok(new { enabled = false, apiKeyConfigured = keySet, model = vopts.ModelName, baseUrl,

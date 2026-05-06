@@ -9,10 +9,11 @@ import {
   Easing,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
 import { useInAppNotifications } from "../context/InAppNotificationContext";
-import ProduceBubble from "../components/decor/ProduceBubble";
+import DytopiaLogoBubble from "../components/decor/DytopiaLogoBubble";
 
 import BottomBar, { TabKey } from "../components/BottomBar";
 import KitchenQuickSheet from "../components/KitchenQuickSheet";
@@ -24,7 +25,7 @@ import MessagesScreen from "../screens/MessagesScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
 import type { Ingredient } from "../types/alternative";
-import { getPantry, replacePantry } from "../api/pantry";
+import { getPantry } from "../api/pantry";
 import { pingGamification } from "../api/gamification";
 import { getCareThread } from "../api/care";
 import { useGamification } from "../queries/useGamification";
@@ -38,6 +39,8 @@ import {
 import BadgeUnlockOverlay, { type BadgeInfo } from "../components/ui/BadgeUnlockOverlay";
 import StreakMilestoneToast, { STREAK_MILESTONES } from "../components/ui/StreakMilestoneToast";
 import { buildBadgeUnlockedBanner, buildStreakMilestoneBanner } from "../notifications/notificationEvents";
+import { migrateLegacyFavoriteRecipes } from "../api/favorites";
+import { subscribeToGamificationChanges } from "../utils/gamificationEvents";
 
 const TAB_ORDER: TabKey[] = ["dashboard", "plans", "kitchen", "messages", "profile"];
 const SEEN_BADGES_KEY = "celebrated_badge_ids_v1";
@@ -60,6 +63,7 @@ type SceneAnimationState = {
 type SceneAnimationMap = Record<TabKey, SceneAnimationState>;
 
 export default function AppShell() {
+  const { user } = useAuth();
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
   const { notify } = useInAppNotifications();
@@ -67,14 +71,13 @@ export default function AppShell() {
   const [active, setActive] = useState<TabKey>("dashboard");
   const [visitedTabs, setVisitedTabs] = useState<TabKey[]>(["dashboard"]);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [selected, setSelected] = useState<Ingredient[]>([]);
+  const [kitchenIngredients, setKitchenIngredients] = useState<Ingredient[]>([]);
+  const [pantryIngredients, setPantryIngredients] = useState<Ingredient[]>([]);
   const [messagesAttention, setMessagesAttention] = useState(false);
   const [tabSwipeEnabled, setTabSwipeEnabled] = useState(true);
   const tabSwipeEnabledRef = useRef(true);
   const pantryLoadedRef = useRef(false);
-  const pantryHydratingRef = useRef(true);
   const lastSyncedPantryRef = useRef("");
-  const pantrySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionLockRef = useRef(false);
   const latestInboundMessageIdRef = useRef<string | null>(null);
   const careSeededRef = useRef(false);
@@ -89,6 +92,7 @@ export default function AppShell() {
 
   // ── Celebration state ────────────────────────────────────────────────────
   const [pendingBadge, setPendingBadge] = useState<BadgeInfo | null>(null);
+  const [badgeQueue, setBadgeQueue] = useState<BadgeInfo[]>([]);
   const [pendingStreak, setPendingStreak] = useState<number | null>(null);
 
   // Persistence refs — loaded from SecureStore
@@ -106,8 +110,36 @@ export default function AppShell() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!user?.isPremium) return;
+    void migrateLegacyFavoriteRecipes(user.publicUserId).catch(() => {
+      // Non-blocking. Legacy favorites can still be retried on the next app session.
+    });
+  }, [user?.isPremium, user?.publicUserId]);
+
   // ── Gamification watch ───────────────────────────────────────────────────
-  const { data: gamification } = useGamification();
+  const { data: gamification, refetch: refetchGamification } = useGamification();
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToGamificationChanges(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void refetchGamification();
+      }, 180);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [refetchGamification]);
+
+  useEffect(() => {
+    if (pendingBadge || badgeQueue.length === 0) return;
+    const [nextBadge, ...rest] = badgeQueue;
+    setPendingBadge(nextBadge);
+    setBadgeQueue(rest);
+  }, [badgeQueue, pendingBadge]);
 
   useEffect(() => {
     if (!gamification) return;
@@ -115,7 +147,7 @@ export default function AppShell() {
     const motivation = mapGamificationToMotivation(gamification);
     if (!motivation) return;
 
-    const badges = buildBadgeCollection(motivation, 'tr');
+    const badges = buildBadgeCollection(motivation, language);
     const unlocked = badges.filter(b => b.unlocked);
 
     if (!celebInitRef.current) {
@@ -128,18 +160,27 @@ export default function AppShell() {
     }
 
     // Check for newly unlocked badges
-    const newBadges = unlocked.filter(b => !seenBadgesRef.current.has(b.id));
-    if (newBadges.length > 0 && !pendingBadge) {
-      const badge = newBadges[0];
-      setPendingBadge({
+    const recentUnlockIds = new Set(gamification.recentUnlocks ?? []);
+    const newBadges = unlocked
+      .filter(b => !seenBadgesRef.current.has(b.id))
+      .sort((left, right) => {
+        const leftRecent = recentUnlockIds.has(left.id) ? 0 : 1;
+        const rightRecent = recentUnlockIds.has(right.id) ? 0 : 1;
+        return leftRecent - rightRecent || right.priority - left.priority;
+      });
+    if (newBadges.length > 0) {
+      const badgeInfos = newBadges.map((badge) => ({
         id: badge.id,
         title: badge.title,
         flavor: badge.flavor,
         icon: badge.icon,
         color: getToneColor(theme, badge.tone),
+      }));
+      setBadgeQueue((current) => [...current, ...badgeInfos]);
+      newBadges.forEach((badge) => {
+        notify(buildBadgeUnlockedBanner(language, badge.title, badge.flavor, badge.id));
+        seenBadgesRef.current.add(badge.id);
       });
-      notify(buildBadgeUnlockedBanner(language, badge.title, badge.flavor, badge.id));
-      unlocked.forEach(b => seenBadgesRef.current.add(b.id));
       void SecureStore.setItemAsync(SEEN_BADGES_KEY, JSON.stringify([...seenBadgesRef.current]));
       return; // Show badge first, streak toast will wait
     }
@@ -155,7 +196,7 @@ export default function AppShell() {
       seenStreaksRef.current.add(newMilestone);
       void SecureStore.setItemAsync(SEEN_STREAKS_KEY, JSON.stringify([...seenStreaksRef.current]));
     }
-  }, [gamification]);
+  }, [gamification, language, notify, theme]);
 
   // ── Tab switching ────────────────────────────────────────────────────────
   const activeRef = useRef<TabKey>("dashboard");
@@ -215,13 +256,13 @@ export default function AppShell() {
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) =>
         tabSwipeEnabledRef.current &&
-        Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 2.8,
+        Math.abs(gs.dx) > 28 && Math.abs(gs.dx) > Math.abs(gs.dy) * 3.2,
       onPanResponderEnd: (_, gs) => {
         if (!tabSwipeEnabledRef.current) return;
         const idx  = TAB_ORDER.indexOf(activeRef.current);
         const dist = Math.abs(gs.dx);
         const vel  = Math.abs(gs.vx);
-        if (dist < 50 && vel < 0.35) return;
+        if (dist < 72 && vel < 0.45) return;
         if (gs.dx < 0 && idx < TAB_ORDER.length - 1) switchTabFn.current(TAB_ORDER[idx + 1]);
         else if (gs.dx > 0 && idx > 0) switchTabFn.current(TAB_ORDER[idx - 1]);
       },
@@ -308,49 +349,24 @@ export default function AppShell() {
           id: item.ingredientId,
           canonicalName: item.ingredientName,
         }));
-        setSelected(normalized);
+        setPantryIngredients(normalized);
+        setKitchenIngredients((current) => current.length > 0 ? current : normalized);
         lastSyncedPantryRef.current = pantrySignature(normalized);
       } catch {
         if (!alive) return;
-        setSelected(current => current);
       } finally {
-        pantryHydratingRef.current = false;
         pantryLoadedRef.current = true;
       }
     }
     void hydratePantry();
     return () => {
       alive = false;
-      pantryHydratingRef.current = false;
-      if (pantrySaveTimerRef.current) clearTimeout(pantrySaveTimerRef.current);
     };
   }, []);
 
-  useEffect(() => {
-    if (!pantryLoadedRef.current || pantryHydratingRef.current) return;
-    const signature = pantrySignature(selected);
-    if (signature === lastSyncedPantryRef.current) return;
-
-    if (pantrySaveTimerRef.current) clearTimeout(pantrySaveTimerRef.current);
-
-    pantrySaveTimerRef.current = setTimeout(() => {
-      // Re-check: by the time the timer fires, a focus re-hydration may have
-      // already synced lastSyncedPantryRef — skip the PUT if signatures match.
-      const currentSignature = pantrySignature(selected);
-      if (currentSignature === lastSyncedPantryRef.current) return;
-      void replacePantry(selected)
-        .then(() => {
-          lastSyncedPantryRef.current = currentSignature;
-        })
-        .catch(() => undefined);
-    }, 1500);
-
-    return () => { if (pantrySaveTimerRef.current) clearTimeout(pantrySaveTimerRef.current); };
-  }, [selected]);
-
   // Re-hydrate pantry from backend whenever Shell regains focus after a
-  // stack-screen (PantryScreen, RecipeDetail, etc.) is popped.  This prevents
-  // the auto-save from overwriting changes made inside PantryScreen.
+  // stack-screen is popped. Kitchen keeps its own temporary pot state; only
+  // PantryScreen writes durable pantry changes.
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       if (!pantryLoadedRef.current) return; // Skip the very first focus (hydratePantry handles it)
@@ -362,14 +378,18 @@ export default function AppShell() {
           }));
           const newSig = pantrySignature(normalized);
           if (newSig === lastSyncedPantryRef.current) return;
-          // Update ref FIRST so the auto-save effect sees a match and skips the PUT
           lastSyncedPantryRef.current = newSig;
-          setSelected(normalized);
+          setPantryIngredients(normalized);
         })
         .catch(() => undefined);
     });
     return unsubscribe;
   }, [navigation]);
+
+  const handlePantryUpdated = useCallback((ingredients: Ingredient[]) => {
+    setPantryIngredients(ingredients);
+    lastSyncedPantryRef.current = pantrySignature(ingredients);
+  }, []);
 
   // ── Screens ──────────────────────────────────────────────────────────────
   const dashboardScene = useMemo(() => (
@@ -378,8 +398,9 @@ export default function AppShell() {
       onPressPlans={openPlansTab}
       onPressKitchen={openKitchenTab}
       onPressMessages={openMessagesTab}
+      onTabSwipeEnabledChange={handleTabSwipeEnabledChange}
     />
-  ), [active, openKitchenTab, openMessagesTab, openPlansTab]);
+  ), [active, handleTabSwipeEnabledChange, openKitchenTab, openMessagesTab, openPlansTab]);
 
   const plansScene = useMemo(() => (
     <PlansScreen
@@ -391,12 +412,15 @@ export default function AppShell() {
 
   const kitchenScene = useMemo(() => (
     <KitchenScreen
-      selectedIngredients={selected}
-      onChangeSelected={setSelected}
+      selectedIngredients={kitchenIngredients}
+      onChangeSelected={setKitchenIngredients}
+      pantryIngredients={pantryIngredients}
+      onChangePantry={handlePantryUpdated}
       openQuickSheet={openQuickKitchen}
       isActive={active === "kitchen"}
+      onTabSwipeEnabledChange={handleTabSwipeEnabledChange}
     />
-  ), [active, openQuickKitchen, selected]);
+  ), [active, handlePantryUpdated, handleTabSwipeEnabledChange, kitchenIngredients, openQuickKitchen, pantryIngredients]);
 
   const messagesScene = useMemo(() => (
     <MessagesScreen isActive={active === "messages"} />
@@ -414,9 +438,9 @@ export default function AppShell() {
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
-      <ProduceBubble icon="food-apple-outline" iconSize={34} iconColor={`${theme.primary}42`} style={[s.blobA, { backgroundColor: theme.primaryGlow }]} />
-      <ProduceBubble icon="carrot" iconSize={30} iconColor={`${theme.emerald}42`} style={[s.blobB, { backgroundColor: theme.emeraldGlow }]} />
-      <ProduceBubble icon="fruit-pear" iconSize={28} iconColor={`${theme.accent}50`} style={[s.blobC, { backgroundColor: `${theme.accent}22` }]} />
+      <DytopiaLogoBubble size={200} opacity={0.3} logoOpacity={0.36} style={s.blobA} />
+      <DytopiaLogoBubble size={160} opacity={0.24} logoOpacity={0.34} style={s.blobB} />
+      <DytopiaLogoBubble size={126} opacity={0.18} logoOpacity={0.32} style={s.blobC} />
 
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
 
@@ -451,8 +475,8 @@ export default function AppShell() {
       <KitchenQuickSheet
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        selectedIngredients={selected}
-        onChangeSelected={setSelected}
+        selectedIngredients={kitchenIngredients}
+        onChangeSelected={setKitchenIngredients}
         onGoKitchen={() => { setSheetOpen(false); switchTabFn.current("kitchen"); }}
       />
 

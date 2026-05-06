@@ -38,6 +38,9 @@ export interface ShoppingListSummary {
 export interface ShoppingPlanIngredient {
   ingredientId: string;
   ingredientName: string;
+  quantity?: number | null;
+  unit?: string | null;
+  displayAmount?: string | null;
 }
 
 export interface ShoppingIngredientGroups {

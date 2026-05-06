@@ -65,6 +65,12 @@ public class ClientShoppingListController : ControllerBase
             return BadRequest(ApiProblems.Validation("TITLE_REQUIRED", "Liste maddesi basligi gereklidir."));
 
         await UpsertManualItemAsync(identity.Value.clientId, ingredient, title!, request.Quantity, request.Unit, request.Note);
+        await WriteShoppingActivityAsync(identity.Value.clientId, "shopping_item_added", new
+        {
+            title,
+            ingredientId = ingredient?.Id,
+            sourceType = "Manual"
+        });
         return Ok(await BuildResponseAsync(identity.Value.clientId));
     }
 
@@ -97,6 +103,14 @@ public class ClientShoppingListController : ControllerBase
             string.IsNullOrWhiteSpace(request.SourceType) ? "Kitchen" : request.SourceType.Trim(),
             request.SourceReferenceId,
             request.Note);
+
+        await WriteShoppingActivityAsync(identity.Value.clientId, "shopping_items_added", new
+        {
+            count = ingredients.Count,
+            sourceType = string.IsNullOrWhiteSpace(request.SourceType) ? "Kitchen" : request.SourceType.Trim(),
+            sourceReferenceId = request.SourceReferenceId,
+            ingredientNames = ingredients.Select(x => x.CanonicalName).Take(8).ToList()
+        });
 
         return Ok(await BuildResponseAsync(identity.Value.clientId));
     }
@@ -132,6 +146,13 @@ public class ClientShoppingListController : ControllerBase
 
         if (plan == null)
         {
+            await WriteShoppingActivityAsync(identity.Value.clientId, "shopping_list_generated", new
+            {
+                status = "empty",
+                planDate = AppTime.LocalToday.ToString("yyyy-MM-dd"),
+                generatedCount = 0
+            });
+
             return Ok(new
             {
                 response = await BuildResponseAsync(identity.Value.clientId),
@@ -154,6 +175,37 @@ public class ClientShoppingListController : ControllerBase
             .ToList();
         var missingByCategory = BuildCategoryCountsFromSuggestions(suggestions);
         var coveredByCategory = BuildCategoryCountsFromCards(recipeCards, covered: true);
+        var selectedAlternativeCount = recipeCards.Count(x => x.GeneratedFromSelectedRecipe);
+
+        await WriteShoppingActivityAsync(identity.Value.clientId, "shopping_list_generated", new
+        {
+            status = "generated",
+            planDate = AppTime.LocalToday.ToString("yyyy-MM-dd"),
+            generatedCount = uniqueIngredientGroups.Count,
+            recipeCount = plan.Items
+                .Select(GetEffectiveRecipeId)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Distinct()
+                .Count(),
+            mealCount = plan.Items.Count(x => GetEffectiveRecipeId(x).HasValue),
+            mandatoryCount = uniqueIngredientGroups.Count(g => g.Any(x => x.Category == IngredientCategoryKeys.Mandatory)),
+            optionalCount = uniqueIngredientGroups.Count(g => g.Any(x => x.Category == IngredientCategoryKeys.Optional)),
+            flavoringCount = uniqueIngredientGroups.Count(g => g.Any(x => x.Category == IngredientCategoryKeys.Flavoring)),
+            pantryCoveredCount = recipeCards.Sum(x => x.PantryCoveredCount),
+            selectedAlternativeCount,
+            recipeCards = recipeCards.Select(x => new
+            {
+                x.MealTitle,
+                x.MealTime,
+                x.RecipeName,
+                x.PlannedRecipeName,
+                x.SelectedRecipeSource,
+                x.MissingCount,
+                x.PantryCoveredCount,
+                x.CoveragePercent
+            }).Take(8).ToList()
+        });
 
         return Ok(new
         {
@@ -207,6 +259,15 @@ public class ClientShoppingListController : ControllerBase
             recipe.Id.ToString(),
             $"Generated from recipe: {recipe.Name}");
 
+        await WriteShoppingActivityAsync(identity.Value.clientId, "shopping_items_added", new
+        {
+            count = missingIngredients.Count,
+            sourceType = "Recipe",
+            recipeId = recipe.Id,
+            recipeName = recipe.Name,
+            ingredientNames = missingIngredients.Select(x => x.CanonicalName).Take(8).ToList()
+        });
+
         return Ok(await BuildResponseAsync(identity.Value.clientId));
     }
 
@@ -224,7 +285,21 @@ public class ClientShoppingListController : ControllerBase
         if (item == null)
             return NotFound(ApiProblems.NotFound("SHOPPING_ITEM_NOT_FOUND", "Liste maddesi bulunamadi."));
 
-        item.SetChecked(request?.IsChecked ?? !item.IsChecked);
+        var nextChecked = request?.IsChecked ?? !item.IsChecked;
+        item.SetChecked(nextChecked);
+        _appDb.ClientActivities.Add(new ClientActivity(
+            identity.Value.clientId,
+            await GetActiveDietitianIdAsync(identity.Value.clientId),
+            "shopping_item_checked",
+            new
+            {
+                itemId = item.Id,
+                title = item.Title,
+                isChecked = nextChecked,
+                sourceType = item.SourceType,
+                primaryMealTitle = item.PrimaryMealTitle,
+                primaryMealTime = item.PrimaryMealTime
+            }));
         await _appDb.SaveChangesAsync();
         return Ok(await BuildResponseAsync(identity.Value.clientId));
     }
@@ -244,6 +319,18 @@ public class ClientShoppingListController : ControllerBase
             return NotFound(ApiProblems.NotFound("SHOPPING_ITEM_NOT_FOUND", "Liste maddesi bulunamadi."));
 
         _appDb.ClientShoppingListItems.Remove(item);
+        _appDb.ClientActivities.Add(new ClientActivity(
+            identity.Value.clientId,
+            await GetActiveDietitianIdAsync(identity.Value.clientId),
+            "shopping_item_removed",
+            new
+            {
+                itemId = item.Id,
+                title = item.Title,
+                sourceType = item.SourceType,
+                primaryMealTitle = item.PrimaryMealTitle,
+                primaryMealTime = item.PrimaryMealTime
+            }));
         await _appDb.SaveChangesAsync();
         return NoContent();
     }
@@ -261,6 +348,15 @@ public class ClientShoppingListController : ControllerBase
             .ToListAsync();
 
         _appDb.ClientShoppingListItems.RemoveRange(checkedItems);
+        _appDb.ClientActivities.Add(new ClientActivity(
+            identity.Value.clientId,
+            await GetActiveDietitianIdAsync(identity.Value.clientId),
+            "shopping_checked_cleared",
+            new
+            {
+                count = checkedItems.Count,
+                titles = checkedItems.Select(x => x.Title).Take(8).ToList()
+            }));
         await _appDb.SaveChangesAsync();
         return Ok(await BuildResponseAsync(identity.Value.clientId));
     }
@@ -405,6 +501,25 @@ public class ClientShoppingListController : ControllerBase
         await _appDb.SaveChangesAsync();
     }
 
+    private async Task WriteShoppingActivityAsync(Guid clientId, string type, object metadata)
+    {
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId,
+            await GetActiveDietitianIdAsync(clientId),
+            type,
+            metadata));
+        await _appDb.SaveChangesAsync();
+    }
+
+    private async Task<Guid?> GetActiveDietitianIdAsync(Guid clientId)
+    {
+        return await _appDb.Clients
+            .AsNoTracking()
+            .Where(x => x.Id == clientId)
+            .Select(x => x.ActiveDietitianId)
+            .FirstOrDefaultAsync();
+    }
+
     private async Task SyncTodayPlanSuggestionsAsync(
         Guid clientId,
         Guid planId,
@@ -465,8 +580,8 @@ public class ClientShoppingListController : ControllerBase
                     clientId,
                     group.Key,
                     first.IngredientName,
-                    null,
-                    null,
+                    ResolveCombinedQuantity(group),
+                    ResolveCombinedUnit(group),
                     "TodayPlan",
                     sourceReferenceId,
                     note,
@@ -480,8 +595,8 @@ public class ClientShoppingListController : ControllerBase
 
             current.RefreshFromSuggestion(
                 first.IngredientName,
-                current.Quantity,
-                current.Unit,
+                ResolveCombinedQuantity(group),
+                ResolveCombinedUnit(group),
                 "TodayPlan",
                 sourceReferenceId,
                 note,
@@ -522,9 +637,9 @@ public class ClientShoppingListController : ControllerBase
             .ToDictionary(
                 g => g.Key,
                 g => new ExplicitRecipeIngredientLookup(
-                    g.Where(x => x.Role == RecipeIngredient.MandatoryRole).Select(x => x.Ingredient!).DistinctBy(x => x.Id).ToList(),
-                    g.Where(x => x.Role == RecipeIngredient.OptionalRole).Select(x => x.Ingredient!).DistinctBy(x => x.Id).ToList(),
-                    g.Where(x => x.Role == RecipeIngredient.FlavoringRole).Select(x => x.Ingredient!).DistinctBy(x => x.Id).ToList()));
+                    g.Where(x => x.Role == RecipeIngredient.MandatoryRole).Select(ToIngredientLine).DistinctBy(x => x.IngredientId).ToList(),
+                    g.Where(x => x.Role == RecipeIngredient.OptionalRole).Select(ToIngredientLine).DistinctBy(x => x.IngredientId).ToList(),
+                    g.Where(x => x.Role == RecipeIngredient.FlavoringRole).Select(ToIngredientLine).DistinctBy(x => x.IngredientId).ToList()));
 
         var suggestions = new List<ShoppingIngredientSuggestion>();
         foreach (var mealItem in plan.Items.OrderBy(x => x.Time))
@@ -543,43 +658,49 @@ public class ClientShoppingListController : ControllerBase
             var selectedRecipeName = generatedFromSelectedRecipe ? recipe.Name : null;
             var mealTime = AppTime.FormatTimeKey(mealItem.Time);
 
-            foreach (var ingredient in ingredientGroups.Mandatory.Where(x => !pantryIds.Contains(x.Id)))
+            foreach (var ingredient in ingredientGroups.Mandatory.Where(x => !pantryIds.Contains(x.IngredientId)))
             {
                 suggestions.Add(new ShoppingIngredientSuggestion(
-                    ingredient.Id,
-                    ingredient.CanonicalName,
+                    ingredient.IngredientId,
+                    ingredient.IngredientName,
                     IngredientCategoryKeys.Mandatory,
                     mealItem.Id,
                     mealItem.Title,
                     mealTime,
                     generatedFromSelectedRecipe,
-                    selectedRecipeName));
+                    selectedRecipeName,
+                    ingredient.Quantity,
+                    ingredient.Unit));
             }
 
-            foreach (var ingredient in ingredientGroups.Optional.Where(x => !pantryIds.Contains(x.Id)))
+            foreach (var ingredient in ingredientGroups.Optional.Where(x => !pantryIds.Contains(x.IngredientId)))
             {
                 suggestions.Add(new ShoppingIngredientSuggestion(
-                    ingredient.Id,
-                    ingredient.CanonicalName,
+                    ingredient.IngredientId,
+                    ingredient.IngredientName,
                     IngredientCategoryKeys.Optional,
                     mealItem.Id,
                     mealItem.Title,
                     mealTime,
                     generatedFromSelectedRecipe,
-                    selectedRecipeName));
+                    selectedRecipeName,
+                    ingredient.Quantity,
+                    ingredient.Unit));
             }
 
-            foreach (var ingredient in ingredientGroups.Flavoring.Where(x => !pantryIds.Contains(x.Id)))
+            foreach (var ingredient in ingredientGroups.Flavoring.Where(x => !pantryIds.Contains(x.IngredientId)))
             {
                 suggestions.Add(new ShoppingIngredientSuggestion(
-                    ingredient.Id,
-                    ingredient.CanonicalName,
+                    ingredient.IngredientId,
+                    ingredient.IngredientName,
                     IngredientCategoryKeys.Flavoring,
                     mealItem.Id,
                     mealItem.Title,
                     mealTime,
                     generatedFromSelectedRecipe,
-                    selectedRecipeName));
+                    selectedRecipeName,
+                    ingredient.Quantity,
+                    ingredient.Unit));
             }
         }
 
@@ -613,9 +734,9 @@ public class ClientShoppingListController : ControllerBase
             .ToDictionary(
                 g => g.Key,
                 g => new ExplicitRecipeIngredientLookup(
-                    g.Where(x => x.Role == RecipeIngredient.MandatoryRole).Select(x => x.Ingredient!).DistinctBy(x => x.Id).ToList(),
-                    g.Where(x => x.Role == RecipeIngredient.OptionalRole).Select(x => x.Ingredient!).DistinctBy(x => x.Id).ToList(),
-                    g.Where(x => x.Role == RecipeIngredient.FlavoringRole).Select(x => x.Ingredient!).DistinctBy(x => x.Id).ToList()));
+                    g.Where(x => x.Role == RecipeIngredient.MandatoryRole).Select(ToIngredientLine).DistinctBy(x => x.IngredientId).ToList(),
+                    g.Where(x => x.Role == RecipeIngredient.OptionalRole).Select(ToIngredientLine).DistinctBy(x => x.IngredientId).ToList(),
+                    g.Where(x => x.Role == RecipeIngredient.FlavoringRole).Select(ToIngredientLine).DistinctBy(x => x.IngredientId).ToList()));
 
         var cards = new List<ShoppingPlanRecipeCardDto>();
         foreach (var mealItem in plan.Items.OrderBy(x => x.Time))
@@ -660,8 +781,8 @@ public class ClientShoppingListController : ControllerBase
         IReadOnlySet<Guid> pantryIds,
         bool missing)
     {
-        bool ShouldInclude(Ingredient ingredient)
-            => missing ? !pantryIds.Contains(ingredient.Id) : pantryIds.Contains(ingredient.Id);
+        bool ShouldInclude(RecipeIngredientLine ingredient)
+            => missing ? !pantryIds.Contains(ingredient.IngredientId) : pantryIds.Contains(ingredient.IngredientId);
 
         return new ShoppingIngredientGroupDto(
             ToShoppingIngredients(groups.Mandatory.Where(ShouldInclude)),
@@ -669,10 +790,15 @@ public class ClientShoppingListController : ControllerBase
             ToShoppingIngredients(groups.Flavoring.Where(ShouldInclude)));
     }
 
-    private static List<ShoppingPlanIngredientDto> ToShoppingIngredients(IEnumerable<Ingredient> ingredients)
+    private static List<ShoppingPlanIngredientDto> ToShoppingIngredients(IEnumerable<RecipeIngredientLine> ingredients)
         => ingredients
-            .DistinctBy(x => x.Id)
-            .Select(x => new ShoppingPlanIngredientDto(x.Id, x.CanonicalName))
+            .DistinctBy(x => x.IngredientId)
+            .Select(x => new ShoppingPlanIngredientDto(
+                x.IngredientId,
+                x.IngredientName,
+                x.Quantity,
+                x.Unit,
+                FormatDisplayAmount(x.Quantity, x.Unit)))
             .ToList();
 
     private static int CountShoppingGroupItems(ShoppingIngredientGroupDto groups)
@@ -682,8 +808,8 @@ public class ClientShoppingListController : ControllerBase
         RecipeIngredientGroups groups,
         IReadOnlySet<Guid> pantryIds)
     {
-        static decimal Ratio(IReadOnlyCollection<Ingredient> ingredients, IReadOnlySet<Guid> pantryIds)
-            => ingredients.Count == 0 ? 1m : (decimal)ingredients.Count(x => pantryIds.Contains(x.Id)) / ingredients.Count;
+        static decimal Ratio(IReadOnlyCollection<RecipeIngredientLine> ingredients, IReadOnlySet<Guid> pantryIds)
+            => ingredients.Count == 0 ? 1m : (decimal)ingredients.Count(x => pantryIds.Contains(x.IngredientId)) / ingredients.Count;
 
         var score =
             Ratio(groups.Mandatory, pantryIds) * 70m +
@@ -735,16 +861,16 @@ public class ClientShoppingListController : ControllerBase
 
     private static RecipeIngredientGroups BuildRecipeIngredientGroups(Recipe recipe, ExplicitRecipeIngredientLookup? explicitLookup)
     {
-        var explicitMandatory = explicitLookup?.Mandatory ?? new List<Ingredient>();
-        var explicitOptional = explicitLookup?.Optional ?? new List<Ingredient>();
-        var explicitFlavoring = explicitLookup?.Flavoring ?? new List<Ingredient>();
+        var explicitMandatory = explicitLookup?.Mandatory ?? new List<RecipeIngredientLine>();
+        var explicitOptional = explicitLookup?.Optional ?? new List<RecipeIngredientLine>();
+        var explicitFlavoring = explicitLookup?.Flavoring ?? new List<RecipeIngredientLine>();
 
         var mandatory = explicitMandatory.Count > 0
             ? explicitMandatory
-            : recipe.MandatoryIngredients.DistinctBy(x => x.Id).ToList();
+            : recipe.MandatoryIngredients.DistinctBy(x => x.Id).Select(ToIngredientLine).ToList();
 
-        List<Ingredient> optional;
-        List<Ingredient> flavoring;
+        List<RecipeIngredientLine> optional;
+        List<RecipeIngredientLine> flavoring;
         if (explicitOptional.Count > 0 || explicitFlavoring.Count > 0)
         {
             optional = explicitOptional;
@@ -755,15 +881,27 @@ public class ClientShoppingListController : ControllerBase
             flavoring = recipe.OptionalIngredients
                 .Where(x => x.IsCondiment)
                 .DistinctBy(x => x.Id)
+                .Select(ToIngredientLine)
                 .ToList();
             optional = recipe.OptionalIngredients
                 .Where(x => !x.IsCondiment)
                 .DistinctBy(x => x.Id)
+                .Select(ToIngredientLine)
                 .ToList();
         }
 
         return new RecipeIngredientGroups(mandatory, optional, flavoring);
     }
+
+    private static RecipeIngredientLine ToIngredientLine(RecipeIngredient row)
+        => new(
+            row.IngredientId,
+            row.Ingredient!.CanonicalName,
+            row.Quantity,
+            row.Unit);
+
+    private static RecipeIngredientLine ToIngredientLine(Ingredient ingredient)
+        => new(ingredient.Id, ingredient.CanonicalName, null, null);
 
     private static string BuildTodayPlanNote(
         IReadOnlyCollection<ShoppingSourceMealDto> sourceMeals,
@@ -778,6 +916,43 @@ public class ClientShoppingListController : ControllerBase
         return extraMeals > 0
             ? $"{primaryMeal.MealTitle} için {roleSummary}. +{extraMeals} öğünde daha kullanılıyor."
             : $"{primaryMeal.MealTitle} için {roleSummary}.";
+    }
+
+    private static decimal? ResolveCombinedQuantity(IEnumerable<ShoppingIngredientSuggestion> suggestions)
+    {
+        var items = suggestions.ToList();
+        var units = items
+            .Select(x => x.Unit?.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (units.Count != 1 || items.Any(x => !x.Quantity.HasValue))
+            return null;
+
+        return items.Sum(x => x.Quantity!.Value);
+    }
+
+    private static string? ResolveCombinedUnit(IEnumerable<ShoppingIngredientSuggestion> suggestions)
+    {
+        var units = suggestions
+            .Select(x => x.Unit?.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return units.Count == 1 ? units[0] : null;
+    }
+
+    private static string? FormatDisplayAmount(decimal? quantity, string? unit)
+    {
+        if (!quantity.HasValue || string.IsNullOrWhiteSpace(unit))
+            return null;
+
+        var formatted = quantity.Value % 1 == 0
+            ? quantity.Value.ToString("0")
+            : quantity.Value.ToString("0.##");
+        return $"{formatted} {unit.Trim()}";
     }
 
     private static string ToRoleDisplayName(string category)
@@ -891,7 +1066,9 @@ internal sealed record ShoppingIngredientSuggestion(
     string MealTitle,
     string MealTime,
     bool GeneratedFromSelectedRecipe,
-    string? SelectedRecipeName);
+    string? SelectedRecipeName,
+    decimal? Quantity,
+    string? Unit);
 
 internal sealed record ShoppingSourceMealDto(
     Guid MealItemId,
@@ -903,7 +1080,10 @@ internal sealed record ShoppingSourceMealDto(
 
 internal sealed record ShoppingPlanIngredientDto(
     Guid IngredientId,
-    string IngredientName);
+    string IngredientName,
+    decimal? Quantity,
+    string? Unit,
+    string? DisplayAmount);
 
 internal sealed record ShoppingIngredientGroupDto(
     List<ShoppingPlanIngredientDto> Mandatory,
@@ -931,14 +1111,20 @@ internal sealed record ShoppingPlanRecipeCardDto(
     int PantryCoveredCount);
 
 internal sealed record ExplicitRecipeIngredientLookup(
-    List<Ingredient> Mandatory,
-    List<Ingredient> Optional,
-    List<Ingredient> Flavoring);
+    List<RecipeIngredientLine> Mandatory,
+    List<RecipeIngredientLine> Optional,
+    List<RecipeIngredientLine> Flavoring);
 
 internal sealed record RecipeIngredientGroups(
-    List<Ingredient> Mandatory,
-    List<Ingredient> Optional,
-    List<Ingredient> Flavoring);
+    List<RecipeIngredientLine> Mandatory,
+    List<RecipeIngredientLine> Optional,
+    List<RecipeIngredientLine> Flavoring);
+
+internal sealed record RecipeIngredientLine(
+    Guid IngredientId,
+    string IngredientName,
+    decimal? Quantity,
+    string? Unit);
 
 internal static class IngredientCategoryKeys
 {

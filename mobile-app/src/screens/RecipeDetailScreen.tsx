@@ -1,23 +1,31 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator } from "react-native";
-import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
+import { useInAppNotifications } from "../context/InAppNotificationContext";
+import { useFeedback } from "../context/FeedbackContext";
 import { spacing, radii } from "../theme/tokens";
 import { dur } from "../hooks/useAuraMotion";
 import type { RecipeMatchResult } from "../api/kitchen";
 import { getRecipePlanContext, type RecipePlanContext } from "../api/alternative";
+import { favoriteRecipe, unfavoriteRecipe } from "../api/favorites";
+import { addIngredientsToShoppingList } from "../api/shopping-list";
 import ProduceBubble from "../components/decor/ProduceBubble";
+import DytopiaWatermark from "../components/decor/DytopiaWatermark";
 import RecipeNutritionPanel from "../components/recipes/RecipeNutritionPanel";
 import { buildWhySuggested, formatCompatibilityPercent, getMatchTierLabel } from "../utils/recipeMatchPresentation";
+import type { CookingIngredient, CookingModePayload } from "./CookingModeScreen";
+import { Routes } from "../navigation/routes";
 
-type ScreenRoute = RouteProp<{ params: { result: RecipeMatchResult } }, "params">;
+type ScreenRoute = RouteProp<{ params: { result: RecipeMatchResult; fromFavorites?: boolean } }, "params">;
 
 // â”€â”€ Nutrition table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -129,61 +137,150 @@ function Pill({
   );
 }
 
+function formatAmountValue(value?: number | null) {
+  if (value == null || !Number.isFinite(Number(value))) return "";
+  return Number(value).toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function formatIngredientLabel(item: { name: string; quantity?: number | null; unit?: string | null; displayAmount?: string | null }) {
+  const amount = item.displayAmount?.trim() || (item.quantity != null && item.unit ? `${formatAmountValue(item.quantity)} ${item.unit}` : "");
+  return amount ? `${amount} ${item.name}` : item.name;
+}
+
+function CoverageWeightRow({
+  label,
+  value,
+  weight,
+  color,
+  theme,
+}: {
+  label: string;
+  value: number;
+  weight: string;
+  color: string;
+  theme: any;
+}) {
+  const safeValue = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  return (
+    <View style={s.coverageWeightRow}>
+      <View style={s.coverageWeightHead}>
+        <Text style={[s.coverageWeightLabel, { color: theme.text }]}>{label}</Text>
+        <Text style={[s.coverageWeightValue, { color }]}>{safeValue}% · {weight}</Text>
+      </View>
+      <View style={[s.coverageWeightTrack, { backgroundColor: theme.surfaceElevated }]}>
+        <View style={[s.coverageWeightFill, { width: `${safeValue}%`, backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
 export default function RecipeDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute<ScreenRoute>();
   const { result } = route.params;
+  const fromFavorites = route.params?.fromFavorites === true;
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
+  const { notify } = useInAppNotifications();
+  const { showDialog, showToast } = useFeedback();
   const insets = useSafeAreaInsets();
-
-  const FAVORITES_KEY = 'recipe_favorites_v1';
-  const recipeKey = result.recipeId ?? result.name ?? '';
-
-  const [isFavorite, setIsFavorite] = useState(false);
-  useEffect(() => {
-    if (!recipeKey) return;
-    SecureStore.getItemAsync(FAVORITES_KEY).then(raw => {
-      const ids: string[] = raw ? JSON.parse(raw) : [];
-      setIsFavorite(ids.includes(recipeKey));
-    }).catch(() => {});
-  }, [recipeKey]);
-
-  async function toggleFavorite() {
-    if (!recipeKey) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const raw = await SecureStore.getItemAsync(FAVORITES_KEY).catch(() => null);
-    const ids: string[] = raw ? JSON.parse(raw) : [];
-    const next = isFavorite ? ids.filter(id => id !== recipeKey) : [...ids, recipeKey];
-    await SecureStore.setItemAsync(FAVORITES_KEY, JSON.stringify(next)).catch(() => {});
-    setIsFavorite(!isFavorite);
-  }
 
   // Hydrate recipe details when navigation payload is partial.
   const [planCtx, setPlanCtx] = useState<RecipePlanContext | null>(null);
   const [planCtxLoading, setPlanCtxLoading] = useState(false);
+  const [favoriteOverride, setFavoriteOverride] = useState<boolean | null>(null);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
   const isPlanMode = !!result.recipeId && !result.explanation && (!result.steps || result.steps.length === 0);
-  const needsRecipeHydration = !!result.recipeId && (
-    !result.description?.trim() ||
-    !result.steps?.length ||
-    (
-      result.caloriesKcal == null &&
-      result.proteinGrams == null &&
-      result.carbsGrams == null &&
-      result.fatGrams == null
-    )
-  );
+  const canFavorite = user?.isPremium === true && !!result.recipeId;
 
   useEffect(() => {
-    if (!needsRecipeHydration || !result.recipeId) return;
+    setFavoriteOverride(null);
+  }, [result.recipeId]);
+
+  useEffect(() => {
+    if (!result.recipeId) return;
     let active = true;
     setPlanCtxLoading(true);
     getRecipePlanContext(result.recipeId)
-      .then(ctx => { if (active) setPlanCtx(ctx); })
+      .then(ctx => {
+        if (!active) return;
+        setPlanCtx(ctx);
+      })
       .catch(() => {})
       .finally(() => { if (active) setPlanCtxLoading(false); });
     return () => { active = false; };
-  }, [needsRecipeHydration, result.recipeId]);
+  }, [result.recipeId]);
+
+  const isFavorite = favoriteOverride ?? planCtx?.isFavorited ?? false;
+
+  async function toggleFavorite() {
+    if (!canFavorite || !result.recipeId || favoriteBusy) return;
+
+    const nextFavorite = !isFavorite;
+    setFavoriteBusy(true);
+    setFavoriteOverride(nextFavorite);
+
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Non-blocking.
+    }
+
+    try {
+      if (nextFavorite) {
+        await favoriteRecipe(result.recipeId);
+      } else {
+        await unfavoriteRecipe(result.recipeId);
+      }
+
+      setPlanCtx(current => current ? { ...current, isFavorited: nextFavorite } : current);
+      notify({
+        type: "pantry_updated",
+        dedupKey: `recipe_favorite:${result.recipeId}:${nextFavorite ? "on" : "off"}`,
+        title: language === "tr"
+          ? (nextFavorite ? "Favorilere eklendi" : "Favorilerden çıkarıldı")
+          : (nextFavorite ? "Added to favorites" : "Removed from favorites"),
+        body: language === "tr"
+          ? (nextFavorite
+            ? `${displayName} premium favorilerine eklendi.`
+            : `${displayName} favorilerinden çıkarıldı.`)
+          : (nextFavorite
+            ? `${displayName} was added to your premium favorites.`
+            : `${displayName} was removed from your favorites.`),
+        icon: nextFavorite ? "heart" : "heart-dislike-outline",
+        tone: nextFavorite ? "coral" : "primary",
+        haptic: "light",
+        durationMs: 2200,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["favorite-recipes"] }),
+        queryClient.invalidateQueries({ queryKey: ["favorite-recipes-summary"] }),
+      ]);
+    } catch {
+      setFavoriteOverride(isFavorite);
+      notify({
+        type: "pantry_updated",
+        dedupKey: `recipe_favorite_error:${result.recipeId}`,
+        title: language === "tr" ? "Favori güncellenemedi" : "Favorite update failed",
+        body: language === "tr"
+          ? "Tarif favori durumuna alınamadı. Lütfen tekrar dene."
+          : "The recipe favorite state could not be updated. Please try again.",
+        icon: "alert-circle-outline",
+        tone: "coral",
+        haptic: "warning",
+        durationMs: 2600,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["favorite-recipes"] }),
+        queryClient.invalidateQueries({ queryKey: ["favorite-recipes-summary"] }),
+      ]);
+    } finally {
+      setFavoriteBusy(false);
+      setFavoriteOverride(null);
+    }
+  }
 
   const copy = language === "en" ? {
     back: "Recipe Results",
@@ -255,12 +352,12 @@ export default function RecipeDetailScreen() {
   const displayProteinGrams = planCtx?.proteinGrams ?? result.proteinGrams;
   const displayCarbsGrams = planCtx?.carbsGrams ?? result.carbsGrams;
   const displayFatGrams = planCtx?.fatGrams ?? result.fatGrams;
-  const planMatchedMandatory = (planCtx?.matchedGroups?.mandatory ?? planCtx?.ingredients.mandatory ?? []).map(i => ({ id: i.id, name: i.name }));
-  const planMatchedOptional = (planCtx?.matchedGroups?.optional ?? []).map(i => ({ id: i.id, name: i.name }));
-  const planMatchedFlavoring = (planCtx?.matchedGroups?.flavoring ?? []).map(i => ({ id: i.id, name: i.name }));
-  const planMissingMandatory = (planCtx?.missingGroups?.mandatory ?? []).map(i => ({ id: i.id, name: i.name }));
-  const planMissingOptional = (planCtx?.missingGroups?.optional ?? []).map(i => ({ id: i.id, name: i.name }));
-  const planMissingFlavoring = (planCtx?.missingGroups?.flavoring ?? []).map(i => ({ id: i.id, name: i.name }));
+  const planMatchedMandatory = planCtx?.matchedGroups?.mandatory ?? planCtx?.ingredients.mandatory ?? [];
+  const planMatchedOptional = planCtx?.matchedGroups?.optional ?? [];
+  const planMatchedFlavoring = planCtx?.matchedGroups?.flavoring ?? [];
+  const planMissingMandatory = planCtx?.missingGroups?.mandatory ?? [];
+  const planMissingOptional = planCtx?.missingGroups?.optional ?? [];
+  const planMissingFlavoring = planCtx?.missingGroups?.flavoring ?? [];
 
   const isClinic =
     result.isOwnedByActiveDietitian === true ||
@@ -281,14 +378,158 @@ export default function RecipeDetailScreen() {
     ? (result.missing ?? [])
     : planMissingMandatory.map((ingredient) => ({ ingredient, suggestedSubstitutes: [] }));
   const usedSubstitutes = explanation?.usedSubstitutes ?? [];
-  const why = buildWhySuggested(result, language as "tr" | "en");
+  const why = isPlanMode && isClinic
+    ? (
+      language === "en"
+        ? {
+            summaryLine: "Planned meal · Clinic recipe",
+            paragraph: "This recipe appears here because your dietitian placed it directly into your daily plan. It is one of the clinic recipes selected to support the meal flow, portion balance, and intent of your program.",
+            facts: [
+              { label: "Plan status", value: "Dietitian planned" },
+              { label: "Recipe source", value: "Clinic" },
+              { label: "Pantry note", value: "Compared below" },
+            ],
+          }
+        : {
+            summaryLine: "Planlanan öğün · Klinik tarifi",
+            paragraph: "Bu tarif sana dolabındaki ürünlere göre otomatik önerilmedi; diyetisyenin tarafından doğrudan bugünkü planına yerleştirildi. Plan akışını, porsiyon dengesini ve öğünün hedefini destekleyen klinik tariflerinden biridir.",
+            facts: [
+              { label: "Plan durumu", value: "Diyetisyen planladı" },
+              { label: "Tarif kaynağı", value: "Klinik" },
+              { label: "Dolap notu", value: "Karşılaştırma aşağıda" },
+            ],
+          }
+    )
+    : buildWhySuggested(result, language as "tr" | "en");
   const displayCompatibility = planCtx?.coverage
     ? formatCompatibilityPercent({ compatibilityPercent: planCtx.coverage.percent })
     : formatCompatibilityPercent(result);
+  const cookingIngredients: CookingIngredient[] = (() => {
+    const fromPlan = [
+      ...(planCtx?.ingredients.mandatory ?? []).map((item) => ({ ...item, role: "mandatory" as const })),
+      ...(planCtx?.ingredients.optional ?? []).map((item) => ({ ...item, role: "optional" as const })),
+      ...(planCtx?.ingredients.flavoring ?? []).map((item) => ({ ...item, role: "flavoring" as const })),
+    ];
+
+    if (fromPlan.length > 0) {
+      return fromPlan.map((item) => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        displayAmount: item.displayAmount,
+        role: item.role,
+      }));
+    }
+
+    const matched = [
+      ...matchedIngredients.map((item) => ({ id: item.id, name: formatIngredientLabel(item), role: "mandatory" as const })),
+      ...matchedOptionalIngredients.map((item) => ({ id: item.id, name: formatIngredientLabel(item), role: "optional" as const })),
+      ...matchedSupportIngredients.map((item) => ({ id: item.id, name: formatIngredientLabel(item), role: "flavoring" as const })),
+    ];
+    const missing = missingItems.map((item) => ({
+      id: item.ingredient.id,
+      name: formatIngredientLabel(item.ingredient),
+      role: "missing" as const,
+    }));
+
+    return [...matched, ...missing];
+  })();
+  const cookingMissingIngredients: CookingIngredient[] = missingItems.map((item) => ({
+    id: item.ingredient.id,
+    name: formatIngredientLabel(item.ingredient),
+    role: "missing",
+  }));
+  const missingPreviewNames = cookingMissingIngredients.slice(0, 3).map((item) => item.name).join(", ");
+  const missingDialogMessage = language === "tr"
+    ? `${missingPreviewNames}${cookingMissingIngredients.length > 3 ? "..." : ""} eksik görünüyor. Yine de pişirmeye başlamak ister misin?`
+    : `${missingPreviewNames}${cookingMissingIngredients.length > 3 ? "..." : ""} seem missing. Start cooking anyway?`;
+
+  function openCookingMode() {
+    const payload: CookingModePayload = {
+      recipeId: result.recipeId,
+      name: displayName,
+      description: displayDescription,
+      steps: displaySteps,
+      ingredients: cookingIngredients,
+      missingIngredients: cookingMissingIngredients,
+      caloriesKcal: displayCaloriesKcal,
+      proteinGrams: displayProteinGrams,
+      carbsGrams: displayCarbsGrams,
+      fatGrams: displayFatGrams,
+      baseServings: planCtx?.coverage ? undefined : undefined,
+      source: fromFavorites ? "favorite" : isPlanMode ? "plan" : "kitchen",
+    };
+
+    (navigation as any).navigate(Routes.App.CookingMode, { recipe: payload });
+  }
+
+  function handleStartCooking() {
+    if (cookingMissingIngredients.length > 0) {
+      showDialog({
+        variant: "warning",
+        icon: "basket-outline",
+        eyebrow: language === "tr" ? "Dolap kontrolü" : "Pantry check",
+        title: language === "tr" ? "Eksik malzeme var" : "Missing ingredients",
+        message: missingDialogMessage,
+        secondaryAction: {
+          label: language === "tr" ? "Vazgeç" : "Cancel",
+          tone: "muted",
+        },
+        suggestions: [
+          {
+            label: language === "tr" ? "Eksikleri alışveriş listesine ekle" : "Add missing items to list",
+            icon: "cart-outline",
+            tone: "warning",
+            onPress: async () => {
+              try {
+                await addIngredientsToShoppingList(
+                  cookingMissingIngredients.map((item) => item.id),
+                  "Recipe",
+                  result.recipeId,
+                  language === "tr" ? `${displayName} için eksikler` : `Missing for ${displayName}`,
+                );
+                showToast({
+                  variant: "success",
+                  title: language === "tr" ? "Listeye eklendi" : "Added to list",
+                  message: language === "tr" ? "Eksik malzemeler alışveriş listesine taşındı." : "Missing ingredients moved to your shopping list.",
+                  action: {
+                    label: language === "tr" ? "Aç" : "Open",
+                    icon: "open-outline",
+                    onPress: () => (navigation as any).navigate(Routes.App.ShoppingList),
+                  },
+                });
+              } catch {
+                showToast({
+                  variant: "error",
+                  title: language === "tr" ? "Listeye eklenemedi" : "Could not add",
+                  message: language === "tr" ? "Birazdan tekrar dene." : "Try again in a moment.",
+                });
+              }
+            },
+          },
+          {
+            label: language === "tr" ? "Alternatif tarif ara" : "Find an alternative recipe",
+            icon: "swap-horizontal-outline",
+            onPress: () => (navigation as any).navigate(Routes.App.CheckIngredients),
+          },
+        ],
+        primaryAction: {
+          label: language === "tr" ? "Yine de başla" : "Start anyway",
+          tone: "warning",
+          onPress: openCookingMode,
+        },
+      });
+      return;
+    }
+
+    openCookingMode();
+  }
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+      <DytopiaWatermark position="center" size={300} opacity={0.034} />
       <ProduceBubble
         icon="food-apple-outline"
         iconSize={34}
@@ -306,7 +547,7 @@ export default function RecipeDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           s.scroll,
-          { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 18) + 100 },
+          { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 18) + 150 },
         ]}
       >
         <View style={s.navRow}>
@@ -318,13 +559,22 @@ export default function RecipeDetailScreen() {
             <Ionicons name="chevron-back" size={16} color={theme.textSub} />
             <Text style={[s.backTxt, { color: theme.textSub }]}>{copy.back}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.favBtn, { backgroundColor: theme.surface, borderColor: isFavorite ? '#FF4757' : theme.border }]}
-            activeOpacity={0.82}
-            onPress={() => void toggleFavorite()}
-          >
-            <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={18} color={isFavorite ? '#FF4757' : theme.textSub} />
-          </TouchableOpacity>
+          {canFavorite ? (
+            <TouchableOpacity
+              style={[s.favBtn, { backgroundColor: theme.surface, borderColor: isFavorite ? '#FF4757' : theme.border }]}
+              activeOpacity={0.82}
+              disabled={favoriteBusy}
+              onPress={() => void toggleFavorite()}
+            >
+              {favoriteBusy ? (
+                <ActivityIndicator size="small" color={isFavorite ? '#FF4757' : theme.textSub} />
+              ) : (
+                <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={18} color={isFavorite ? '#FF4757' : theme.textSub} />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={s.favSpacer} />
+          )}
         </View>
 
         <Animated.View entering={FadeIn.duration(dur.base)} style={[s.hero, { backgroundColor: theme.surface, borderColor: `${accent}28` }]}>
@@ -396,6 +646,29 @@ export default function RecipeDetailScreen() {
               </View>
             </View>
             <Text style={[s.coverageFormula, { color: theme.textMuted }]}>{copy.pantryCoverageFormula}</Text>
+            <View style={s.coverageWeightBox}>
+              <CoverageWeightRow
+                label={copy.mandatory}
+                value={planCtx.coverage.mandatoryPercent}
+                weight="70%"
+                color={theme.emerald}
+                theme={theme}
+              />
+              <CoverageWeightRow
+                label={copy.optional}
+                value={planCtx.coverage.optionalPercent}
+                weight="20%"
+                color={theme.primary}
+                theme={theme}
+              />
+              <CoverageWeightRow
+                label={copy.flavoring}
+                value={planCtx.coverage.flavoringPercent}
+                weight="10%"
+                color={theme.accentGold}
+                theme={theme}
+              />
+            </View>
             <View style={s.coverageBreakdown}>
               <Pill label={`${copy.mandatory} ${planCtx.coverage.mandatoryPercent}%`} color={theme.emerald} bg={`${theme.emerald}10`} border={`${theme.emerald}24`} />
               <Pill label={`${copy.optional} ${planCtx.coverage.optionalPercent}%`} color={theme.primary} bg={`${theme.primary}10`} border={`${theme.primary}24`} />
@@ -404,21 +677,23 @@ export default function RecipeDetailScreen() {
           </Animated.View>
         )}
 
-        <Animated.View entering={FadeInDown.delay(50).duration(dur.base)} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[s.cardLabel, { color: theme.textMuted }]}>{copy.why}</Text>
-          <Text style={[s.reasonSummary, { color: accent }]}>{why.summaryLine}</Text>
-          <Text style={[s.reasonBox, { color: theme.text, backgroundColor: `${accent}0E`, borderColor: `${accent}20` }]}>
-            {why.paragraph}
-          </Text>
-          <View style={s.factsRow}>
-            {why.facts.map((fact) => (
-              <View key={fact.label} style={[s.factItem, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
-                <Text style={[s.factLabel, { color: theme.textMuted }]}>{fact.label}</Text>
-                <Text style={[s.factValue, { color: theme.text }]}>{fact.value}</Text>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
+        {!fromFavorites && (
+          <Animated.View entering={FadeInDown.delay(50).duration(dur.base)} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[s.cardLabel, { color: theme.textMuted }]}>{copy.why}</Text>
+            <Text style={[s.reasonSummary, { color: accent }]}>{why.summaryLine}</Text>
+            <Text style={[s.reasonBox, { color: theme.text, backgroundColor: `${accent}0E`, borderColor: `${accent}20` }]}>
+              {why.paragraph}
+            </Text>
+            <View style={s.factsRow}>
+              {why.facts.map((fact) => (
+                <View key={fact.label} style={[s.factItem, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
+                  <Text style={[s.factLabel, { color: theme.textMuted }]}>{fact.label}</Text>
+                  <Text style={[s.factValue, { color: theme.text }]}>{fact.value}</Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
 
         {(matchedIngredients.length > 0 || matchedOptionalIngredients.length > 0 || matchedSupportIngredients.length > 0) && (
           <Animated.View entering={FadeInDown.delay(90).duration(dur.base)} style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -428,7 +703,7 @@ export default function RecipeDetailScreen() {
                 <Text style={[s.groupTitle, { color: theme.emerald }]}>{copy.matchedMandatory}</Text>
                 <View style={s.chipWrap}>
                   {matchedIngredients.map((item) => (
-                    <Pill key={item.id} label={item.name} color={theme.emerald} bg={`${theme.emerald}10`} border={`${theme.emerald}22`} />
+                    <Pill key={item.id} label={formatIngredientLabel(item)} color={theme.emerald} bg={`${theme.emerald}10`} border={`${theme.emerald}22`} />
                   ))}
                 </View>
               </>
@@ -438,7 +713,7 @@ export default function RecipeDetailScreen() {
                 <Text style={[s.groupTitle, { color: theme.primary }]}>{copy.matchedOptional}</Text>
                 <View style={s.chipWrap}>
                   {matchedOptionalIngredients.map((item) => (
-                    <Pill key={item.id} label={item.name} color={theme.primary} bg={`${theme.primary}10`} border={`${theme.primary}22`} />
+                    <Pill key={item.id} label={formatIngredientLabel(item)} color={theme.primary} bg={`${theme.primary}10`} border={`${theme.primary}22`} />
                   ))}
                 </View>
               </>
@@ -448,7 +723,7 @@ export default function RecipeDetailScreen() {
                 <Text style={[s.groupTitle, { color: theme.accentGold }]}>{copy.matchedSupport}</Text>
                 <View style={s.chipWrap}>
                   {matchedSupportIngredients.map((item) => (
-                    <Pill key={item.id} label={item.name} color={theme.accentGold} bg={`${theme.accentGold}10`} border={`${theme.accentGold}22`} />
+                    <Pill key={item.id} label={formatIngredientLabel(item)} color={theme.accentGold} bg={`${theme.accentGold}10`} border={`${theme.accentGold}22`} />
                   ))}
                 </View>
               </>
@@ -464,7 +739,7 @@ export default function RecipeDetailScreen() {
                 <Text style={[s.groupTitle, { color: theme.primary }]}>{copy.optionalAddable}</Text>
                 <View style={s.chipWrap}>
                   {missingOptionalIngredients.map((item) => (
-                    <Pill key={item.id} label={item.name} color={theme.primary} bg={`${theme.primary}10`} border={`${theme.primary}22`} />
+                    <Pill key={item.id} label={formatIngredientLabel(item)} color={theme.primary} bg={`${theme.primary}10`} border={`${theme.primary}22`} />
                   ))}
                 </View>
               </View>
@@ -474,7 +749,7 @@ export default function RecipeDetailScreen() {
                 <Text style={[s.groupTitle, { color: theme.accentGold }]}>{copy.flavorBoost}</Text>
                 <View style={s.chipWrap}>
                   {missingSupportIngredients.map((item) => (
-                    <Pill key={item.id} label={item.name} color={theme.accentGold} bg={`${theme.accentGold}10`} border={`${theme.accentGold}22`} />
+                    <Pill key={item.id} label={formatIngredientLabel(item)} color={theme.accentGold} bg={`${theme.accentGold}10`} border={`${theme.accentGold}22`} />
                   ))}
                 </View>
               </View>
@@ -487,7 +762,7 @@ export default function RecipeDetailScreen() {
             <Text style={[s.cardLabel, { color: theme.warning }]}>{copy.missingTitle}</Text>
             {missingItems.map((item) => (
               <View key={item.ingredient.id} style={[s.missingCard, { backgroundColor: theme.surfaceElevated, borderColor: `${theme.warning}22` }]}>
-                <Text style={[s.missingName, { color: theme.warning }]}>{item.ingredient.name}</Text>
+                <Text style={[s.missingName, { color: theme.warning }]}>{formatIngredientLabel(item.ingredient)}</Text>
                 {item.suggestedSubstitutes.length > 0 && (
                   <>
                     <Text style={[s.swapLabel, { color: theme.textMuted }]}>{copy.alternatives}</Text>
@@ -561,6 +836,31 @@ export default function RecipeDetailScreen() {
           )}
         </Animated.View>
       </ScrollView>
+
+      <Animated.View
+        entering={FadeInDown.delay(220).duration(320)}
+        style={[s.cookDock, { paddingBottom: Math.max(insets.bottom, 14), backgroundColor: theme.glass, borderColor: theme.glassBorder }]}
+      >
+        <TouchableOpacity
+          style={[s.cookGhostBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          activeOpacity={0.82}
+          onPress={() => (navigation as any).navigate(Routes.App.ShoppingList)}
+        >
+          <Ionicons name="cart-outline" size={17} color={theme.text} />
+          <Text style={[s.cookGhostTxt, { color: theme.text }]}>
+            {language === "tr" ? "Eksikler" : "Missing"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.cookPrimaryBtn, { backgroundColor: accent, shadowColor: accent }]}
+          activeOpacity={0.86}
+          onPress={handleStartCooking}
+        >
+          <MaterialCommunityIcons name="chef-hat" size={19} color="#FFFFFF" />
+          <Text style={s.cookPrimaryTxt}>{language === "tr" ? "Pişirmeye Başla" : "Start Cooking"}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
     </View>
   );
 }
@@ -608,6 +908,10 @@ const s = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  favSpacer: {
+    width: 36,
+    height: 36,
   },
   backTxt: { fontSize: 13, fontWeight: "700" },
   hero: {
@@ -687,6 +991,30 @@ const s = StyleSheet.create({
   coverageTitle: { fontSize: 15, fontWeight: "900", marginBottom: 4 },
   coverageBody: { fontSize: 12.5, lineHeight: 18 },
   coverageFormula: { fontSize: 11.5, fontWeight: "800" },
+  coverageWeightBox: {
+    gap: 10,
+    borderRadius: radii.xl,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  coverageWeightRow: { gap: 6 },
+  coverageWeightHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  coverageWeightLabel: { fontSize: 12, fontWeight: "900" },
+  coverageWeightValue: { fontSize: 11.5, fontWeight: "900" },
+  coverageWeightTrack: {
+    height: 7,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  coverageWeightFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
   coverageBreakdown: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   cardLabel: {
     fontSize: 10.5,
@@ -764,5 +1092,49 @@ const s = StyleSheet.create({
   },
   noStepsTitle: { fontSize: 13.5, lineHeight: 19, fontWeight: "700", textAlign: "center", marginTop: 8, marginBottom: 6 },
   noStepsSub: { fontSize: 12, lineHeight: 18, textAlign: "center" },
+  cookDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: 1,
+    paddingTop: 12,
+    paddingHorizontal: spacing.base,
+    flexDirection: "row",
+    gap: 10,
+  },
+  cookGhostBtn: {
+    minWidth: 112,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  cookGhostTxt: { fontSize: 13, fontWeight: "900" },
+  cookPrimaryBtn: {
+    flex: 1,
+    borderRadius: radii.full,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    elevation: 7,
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  cookPrimaryTxt: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: -0.1,
+  },
 });
+
 

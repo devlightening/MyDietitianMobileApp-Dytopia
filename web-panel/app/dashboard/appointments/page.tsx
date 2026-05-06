@@ -15,6 +15,8 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Dropdown } from '@/components/ui/Dropdown';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import {
   cancelAppointment,
   createAppointment,
@@ -136,19 +138,12 @@ function AppointmentModal({ editing, onClose, onSave, clients, isSaving }: Modal
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Danışan
             </label>
-            <select
+            <Dropdown
               value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
+              onChange={setClientId}
               disabled={!!editing}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
-            >
-              <option value="">— Seçiniz —</option>
-              {clients.map((c) => (
-                <option key={c.clientId} value={c.clientId}>
-                  {c.fullName}
-                </option>
-              ))}
-            </select>
+              options={[{ label: 'Seçiniz', value: '' }, ...clients.map((c) => ({ label: c.fullName, value: c.clientId }))]}
+            />
           </div>
 
           {/* Title */}
@@ -170,12 +165,7 @@ function AppointmentModal({ editing, onClose, onSave, clients, isSaving }: Modal
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Tarih ve Saat
             </label>
-            <input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
+            <DateTimeField value={scheduledAt} onChange={setScheduledAt} />
           </div>
 
           {/* Mode */}

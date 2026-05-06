@@ -17,8 +17,7 @@ export interface HealthCheckResult {
  * auth interceptors and has its own timeout — safe to call before any token
  * is loaded.
  *
- * Local dev (Android emulator): ensure adb reverse is active before calling:
- *   adb reverse tcp:5000 tcp:5000
+ * Backend endpoint is mapped in Program.cs as GET /health.
  */
 export async function checkBackendHealth(timeoutMs = 5000): Promise<HealthCheckResult> {
   const url = `${API_BASE_URL}/health`;

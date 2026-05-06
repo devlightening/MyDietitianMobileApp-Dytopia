@@ -22,6 +22,8 @@ import { matchKitchen, type RecipeMatchResult } from "../api/kitchen";
 import { useGamification } from "../queries/useGamification";
 import RecipeCard, { type MatchType } from "../components/recipes/RecipeCard";
 import RecipeSearchStage from "../components/kitchen/RecipeSearchStage";
+import DytopiaWatermark from "../components/decor/DytopiaWatermark";
+import DytopiaLogoBubble from "../components/decor/DytopiaLogoBubble";
 import { Routes } from "../navigation/routes";
 import {
   buildWhySuggested,
@@ -272,6 +274,9 @@ export default function KitchenResultScreen() {
         backgroundColor="transparent"
         translucent
       />
+      <DytopiaWatermark position="center" size={310} opacity={0.034} />
+      <DytopiaLogoBubble size={150} opacity={0.24} logoOpacity={0.36} style={s.resultGlowA} />
+      <DytopiaLogoBubble size={128} opacity={0.18} logoOpacity={0.32} style={s.resultGlowB} />
       <ScrollView
         contentContainerStyle={[
           s.scroll,
@@ -505,6 +510,22 @@ const s = StyleSheet.create({
   loadingRoot: {
     flex: 1,
     paddingHorizontal: spacing.base,
+  },
+  resultGlowA: {
+    position: "absolute",
+    top: "21%",
+    right: -36,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+  },
+  resultGlowB: {
+    position: "absolute",
+    bottom: "18%",
+    left: -42,
+    width: 128,
+    height: 128,
+    borderRadius: 64,
   },
   scroll: { paddingHorizontal: spacing.base },
   backBtn: {

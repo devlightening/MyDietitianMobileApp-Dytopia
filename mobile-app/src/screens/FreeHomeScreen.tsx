@@ -11,6 +11,7 @@ import {
   Alert,
   ScrollView,
   StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,16 +24,23 @@ import { radii, spacing } from '../theme/tokens';
 import { Routes } from '../navigation/routes';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import { useFadeRise, useScaleSettle, useStaggerItem } from '../hooks/useAuraMotion';
+import { getResponsiveGridItemWidth } from '../utils/responsiveLayout';
+
+const FEATURE_GRID_COLUMNS = 2;
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function getGreeting(): { emoji: string; line1: string; line2: string } {
+function getGreeting(): {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  line1: string;
+  line2: string;
+} {
   const h = new Date().getHours();
-  if (h < 6)  return { emoji: 'ğŸŒ™', line1: 'İyi geceler,',        line2: 'Sağlıklı yarınlar seni bekliyor.' };
-  if (h < 12) return { emoji: 'â˜€ï¸', line1: 'Günaydın!',           line2: 'Enerjik bir güne hoş geldin.' };
-  if (h < 14) return { emoji: 'ğŸŒ¿', line1: 'İyi öğleler!',        line2: 'Öğle molası, sağlıklı bir seçim.' };
-  if (h < 18) return { emoji: 'ğŸƒ', line1: 'İyi öğleden sonralar!', line2: 'Akşamı birlikte planlayalım.' };
-  return       { emoji: 'ğŸŒ†', line1: 'İyi akşamlar!',             line2: 'Günü güzel bitiriyorsun.' };
+  if (h < 6)  return { icon: 'moon-outline', line1: 'İyi geceler,', line2: 'Sağlıklı yarınlar seni bekliyor.' };
+  if (h < 12) return { icon: 'sunny-outline', line1: 'Günaydın!', line2: 'Enerjik bir güne hoş geldin.' };
+  if (h < 14) return { icon: 'leaf-outline', line1: 'İyi öğleler!', line2: 'Öğle molası, sağlıklı bir seçim.' };
+  if (h < 18) return { icon: 'partly-sunny-outline', line1: 'İyi öğleden sonralar!', line2: 'Akşamı birlikte planlayalım.' };
+  return       { icon: 'sparkles-outline', line1: 'İyi akşamlar!', line2: 'Günü güzel bitiriyorsun.' };
 }
 
 // â”€â”€ Feature preview data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -75,7 +83,7 @@ const STEPS = [
 // â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function FeatureCard({
-  icon, accent, title, desc, index, theme,
+  icon, accent, title, desc, index, theme, width,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   accent: string;
@@ -83,15 +91,26 @@ function FeatureCard({
   desc: string;
   index: number;
   theme: import('../theme/tokens').Theme;
+  width: number;
 }) {
   const anim = useStaggerItem(index, 120, 60);
   return (
-    <Animated.View style={[s.featureCard, { backgroundColor: theme.surface, borderColor: theme.border }, anim]}>
+    <Animated.View style={[s.featureCard, { width, backgroundColor: theme.surface, borderColor: theme.border }, anim]}>
       <View style={[s.featureIconWrap, { backgroundColor: `${accent}16` }]}>
         <Ionicons name={icon} size={22} color={accent} />
       </View>
-      <Text style={[s.featureCardTitle, { color: theme.text }]}>{title}</Text>
-      <Text style={[s.featureCardDesc, { color: theme.textMuted }]} numberOfLines={2}>{desc}</Text>
+      <Text
+        style={[s.featureCardTitle, { color: theme.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}
+        maxFontSizeMultiplier={1.1}
+      >
+        {title}
+      </Text>
+      <Text style={[s.featureCardDesc, { color: theme.textMuted }]} numberOfLines={2} maxFontSizeMultiplier={1.1}>
+        {desc}
+      </Text>
       <View style={[s.featureLock, { backgroundColor: theme.surfaceElevated }]}>
         <Ionicons name="lock-closed-outline" size={11} color={theme.textMuted} />
         <Text style={[s.featureLockText, { color: theme.textMuted }]}>Premium</Text>
@@ -107,6 +126,13 @@ export default function FreeHomeScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const featureGridWidth = Math.max(0, width - spacing.lg * 2);
+  const featureCardWidth = getResponsiveGridItemWidth(
+    featureGridWidth,
+    FEATURE_GRID_COLUMNS,
+    spacing.sm,
+  );
 
   const greeting = getGreeting();
 
@@ -158,7 +184,9 @@ export default function FreeHomeScreen() {
               <View style={[s.freePillDot, { backgroundColor: theme.emerald }]} />
               <Text style={[s.freePillText, { color: theme.textMuted }]}>ÜCRETSİZ</Text>
             </View>
-            <Text style={[s.greetingEmoji]}>{greeting.emoji}</Text>
+            <View style={[s.greetingIcon, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+              <Ionicons name={greeting.icon} size={22} color={theme.emerald} />
+            </View>
             <Text style={[s.greetingLine1, { color: theme.text }]}>{greeting.line1}</Text>
             <Text style={[s.greetingLine2, { color: theme.textSub }]}>{greeting.line2}</Text>
           </View>
@@ -318,6 +346,7 @@ export default function FreeHomeScreen() {
                 desc={f.desc}
                 index={i}
                 theme={theme}
+                width={featureCardWidth}
               />
             ))}
           </View>
@@ -387,7 +416,15 @@ const s = StyleSheet.create({
   },
   freePillDot: { width: 7, height: 7, borderRadius: 4 },
   freePillText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
-  greetingEmoji: { fontSize: 28, marginBottom: 2 },
+  greetingIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
   greetingLine1: { fontSize: 26, fontWeight: '900', letterSpacing: -0.6, lineHeight: 30 },
   greetingLine2: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
   iconBtn: {
@@ -505,7 +542,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
   },
   featureCard: {
-    width: '47.5%',
+    flexShrink: 0,
     borderRadius: radii.xl, borderWidth: 1,
     padding: spacing.md, gap: 6,
   },

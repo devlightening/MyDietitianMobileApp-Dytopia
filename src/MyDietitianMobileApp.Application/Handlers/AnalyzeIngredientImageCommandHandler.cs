@@ -61,6 +61,20 @@ public class AnalyzeIngredientImageCommandHandler
                 request.Base64Image, request.MediaType, cancellationToken)
             : await _visionService.DetectFoodNamesAsync(
                 request.Base64Image, request.MediaType, cancellationToken);
+        if (detectionResult.Reason == "image_too_large")
+        {
+            _logger.LogWarning(
+                "Image analysis aborted: image too large. SessionId={SessionId}", sessionId);
+            return new AnalyzeIngredientImageResult
+            {
+                SessionId     = sessionId,
+                TotalDetected = 0,
+                FeatureStatus = "active",
+                Reason        = "image_too_large",
+                UserMessage   = "Fotoğraf çok büyük olduğu için analiz edilemedi. Lütfen tekrar deneyin.",
+            };
+        }
+
         var rawNames = detectionResult.Items;
 
         if (rawNames.Count == 0)

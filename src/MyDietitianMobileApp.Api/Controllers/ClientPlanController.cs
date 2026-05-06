@@ -210,7 +210,23 @@ public class ClientPlanController : ControllerBase
         var availabilityError = ValidateMealActionWindow(mealItem!);
         if (availabilityError != null) return availabilityError;
 
-        var (completionStatus, alternativeRecipeId) = ResolveCompletionTarget(mealItem!);
+        var explicitCompletionTarget = !string.IsNullOrWhiteSpace(body?.CompletionTarget);
+        var completionTarget = NormalizeSelectionType(body?.CompletionTarget);
+        if (explicitCompletionTarget && completionTarget == null)
+        {
+            return BadRequest(ApiProblems.Validation(
+                "INVALID_COMPLETION_TARGET",
+                "Tamamlama hedefi Original veya Alternative olmalıdır."));
+        }
+
+        if (completionTarget == PlanMealSelectionTypes.Alternative && !HasSelectedAlternative(mealItem!))
+        {
+            return BadRequest(ApiProblems.Validation(
+                "ALTERNATIVE_SELECTION_REQUIRED",
+                "Alternatif olarak tamamlamak için önce alternatif tarif seçilmelidir."));
+        }
+
+        var (completionStatus, alternativeRecipeId) = ResolveCompletionTarget(mealItem!, completionTarget);
 
         return await UpsertCompletion(
             clientId!.Value,
@@ -218,7 +234,9 @@ public class ClientPlanController : ControllerBase
             mealItemId,
             completionStatus,
             body?.Note,
-            alternativeRecipeId);
+            alternativeRecipeId,
+            mealItem,
+            preserveExistingAlternative: !explicitCompletionTarget);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -243,7 +261,8 @@ public class ClientPlanController : ControllerBase
             mealItemId,
             MealCompletionStatus.Skipped,
             body?.Note,
-            null);
+            null,
+            mealItem);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -274,7 +293,8 @@ public class ClientPlanController : ControllerBase
             mealItemId,
             MealCompletionStatus.Alternative,
             body.Note,
-            body.AlternativeRecipeId);
+            body.AlternativeRecipeId,
+            mealItem);
     }
 
     [HttpPost("meals/{mealItemId}/selected-recipe")]
@@ -311,6 +331,11 @@ public class ClientPlanController : ControllerBase
 
             mealItem!.SelectedRecipeId = recipe.Id;
             mealItem.SelectedRecipeSource = PlanMealSelectionTypes.Alternative;
+            _appDb.ClientActivities.Add(new ClientActivity(
+                clientId.Value,
+                mealItem.Plan.CreatedBy,
+                "meal_recipe_selected",
+                BuildMealActivityMeta(mealItem, PlanMealSelectionTypes.Alternative, recipe.Name)));
             await _appDb.SaveChangesAsync();
             await PublishPlanAndGamificationEventsAsync(clientId.Value, mealItem.Plan.CreatedBy, mealItemId);
 
@@ -325,6 +350,11 @@ public class ClientPlanController : ControllerBase
 
         mealItem!.SelectedRecipeId = mealItem.RecipeId;
         mealItem.SelectedRecipeSource = PlanMealSelectionTypes.Original;
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId.Value,
+            mealItem.Plan.CreatedBy,
+            "meal_recipe_selected",
+            BuildMealActivityMeta(mealItem, PlanMealSelectionTypes.Original, mealItem.Recipe?.Name)));
         await _appDb.SaveChangesAsync();
         await PublishPlanAndGamificationEventsAsync(clientId.Value, mealItem.Plan.CreatedBy, mealItemId);
 
@@ -364,6 +394,26 @@ public class ClientPlanController : ControllerBase
             completion.Status,
             MealFeedbackCodec.Apply(completion.Note, normalizedFeedback),
             completion.AlternativeRecipeId);
+
+        var completedRecipe = GetCompletedRecipeInfo(mealItem!, completion.Status, completion.AlternativeRecipeId);
+        var feedbackRecipe = GetFeedbackRecipeInfo(mealItem!, completion.Status, completion.AlternativeRecipeId, body.RecipeSource);
+
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId.Value,
+            mealItem!.Plan.CreatedBy,
+            "meal_feedback_saved",
+            BuildMealActivityMeta(
+                mealItem,
+                completion.Status.ToString(),
+                mealItem.SelectedRecipe?.Name ?? mealItem.Recipe?.Name,
+                feedbackKey: normalizedFeedback,
+                alternativeRecipeId: completion.AlternativeRecipeId,
+                completedRecipeSource: completedRecipe.source,
+                completedRecipeId: completedRecipe.recipeId,
+                completedRecipeName: completedRecipe.recipeName,
+                feedbackRecipeSource: feedbackRecipe.source,
+                feedbackRecipeId: feedbackRecipe.recipeId,
+                feedbackRecipeName: feedbackRecipe.recipeName)));
 
         await _appDb.SaveChangesAsync();
         await PublishPlanAndGamificationEventsAsync(clientId.Value, mealItem!.Plan.CreatedBy, mealItemId);
@@ -626,11 +676,28 @@ public class ClientPlanController : ControllerBase
         return (item, null);
     }
 
-    private (MealCompletionStatus status, Guid? alternativeRecipeId) ResolveCompletionTarget(PlanMealItem mealItem)
+    private static bool HasSelectedAlternative(PlanMealItem mealItem)
     {
-        if (mealItem.SelectedRecipeSource == PlanMealSelectionTypes.Alternative
+        return mealItem.SelectedRecipeSource == PlanMealSelectionTypes.Alternative
             && mealItem.SelectedRecipeId.HasValue
-            && mealItem.SelectedRecipeId != mealItem.RecipeId)
+            && mealItem.SelectedRecipeId != mealItem.RecipeId;
+    }
+
+    private (MealCompletionStatus status, Guid? alternativeRecipeId) ResolveCompletionTarget(
+        PlanMealItem mealItem,
+        string? completionTarget = null)
+    {
+        if (completionTarget == PlanMealSelectionTypes.Original)
+        {
+            return (MealCompletionStatus.Done, null);
+        }
+
+        if (completionTarget == PlanMealSelectionTypes.Alternative)
+        {
+            return (MealCompletionStatus.Alternative, mealItem.SelectedRecipeId);
+        }
+
+        if (HasSelectedAlternative(mealItem))
         {
             return (MealCompletionStatus.Alternative, mealItem.SelectedRecipeId);
         }
@@ -671,7 +738,8 @@ public class ClientPlanController : ControllerBase
 
     private async Task<IActionResult> UpsertCompletion(
         Guid clientId, Guid dietitianId, Guid mealItemId,
-        MealCompletionStatus status, string? note, Guid? alternativeRecipeId)
+        MealCompletionStatus status, string? note, Guid? alternativeRecipeId, PlanMealItem? mealItem = null,
+        bool preserveExistingAlternative = true)
     {
         var existing = await _appDb.MealCompletions
             .FirstOrDefaultAsync(c => c.ClientId == clientId && c.DietPlanMealId == mealItemId);
@@ -681,7 +749,9 @@ public class ClientPlanController : ControllerBase
 
         if (existing != null)
         {
-            if (existing.Status == MealCompletionStatus.Alternative && status == MealCompletionStatus.Done)
+            if (preserveExistingAlternative
+                && existing.Status == MealCompletionStatus.Alternative
+                && status == MealCompletionStatus.Done)
             {
                 // Protect alternative-based progress from accidental "Done" taps on a different
                 // screen. Switching back to the planned recipe should require an explicit undo.
@@ -696,6 +766,39 @@ public class ClientPlanController : ControllerBase
             var completion = new MealCompletion(clientId, dietitianId, mealItemId, effectiveStatus, note, effectiveAlternativeRecipeId);
             _appDb.MealCompletions.Add(completion);
         }
+
+        var completedRecipe = mealItem == null
+            ? (recipeId: (Guid?)null, recipeName: (string?)null, source: (string?)null)
+            : GetCompletedRecipeInfo(mealItem, effectiveStatus, effectiveAlternativeRecipeId);
+
+        _appDb.ClientActivities.Add(new ClientActivity(
+            clientId,
+            dietitianId,
+            effectiveStatus switch
+            {
+                MealCompletionStatus.Done => "meal_done",
+                MealCompletionStatus.Alternative => "meal_alternative",
+                MealCompletionStatus.Skipped => "meal_skipped",
+                _ => "meal_done"
+            },
+            mealItem == null
+                ? new
+                {
+                    mealItemId,
+                    requestedStatus = status.ToString(),
+                    effectiveStatus = effectiveStatus.ToString(),
+                    alternativeRecipeId = effectiveAlternativeRecipeId
+                }
+                : BuildMealActivityMeta(
+                    mealItem,
+                    effectiveStatus.ToString(),
+                    mealItem.SelectedRecipe?.Name ?? mealItem.Recipe?.Name,
+                    note: note,
+                    requestedStatus: status.ToString(),
+                    alternativeRecipeId: effectiveAlternativeRecipeId,
+                    completedRecipeSource: completedRecipe.source,
+                    completedRecipeId: completedRecipe.recipeId,
+                    completedRecipeName: completedRecipe.recipeName)));
 
         await _appDb.SaveChangesAsync();
         await _gamificationService.TrackEventAsync(
@@ -739,6 +842,103 @@ public class ClientPlanController : ControllerBase
             : null;
     }
 
+    private static object BuildMealActivityMeta(
+        PlanMealItem mealItem,
+        string statusOrSelection,
+        string? selectedRecipeName,
+        string? note = null,
+        string? feedbackKey = null,
+        string? requestedStatus = null,
+        Guid? alternativeRecipeId = null,
+        string? completedRecipeSource = null,
+        Guid? completedRecipeId = null,
+        string? completedRecipeName = null,
+        string? feedbackRecipeSource = null,
+        Guid? feedbackRecipeId = null,
+        string? feedbackRecipeName = null)
+    {
+        return new
+        {
+            mealItemId = mealItem.Id,
+            mealName = mealItem.Title,
+            mealTitle = mealItem.Title,
+            mealType = mealItem.MealType.ToString(),
+            mealTime = AppTime.FormatTimeKey(mealItem.Time),
+            recipeId = mealItem.RecipeId,
+            plannedRecipeName = mealItem.Recipe?.Name,
+            selectedRecipeId = mealItem.SelectedRecipeId ?? mealItem.RecipeId,
+            selectedRecipeName,
+            selectedRecipeSource = mealItem.SelectedRecipeSource ?? PlanMealSelectionTypes.Original,
+            status = statusOrSelection,
+            requestedStatus,
+            alternativeRecipeId,
+            completedRecipeSource,
+            completedRecipeId,
+            completedRecipeName,
+            feedbackRecipeSource,
+            feedbackRecipeId,
+            feedbackRecipeName,
+            note,
+            feedbackKey,
+            feedbackLabel = GetFeedbackLabel(feedbackKey)
+        };
+    }
+
+    private static (Guid? recipeId, string? recipeName, string? source) GetCompletedRecipeInfo(
+        PlanMealItem mealItem,
+        MealCompletionStatus status,
+        Guid? alternativeRecipeId)
+    {
+        return status switch
+        {
+            MealCompletionStatus.Alternative => (
+                alternativeRecipeId ?? mealItem.SelectedRecipeId,
+                mealItem.SelectedRecipe?.Name ?? mealItem.Recipe?.Name,
+                PlanMealSelectionTypes.Alternative),
+            MealCompletionStatus.Done => (
+                mealItem.RecipeId,
+                mealItem.Recipe?.Name,
+                PlanMealSelectionTypes.Original),
+            _ => (null, null, null)
+        };
+    }
+
+    private static (Guid? recipeId, string? recipeName, string? source) GetFeedbackRecipeInfo(
+        PlanMealItem mealItem,
+        MealCompletionStatus status,
+        Guid? alternativeRecipeId,
+        string? requestedRecipeSource)
+    {
+        var normalizedSource = NormalizeSelectionType(requestedRecipeSource);
+
+        if (normalizedSource == PlanMealSelectionTypes.Alternative)
+        {
+            return (
+                alternativeRecipeId ?? mealItem.SelectedRecipeId,
+                mealItem.SelectedRecipe?.Name ?? mealItem.Recipe?.Name,
+                PlanMealSelectionTypes.Alternative);
+        }
+
+        if (normalizedSource == PlanMealSelectionTypes.Original)
+        {
+            return (
+                mealItem.RecipeId,
+                mealItem.Recipe?.Name,
+                PlanMealSelectionTypes.Original);
+        }
+
+        return GetCompletedRecipeInfo(mealItem, status, alternativeRecipeId);
+    }
+
+    private static string? GetFeedbackLabel(string? feedbackKey) => feedbackKey switch
+    {
+        "filling" => "Tok tuttu",
+        "light" => "Hafif geldi",
+        "again" => "Tekrar isterim",
+        "hard" => "Zor hazırlandı",
+        _ => null
+    };
+
     private async Task PublishPlanAndGamificationEventsAsync(Guid clientId, Guid dietitianId, Guid mealItemId)
     {
         await _syncPublisher.PublishToLinkAsync(dietitianId, clientId, "plan.today.updated", new
@@ -765,11 +965,11 @@ public class ClientPlanController : ControllerBase
 
 // ─── Request models ───────────────────────────────────────────────────────────
 
-public record MealActionRequest(string? Note);
+public record MealActionRequest(string? Note, string? CompletionTarget);
 
 public record AlternativeMealRequest(Guid? AlternativeRecipeId, string? Note);
 
-public record MealFeedbackRequest(string FeedbackKey);
+public record MealFeedbackRequest(string FeedbackKey, string? RecipeSource = null);
 
 public record MealRecipeSelectionRequest(string SelectionType, Guid? AlternativeRecipeId);
 

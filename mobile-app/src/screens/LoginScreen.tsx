@@ -10,15 +10,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import axios from 'axios';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from '../context/I18nContext';
 import { spacing, radii } from '../theme/tokens';
-import { API_BASE_URL } from '../config/api';
+import { checkBackendHealth } from '../api/health';
+import { API_BASE_URL, API_BASE_URL_SOURCE, isPhysicalDeviceUnsafeApiBaseUrl } from '../config/api';
 import ProduceBubble from '../components/decor/ProduceBubble';
 
 let Device: any = null;
@@ -29,6 +30,7 @@ const BENEFITS = [
   { icon: 'restaurant-outline', label: 'Akıllı tarifler' },
   { icon: 'fitness-outline', label: 'Ölçüm takibi' },
 ] as const;
+const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -48,18 +50,21 @@ export default function LoginScreen() {
   async function testConnectivity() {
     setTestingConn(true);
     const isPhysical = Device?.isDevice === true;
-    const isLocal = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1');
 
-    if (isPhysical && isLocal) {
-      Alert.alert('Yapılandırma', 'Fiziksel cihazda localhost yerine bilgisayarınızın IP adresini kullanmalısınız.');
+    if (isPhysical && isPhysicalDeviceUnsafeApiBaseUrl(API_BASE_URL)) {
+      Alert.alert('Yapılandırma', 'Fiziksel cihazda localhost, 127.0.0.1 veya 10.0.2.2 yerine bilgisayarınızın güncel IPv4 adresini ya da Cloudflare Tunnel URLini kullanmalısınız.');
       setTestingConn(false);
       return;
     }
 
     try {
-      const startedAt = Date.now();
-      const result = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 5000 });
-      Alert.alert('Bağlantı başarılı', `${API_BASE_URL}\n${Date.now() - startedAt} ms · ${result.status}`);
+      const result = await checkBackendHealth();
+
+      if (result.reachable) {
+        Alert.alert('Bağlantı başarılı', `${API_BASE_URL}\n${result.latencyMs} ms · ${result.status ?? 'healthy'}\n${API_BASE_URL_SOURCE}`);
+      } else {
+        Alert.alert('Bağlantı hatası', `${API_BASE_URL}\n${result.error ?? 'Backend yanıt vermedi'}`);
+      }
     } catch (error: any) {
       Alert.alert('Bağlantı hatası', `${API_BASE_URL}\n${error.message}`);
     } finally {
@@ -126,10 +131,10 @@ export default function LoginScreen() {
         <View style={[s.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={s.heroHeader}>
             <View style={[s.brandMark, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
-              <Ionicons name="leaf" size={22} color={theme.primaryDark} />
+              <Image source={BRAND_LOGO} style={s.brandLogo} resizeMode="contain" />
             </View>
             <View style={[s.heroTag, { backgroundColor: theme.surfaceElevated }]}>
-              <Text style={[s.heroTagText, { color: theme.emerald }]}>Healthy routine</Text>
+              <Text style={[s.heroTagText, { color: theme.emerald }]}>Dytopia</Text>
             </View>
           </View>
 
@@ -309,7 +314,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    overflow: 'hidden',
   },
+  brandLogo: { width: 50, height: 50, borderRadius: 16 },
   heroTag: {
     borderRadius: radii.full,
     paddingHorizontal: 12,

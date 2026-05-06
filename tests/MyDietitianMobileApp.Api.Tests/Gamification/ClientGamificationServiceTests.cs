@@ -77,6 +77,46 @@ public class ClientGamificationServiceTests
         summary.Achievements.Single(x => x.Id == "perfect_day").Unlocked.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task TrackEventAsync_UnlocksGameMonster_AfterThreeDifferentDailyGames()
+    {
+        await using var db = CreateDbContext();
+
+        var clientId = Guid.NewGuid();
+        var dietitianId = Guid.NewGuid();
+        var service = new ClientGamificationService(db);
+
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "memory" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "quiz" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "word" });
+
+        var summary = await service.GetSummaryAsync(clientId, isPremium: true, dietitianId);
+
+        var gameMonster = summary.Achievements.Single(x => x.Id == "game_monster");
+        gameMonster.ProgressCurrent.Should().Be(3);
+        gameMonster.Unlocked.Should().BeTrue();
+        db.ClientAchievementUnlocks.Count(x => x.ClientId == clientId && x.BadgeId == "game_monster").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TrackEventAsync_KeepsGameMonsterLocked_BeforeThreeDailyGames()
+    {
+        await using var db = CreateDbContext();
+
+        var clientId = Guid.NewGuid();
+        var dietitianId = Guid.NewGuid();
+        var service = new ClientGamificationService(db);
+
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "memory" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "quiz" });
+
+        var summary = await service.GetSummaryAsync(clientId, isPremium: true, dietitianId);
+
+        var gameMonster = summary.Achievements.Single(x => x.Id == "game_monster");
+        gameMonster.ProgressCurrent.Should().Be(2);
+        gameMonster.Unlocked.Should().BeFalse();
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

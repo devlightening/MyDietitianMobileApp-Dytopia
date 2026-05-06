@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using MyDietitianMobileApp.Application.DTOs;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
@@ -24,6 +25,8 @@ public class ClientGamificationService : IClientGamificationService
         public const string WaterGoalHit = "water_goal_hit";
         public const string MeasurementLogged = "measurement_logged";
         public const string CareMessageSent = "care_message_sent";
+        public const string GameCompleted = "game_completed";
+        public const string DailyGamesCompleted = "daily_games_completed";
     }
 
     private static readonly HashSet<string> SinglePerDayEvents =
@@ -32,7 +35,8 @@ public class ClientGamificationService : IClientGamificationService
         EventTypes.KitchenRecipeGenerated,
         EventTypes.WaterGoalHit,
         EventTypes.MeasurementLogged,
-        EventTypes.CareMessageSent
+        EventTypes.CareMessageSent,
+        EventTypes.DailyGamesCompleted
     ];
 
     private static readonly string[] VegetableKeywords =
@@ -304,14 +308,22 @@ public class ClientGamificationService : IClientGamificationService
 
             var kitchenEvents = dayEvents.Count(x => x.EventType == EventTypes.KitchenRecipeGenerated);
             var appOpenEvents = dayEvents.Count(x => x.EventType == EventTypes.AppOpen);
+            var completedGameTypes = dayEvents
+                .Where(x => x.EventType == EventTypes.GameCompleted)
+                .Select(ExtractGameType)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var gameCompletedCount = Math.Max(
+                completedGameTypes.Count,
+                dayEvents.Any(x => x.EventType == EventTypes.DailyGamesCompleted) ? 3 : 0);
             var waterGoalHit = (dailyTracking?.WaterGlasses ?? 0) >= HydrationGoalGlasses;
             var measurementLogged = measurementDates.Contains(cursor);
             var careMessageSent = careMessageDates.Contains(cursor);
-            var engagementScore = BuildEngagementScore(kitchenEvents, appOpenEvents, waterGoalHit, measurementLogged, careMessageSent, completedMeals);
+            var engagementScore = BuildEngagementScore(kitchenEvents, appOpenEvents, waterGoalHit, measurementLogged, careMessageSent, completedMeals, gameCompletedCount);
             var primaryTrack = isPremium && plannedMeals > 0 ? "plan_adherence" : "daily_rhythm";
             var qualifiedForStreak = primaryTrack == "plan_adherence"
                 ? adherenceScore >= 0.8m
-                : kitchenEvents > 0 || (appOpenEvents > 0 && (waterGoalHit || measurementLogged || careMessageSent || completedMeals > 0));
+                : kitchenEvents > 0 || gameCompletedCount > 0 || (appOpenEvents > 0 && (waterGoalHit || measurementLogged || careMessageSent || completedMeals > 0));
 
             runningStreak = qualifiedForStreak ? runningStreak + 1 : 0;
             bestStreak = Math.Max(bestStreak, runningStreak);
@@ -334,6 +346,7 @@ public class ClientGamificationService : IClientGamificationService
                 kitchenEvents,
                 measurementLogged,
                 careMessageSent,
+                gameCompletedCount,
                 proteinTotal,
                 vegetableSignals));
         }
@@ -384,7 +397,8 @@ public class ClientGamificationService : IClientGamificationService
             CreateDailyAchievement("likir_likir", todayState.WaterGlasses, HydrationGoalGlasses),
             CreateAchievement("water_keeper", currentHydrationStreak, HydrationStreakBadgeDays, unlocks),
             CreateAchievement("flex_saver", anyFlexSaver ? 1 : 0, 1, unlocks),
-            CreateAchievement("plan_keeper", Math.Min(weeklyQualifiedDays, 5), 5, unlocks)
+            CreateAchievement("plan_keeper", Math.Min(weeklyQualifiedDays, 5), 5, unlocks),
+            CreateAchievement("game_monster", Math.Min(todayState.GameCompletedCount, 3), 3, unlocks)
         };
 
         var newlyUnlocked = new List<string>();
@@ -548,7 +562,8 @@ public class ClientGamificationService : IClientGamificationService
         bool waterGoalHit,
         bool measurementLogged,
         bool careMessageSent,
-        int completedMeals)
+        int completedMeals,
+        int gameCompletedCount)
     {
         var score = 0m;
         score += Math.Min(0.45m, kitchenEvents * 0.35m);
@@ -557,7 +572,27 @@ public class ClientGamificationService : IClientGamificationService
         score += measurementLogged ? 0.15m : 0m;
         score += careMessageSent ? 0.1m : 0m;
         score += completedMeals > 0 ? 0.15m : 0m;
+        score += Math.Min(0.15m, gameCompletedCount * 0.05m);
         return Math.Min(1m, score);
+    }
+
+    private static string? ExtractGameType(ClientEngagementEvent engagementEvent)
+    {
+        if (string.IsNullOrWhiteSpace(engagementEvent.MetaJson))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(engagementEvent.MetaJson);
+            if (doc.RootElement.TryGetProperty("gameType", out var gameType))
+                return gameType.GetString();
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private static int GetCompletedMeals(DayState state)
@@ -605,6 +640,7 @@ public class ClientGamificationService : IClientGamificationService
         int KitchenEvents,
         bool MeasurementLogged,
         bool CareMessageSent,
+        int GameCompletedCount,
         decimal ProteinTotal,
         int VegetableSignals);
 }

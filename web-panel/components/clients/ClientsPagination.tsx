@@ -48,7 +48,7 @@ export function ClientsPagination({
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="h-10 rounded-full border border-border bg-white px-4 text-sm text-foreground outline-none transition focus:border-primary/30 focus:ring-2 focus:ring-primary/10"
+            className="select-sfcos select-sfcos-inline h-10 w-24"
           >
             <option value={10}>10</option>
             <option value={25}>25</option>

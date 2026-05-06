@@ -65,7 +65,7 @@ namespace MyDietitianMobileApp.Application.Queries
         /// <summary>Nutritional proximity score 0–100.</summary>
         public decimal NutritionalScore { get; set; }
 
-        /// <summary>Combined ranking score (ingredient 40% + nutrition 60%).</summary>
+        /// <summary>Combined ranking score (ingredient 30% + nutrition 50% + protein 15% + cookability 5%).</summary>
         public decimal CombinedScore { get; set; }
     }
 }

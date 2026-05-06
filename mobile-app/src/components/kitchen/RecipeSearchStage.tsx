@@ -1,5 +1,5 @@
 ﻿import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Animated, {
   Easing,
@@ -11,6 +11,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { radii, spacing, type Theme } from "../../theme/tokens";
+import DytopiaLogoBubble from "../decor/DytopiaLogoBubble";
+
+const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
 
 const PHASES = {
   tr: ["Malzemeler tencerede", "Aromalar yükseliyor", "Tarif servis ediliyor"],
@@ -373,8 +376,9 @@ export default function RecipeSearchStage({
 
   return (
     <View style={s.root}>
-      <View style={[s.ambientOrbA, { backgroundColor: `${theme.primary}1E` }]} />
-      <View style={[s.ambientOrbB, { backgroundColor: `${theme.emerald}18` }]} />
+      <DytopiaLogoBubble size={170} opacity={0.24} logoOpacity={0.42} style={s.ambientOrbA} />
+      <DytopiaLogoBubble size={148} opacity={0.2} logoOpacity={0.4} style={s.ambientOrbB} />
+      <DytopiaLogoBubble size={220} opacity={0.12} logoOpacity={0.3} style={s.centerBrandOrb} />
       <Animated.View style={[s.centralGlow, { backgroundColor: `${theme.primary}12` }, glowStyle]} />
 
       <View style={[s.statusPill, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
@@ -411,6 +415,10 @@ export default function RecipeSearchStage({
           <View style={[s.lidTop, { backgroundColor: theme.surface, borderColor: `${theme.borderEmerald}B5` }]} />
           <View style={[s.lidKnob, { backgroundColor: theme.accentGold, borderColor: `${theme.accentGold}55` }]} />
           <View style={[s.lidHighlight, { backgroundColor: `${theme.surfaceElevated}CC` }]} />
+          <View style={s.lidBrand}>
+            <Image source={BRAND_LOGO} resizeMode="contain" style={s.lidBrandLogo} />
+            <Text style={[s.lidBrandText, { color: theme.primaryDark }]}>DYTOPIA</Text>
+          </View>
         </Animated.View>
 
         <View style={[s.potHandle, s.potHandleLeft, { borderColor: `${theme.borderEmerald}86` }]} />
@@ -498,6 +506,16 @@ const s = StyleSheet.create({
     width: 148,
     height: 148,
     borderRadius: 74,
+  },
+  centerBrandOrb: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -110,
+    marginLeft: -110,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
   },
   centralGlow: {
     position: "absolute",
@@ -625,6 +643,26 @@ const s = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     opacity: 0.9,
+  },
+  lidBrand: {
+    position: "absolute",
+    top: 34,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    opacity: 0.55,
+    zIndex: 8,
+  },
+  lidBrandLogo: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+  },
+  lidBrandText: {
+    fontSize: 6.5,
+    fontWeight: "900",
+    letterSpacing: 1.5,
   },
   potHandle: {
     position: "absolute",

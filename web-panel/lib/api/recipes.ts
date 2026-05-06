@@ -3,6 +3,9 @@ import api from '../api';
 export interface RecipeIngredientSummary {
   id: string;
   name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  displayAmount?: string | null;
 }
 
 export interface RecipeAnalyticsPreview {
@@ -126,6 +129,7 @@ export interface SaveRecipeRequest {
   name: string;
   description?: string;
   isPublic: boolean;
+  ingredients?: SaveRecipeIngredient[];
   mandatoryIngredients: string[];
   optionalIngredients?: string[];
   flavoringIngredients?: string[];
@@ -139,6 +143,13 @@ export interface SaveRecipeRequest {
   proteinGrams?: number;
   carbsGrams?: number;
   fatGrams?: number;
+}
+
+export interface SaveRecipeIngredient {
+  ingredientId: string;
+  role: 'Mandatory' | 'Optional' | 'Flavoring' | 'Prohibited';
+  quantity?: number | null;
+  unit?: string | null;
 }
 
 export interface PopularRecipe {

@@ -150,6 +150,12 @@ namespace MyDietitianMobileApp.Infrastructure.Services
         /// Returns up to <see cref="MaxAlternatives"/> recipe recommendations ordered by a combined score.
         ///
         /// Scoring formula per candidate:
+        ///   NOTE (2026-05): weights updated to avoid suggesting side dishes (e.g., potato salad)
+        ///   as alternatives for protein-centric meals when the pantry lacks the main protein.
+        ///   ingredientCoverage (30%) - weighted mandatory coverage (condiments downweighted)
+        ///   nutritionalProximity (50%) - macro/calorie closeness to the original recipe
+        ///   proteinAlignment (15%) - protein source + amount similarity
+        ///   cookability (5%) - smooth penalty by missing mandatory count
         ///   ingredientCoverage (40%) — fraction of mandatory ingredients the client already has
         ///   nutritionalProximity (45%) — macro/calorie closeness to the original recipe
         ///   cookabilityBonus  (15%) — flat bonus when ALL mandatory ingredients are present (via CombinedScore ctor)
@@ -201,22 +207,30 @@ namespace MyDietitianMobileApp.Infrastructure.Services
 
             var recommendationPool = preferredPool.Count > 0 ? preferredPool : evaluated;
 
-            return recommendationPool
+            var recommendations = recommendationPool
                 .Select(eval =>
                 {
                     var recipe = eval.Recipe;
-                    var totalMandatory = recipe.MandatoryIngredients.Count;
+                    var missingMandatoryIds = eval.MissingMandatoryIngredientIds.ToHashSet();
 
-                    // Real ingredient coverage: percentage of mandatory ingredients the client has.
-                    // Using this instead of eval.MatchPercentage (which is always 0 when any
-                    // mandatory ingredient is missing) gives a meaningful gradient for ranking.
-                    var coveredMandatory = totalMandatory - eval.MissingMandatoryCount;
-                    var ingredientCoverageScore = totalMandatory > 0
-                        ? (decimal)coveredMandatory / totalMandatory * 100m
+                    // Ingredient coverage: weighted mandatory coverage.
+                    // Condiments are downweighted so "salt + spices" does not dominate the score.
+                    decimal totalWeight = 0m;
+                    decimal coveredWeight = 0m;
+                    foreach (var ingredient in recipe.MandatoryIngredients)
+                    {
+                        var weight = ingredient.IsCondiment ? 0.15m : 1.0m;
+                        totalWeight += weight;
+                        if (!missingMandatoryIds.Contains(ingredient.Id))
+                            coveredWeight += weight;
+                    }
+
+                    var ingredientCoverageScore = totalWeight > 0m
+                        ? Math.Round(coveredWeight / totalWeight * 100m, 1)
                         : 0m;
 
-                    var isCookable = eval.MissingMandatoryCount == 0;
                     var nutritionalScore = ComputeNutritionalScore(recipe, originalRecipe);
+                    var proteinScore = ComputeProteinAlignmentScore(recipe, originalRecipe);
                     var comparison = BuildNutritionalComparison(recipe, originalRecipe);
                     var missingIngredientNames = recipe.MandatoryIngredients
                         .Where(i => eval.MissingMandatoryIngredientIds.Contains(i.Id))
@@ -227,8 +241,13 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                         originalRecipe,
                         ingredientCoverageScore,
                         nutritionalScore,
+                        proteinScore,
                         missingIngredientNames);
-                    var planAlignmentNote = BuildPlanAlignmentNote(ingredientCoverageScore, nutritionalScore);
+                    var planAlignmentNote = BuildPlanAlignmentNote(
+                        ingredientCoverageScore,
+                        nutritionalScore,
+                        proteinScore,
+                        eval.MissingMandatoryCount);
 
                     return new AlternativeRecipeRecommendation(
                         recipeId: recipe.Id,
@@ -244,14 +263,46 @@ namespace MyDietitianMobileApp.Infrastructure.Services
                         carbsGrams: recipe.CarbsGrams,
                         fatGrams: recipe.FatGrams,
                         nutritionalScore: nutritionalScore,
-                        isCookable: isCookable);
+                        proteinScore: proteinScore);
                 })
-                .OrderBy(r => r.MissingIngredientsForAlternative.Count)
-                .ThenByDescending(r => r.CombinedScore)
-                .ThenByDescending(r => r.MatchPercentage)
-                .ThenByDescending(r => r.NutritionalScore)
-                .Take(MaxAlternatives)
                 .ToList();
+
+            // Primary ordering: combined score (already includes a smooth cookability penalty).
+            recommendations = recommendations
+                .OrderByDescending(r => r.CombinedScore)
+                .ThenByDescending(r => r.NutritionalScore)
+                .ThenByDescending(r => r.MatchPercentage)
+                .ToList();
+
+            // UX rule:
+            // - If we have a strong "cookable now" option, show exactly one pantry-feasible recipe first.
+            // - Fill the remaining slots primarily with near-miss recipes (missing 1-3 mandatory items),
+            //   so the user also sees "close" alternatives that may require small shopping.
+            var bestOverall = recommendations.FirstOrDefault();
+            var bestCookable = recommendations.FirstOrDefault(r => r.MissingIngredientsForAlternative.Count == 0);
+
+            var shouldLeadWithCookable = bestOverall != null && bestCookable != null &&
+                                         (bestCookable.CombinedScore >= 55m ||
+                                          bestCookable.CombinedScore >= bestOverall.CombinedScore - 7m);
+
+            if (shouldLeadWithCookable && bestCookable != null)
+            {
+                var remaining = recommendations
+                    .Where(r => r.RecipeId != bestCookable.RecipeId)
+                    .ToList();
+
+                var nonCookablesFirst = remaining
+                    .Where(r => r.MissingIngredientsForAlternative.Count > 0)
+                    .Concat(remaining.Where(r => r.MissingIngredientsForAlternative.Count == 0))
+                    .Take(MaxAlternatives - 1)
+                    .ToList();
+
+                return new[] { bestCookable }
+                    .Concat(nonCookablesFirst)
+                    .ToList();
+            }
+
+            return recommendations.Take(MaxAlternatives).ToList();
         }
 
         private static List<string> BuildRecommendationReasons(
@@ -259,6 +310,7 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             Recipe target,
             decimal matchPercentage,
             decimal nutritionalScore,
+            decimal proteinScore,
             IReadOnlyCollection<string> missingIngredientNames)
         {
             var reasons = new List<string>();
@@ -275,6 +327,10 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             if (HasStrongProteinMatch(candidate, target))
             {
                 reasons.Add("Protein dengesi iyi korunur.");
+            }
+            else if (proteinScore >= 75m)
+            {
+                reasons.Add("Protein odagi planla uyumludur.");
             }
 
             if (missingIngredientNames.Count == 0)
@@ -316,9 +372,147 @@ namespace MyDietitianMobileApp.Infrastructure.Services
             return diffRatio <= 0.15m;
         }
 
-        private static string BuildPlanAlignmentNote(decimal matchPercentage, decimal nutritionalScore)
+        private enum ProteinGroup
         {
-            var combinedScore = matchPercentage * 0.4m + nutritionalScore * 0.6m;
+            Unknown = 0,
+            RedMeat,
+            Poultry,
+            FishSeafood,
+            Legume,
+            Egg,
+            Dairy,
+        }
+
+        private static decimal ComputeProteinAlignmentScore(Recipe candidate, Recipe target)
+        {
+            // Group similarity (source) + amount proximity (grams).
+            var groupScore = ComputeProteinGroupSimilarityScore(candidate, target);
+            var amountScore = ComputeProteinAmountSimilarityScore(candidate, target);
+            return Math.Round(groupScore * 0.60m + amountScore * 0.40m, 1);
+        }
+
+        private static decimal ComputeProteinAmountSimilarityScore(Recipe candidate, Recipe target)
+        {
+            if (!candidate.ProteinGrams.HasValue || !target.ProteinGrams.HasValue || target.ProteinGrams.Value <= 0m)
+                return 50m; // neutral when missing data
+
+            var diffRatio = Math.Abs(candidate.ProteinGrams.Value - target.ProteinGrams.Value) / target.ProteinGrams.Value;
+            const decimal tolerance = 0.60m; // allow wider band than "strong match" (15%)
+            var score = Math.Max(0m, 1m - diffRatio / tolerance) * 100m;
+            return Math.Round(score, 1);
+        }
+
+        private static decimal ComputeProteinGroupSimilarityScore(Recipe candidate, Recipe target)
+        {
+            var targetGroup = GetDominantProteinGroup(target);
+            var candidateGroup = GetDominantProteinGroup(candidate);
+
+            if (targetGroup == ProteinGroup.Unknown && candidateGroup == ProteinGroup.Unknown)
+                return 50m;
+
+            if (targetGroup == ProteinGroup.Unknown || candidateGroup == ProteinGroup.Unknown)
+                return 45m;
+
+            if (targetGroup == candidateGroup)
+                return 100m;
+
+            var targetIsAnimal = IsAnimalProtein(targetGroup);
+            var candidateIsAnimal = IsAnimalProtein(candidateGroup);
+
+            if (targetIsAnimal && candidateIsAnimal)
+                return 80m; // red meat vs poultry vs fish
+
+            if ((targetGroup == ProteinGroup.Egg && candidateGroup == ProteinGroup.Dairy) ||
+                (targetGroup == ProteinGroup.Dairy && candidateGroup == ProteinGroup.Egg))
+                return 80m;
+
+            if ((targetIsAnimal && candidateGroup == ProteinGroup.Legume) ||
+                (candidateIsAnimal && targetGroup == ProteinGroup.Legume))
+                return 65m;
+
+            return 60m;
+        }
+
+        private static bool IsAnimalProtein(ProteinGroup group)
+            => group is ProteinGroup.RedMeat or ProteinGroup.Poultry or ProteinGroup.FishSeafood;
+
+        private static ProteinGroup GetDominantProteinGroup(Recipe recipe)
+        {
+            // Prefer mandatory non-condiment ingredients as the "core" definition of the dish.
+            foreach (var ingredient in recipe.MandatoryIngredients)
+            {
+                if (ingredient.IsCondiment) continue;
+                var group = ClassifyProteinGroup(ingredient.CanonicalName);
+                if (group != ProteinGroup.Unknown)
+                    return group;
+            }
+
+            // Fallback: look at the recipe name if ingredients did not reveal a protein group.
+            return ClassifyProteinGroup(recipe.Name);
+        }
+
+        private static ProteinGroup ClassifyProteinGroup(string? text)
+        {
+            var s = NormalizeTr(text);
+            if (string.IsNullOrWhiteSpace(s))
+                return ProteinGroup.Unknown;
+
+            // Poultry
+            if (s.Contains("tavuk") || s.Contains("hindi"))
+                return ProteinGroup.Poultry;
+
+            // Red meat
+            if (s.Contains("dana") || s.Contains("kuzu") || s.Contains("kiyma") || s.Contains("bonfile") ||
+                s.Contains("kofte") || s.Contains("et ") || s.EndsWith(" et"))
+                return ProteinGroup.RedMeat;
+
+            // Fish/seafood
+            if (s.Contains("balik") || s.Contains("somon") || s.Contains("ton") || s.Contains("hamsi") ||
+                s.Contains("levrek") || s.Contains("palamut") || s.Contains("karides") || s.Contains("midye"))
+                return ProteinGroup.FishSeafood;
+
+            // Legumes / plant protein
+            if (s.Contains("mercimek") || s.Contains("nohut") || s.Contains("fasulye") || s.Contains("barbunya") ||
+                s.Contains("bakla") || s.Contains("bezelye") || s.Contains("soya") || s.Contains("tofu"))
+                return ProteinGroup.Legume;
+
+            // Egg
+            if (s.Contains("yumurta"))
+                return ProteinGroup.Egg;
+
+            // Dairy
+            if (s.Contains("yogurt") || s.Contains("suzme yogurt") || s.Contains("sut") || s.Contains("peynir") ||
+                s.Contains("lor") || s.Contains("kefir") || s.Contains("ayran") || s.Contains("labne"))
+                return ProteinGroup.Dairy;
+
+            return ProteinGroup.Unknown;
+        }
+
+        private static string NormalizeTr(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+
+            return input
+                .Trim()
+                .ToLowerInvariant()
+                .Replace('ç', 'c')
+                .Replace('ğ', 'g')
+                .Replace('ı', 'i')
+                .Replace('ö', 'o')
+                .Replace('ş', 's')
+                .Replace('ü', 'u');
+        }
+
+        private static string BuildPlanAlignmentNote(decimal matchPercentage, decimal nutritionalScore, decimal proteinScore, int missingMandatoryCount)
+        {
+            // Mirror the combined score formula used by AlternativeRecipeRecommendation.
+            var cookabilityScore = Math.Max(0m, 100m - missingMandatoryCount * 25m);
+            var combinedScore =
+                matchPercentage * 0.30m +
+                nutritionalScore * 0.50m +
+                proteinScore * 0.15m +
+                cookabilityScore * 0.05m;
 
             if (nutritionalScore >= 85m && matchPercentage >= 80m)
                 return "Plan uyumunu yuksek duzeyde korur.";

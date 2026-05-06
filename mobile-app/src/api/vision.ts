@@ -43,6 +43,13 @@ export interface AnalyzeImageResponse {
   matched: DetectedIngredient[];
   /** Food names GPT detected but the DB could not normalize */
   unmatched: string[];
+  /**
+   * Machine-readable failure reason. Undefined on success.
+   * "image_too_large" — image exceeded backend size limit even after client-side compression.
+   */
+  reason?: 'image_too_large';
+  /** User-facing Turkish error message. Present only when reason is set. */
+  userMessage?: string;
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────

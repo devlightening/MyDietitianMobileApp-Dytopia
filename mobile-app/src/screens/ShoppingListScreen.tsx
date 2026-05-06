@@ -1,7 +1,6 @@
 ﻿import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   Share,
   StatusBar,
@@ -17,10 +16,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from "react-native-reanimated";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
+import { useFeedback } from "../context/FeedbackContext";
 import { Routes } from "../navigation/routes";
 import { radii, spacing } from "../theme/tokens";
+import { mapApiError } from "../utils/apiError";
 import ProduceBubble from "../components/decor/ProduceBubble";
+import DytopiaWatermark from "../components/decor/DytopiaWatermark";
 import AppEmptyState from "../components/ui/AppEmptyState";
+import DytopiaLoadingState from "../components/ui/DytopiaLoadingState";
 import AnimatedCard from "../components/ui/AnimatedCard";
 import PulseBadge from "../components/ui/PulseBadge";
 import SuccessSettleWrapper from "../components/ui/SuccessSettleWrapper";
@@ -39,10 +42,39 @@ import {
 
 const EMPTY_SUMMARY: ShoppingListSummary = { total: 0, checkedCount: 0, activeCount: 0 };
 
+function formatAmountValue(value?: number | null) {
+  if (value == null || !Number.isFinite(Number(value))) return "";
+  return Number(value).toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function formatMeasuredName(item: {
+  title?: string;
+  ingredientName?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  displayAmount?: string | null;
+}) {
+  const name = item.ingredientName || item.title || "";
+  const amount = item.displayAmount?.trim() || (item.quantity != null && item.unit ? `${formatAmountValue(item.quantity)} ${item.unit}` : "");
+  return amount && name ? `${amount} ${name}` : name;
+}
+
+function marketAisleRank(title: string) {
+  const normalized = title.toLocaleLowerCase("tr-TR");
+  if (/(marul|domates|salatalık|brokoli|ıspanak|maydanoz|sebze|biber|soğan|patates|havuç)/.test(normalized)) return 1;
+  if (/(elma|muz|portakal|çilek|meyve|limon|avokado)/.test(normalized)) return 2;
+  if (/(süt|yoğurt|peynir|kefir|ayran)/.test(normalized)) return 3;
+  if (/(tavuk|et|balık|ton|hindi|yumurta)/.test(normalized)) return 4;
+  if (/(bulgur|pirinç|makarna|un|yulaf|ekmek)/.test(normalized)) return 5;
+  if (/(zeytinyağı|yağ|baharat|tuz|karabiber|sos)/.test(normalized)) return 6;
+  return 9;
+}
+
 export default function ShoppingListScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
+  const { showToast } = useFeedback();
   const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<ShoppingListItem[]>([]);
@@ -53,7 +85,7 @@ export default function ShoppingListScreen() {
   const [adding, setAdding] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "meal">("list");
+  const [viewMode, setViewMode] = useState<"list" | "meal" | "market">("list");
   const [expandedPlanCardKey, setExpandedPlanCardKey] = useState<string | null>(null);
 
   const copy = language === "en"
@@ -83,6 +115,9 @@ export default function ShoppingListScreen() {
         completedSection: "Completed",
         listView: "List",
         mealView: "By meal",
+        marketView: "Market",
+        marketModeTitle: "Market mode",
+        marketModeHint: "Bigger taps, calmer list, faster checkout.",
         mealBreakdown: "Meal breakdown",
         selectedRecipePrefix: "Selected recipe",
         mandatory: "Mandatory",
@@ -125,6 +160,9 @@ export default function ShoppingListScreen() {
         completedSection: "Tamamlananlar",
         listView: "Liste",
         mealView: "Öğün Bazlı",
+        marketView: "Market",
+        marketModeTitle: "Market modu",
+        marketModeHint: "Daha büyük dokunuş alanı, daha sakin liste, daha hızlı alışveriş.",
         mealBreakdown: "Öğün kırılımı",
         selectedRecipePrefix: "Seçilen tarif",
         mandatory: "Zorunlu",
@@ -148,16 +186,18 @@ export default function ShoppingListScreen() {
       setItems(res.items);
       setSummary(res.summary);
       setGeneration(res.generation);
-    } catch {
+    } catch (error) {
+      const mapped = mapApiError(error, language);
       setItems([]);
       setSummary(EMPTY_SUMMARY);
+      showToast({ variant: "error", title: mapped.title, message: mapped.message });
     } finally {
       setLoading(false);
       setGenerating(false);
       setAdding(false);
       setBusyId(null);
     }
-  }, []);
+  }, [language, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -221,6 +261,10 @@ export default function ShoppingListScreen() {
 
   const activeMealGroups = useMemo(() => buildMealGroups(activeItems), [activeItems, language]);
   const completedMealGroups = useMemo(() => buildMealGroups(completedItems), [completedItems, language]);
+  const marketRouteItems = useMemo(
+    () => [...activeItems].sort((a, b) => marketAisleRank(formatMeasuredName(a)) - marketAisleRank(formatMeasuredName(b)) || formatMeasuredName(a).localeCompare(formatMeasuredName(b), language === "tr" ? "tr" : "en")),
+    [activeItems, language],
+  );
   const recipeCards = generation?.recipeCards ?? [];
 
   const smartAssist = useMemo(() => {
@@ -259,8 +303,14 @@ export default function ShoppingListScreen() {
       setSummary(res.summary);
       setGeneration(res.generation);
       setDraft("");
-    } catch {
-      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Liste maddesi eklenemedi." : "Could not add item.");
+      showToast({
+        variant: "success",
+        title: language === "tr" ? "Listeye eklendi" : "Added to list",
+        message: value,
+      });
+    } catch (error) {
+      const mapped = mapApiError(error, language);
+      showToast({ variant: "error", title: mapped.title, message: mapped.message });
     } finally {
       setAdding(false);
     }
@@ -273,8 +323,14 @@ export default function ShoppingListScreen() {
       setItems(res.items);
       setSummary(res.summary);
       setGeneration(res.generation);
-    } catch {
-      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Plan listesi oluşturulamadı." : "Could not generate plan list.");
+      showToast({
+        variant: "success",
+        title: language === "tr" ? "Plan listesi hazır" : "Plan list is ready",
+        message: language === "tr" ? `${res.summary.activeCount} aktif madde listede.` : `${res.summary.activeCount} active items are on the list.`,
+      });
+    } catch (error) {
+      const mapped = mapApiError(error, language);
+      showToast({ variant: "error", title: mapped.title, message: mapped.message });
     } finally {
       setGenerating(false);
     }
@@ -287,8 +343,9 @@ export default function ShoppingListScreen() {
       setItems(res.items);
       setSummary(res.summary);
       setGeneration(res.generation);
-    } catch {
-      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Durum güncellenemedi." : "Could not update item.");
+    } catch (error) {
+      const mapped = mapApiError(error, language);
+      showToast({ variant: "error", title: mapped.title, message: mapped.message });
     } finally {
       setBusyId(null);
     }
@@ -296,11 +353,35 @@ export default function ShoppingListScreen() {
 
   async function handleDelete(item: ShoppingListItem) {
     setBusyId(item.id);
+    const deletedTitle = formatMeasuredName(item) || item.title;
     try {
       await deleteShoppingListItem(item.id);
       await load();
-    } catch {
-      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Madde silinemedi." : "Could not delete item.");
+      showToast({
+        variant: "warning",
+        title: language === "tr" ? "Madde silindi" : "Item deleted",
+        message: deletedTitle,
+        durationMs: 5600,
+        action: {
+          label: language === "tr" ? "Geri al" : "Undo",
+          icon: "return-up-back-outline",
+          tone: "warning",
+          onPress: async () => {
+            try {
+              const res = await addShoppingListItem(deletedTitle);
+              setItems(res.items);
+              setSummary(res.summary);
+              setGeneration(res.generation);
+              showToast({ variant: "success", title: language === "tr" ? "Geri alındı" : "Restored", message: deletedTitle });
+            } catch {
+              showToast({ variant: "error", title: language === "tr" ? "Geri alınamadı" : "Could not restore", message: deletedTitle });
+            }
+          },
+        },
+      });
+    } catch (error) {
+      const mapped = mapApiError(error, language);
+      showToast({ variant: "error", title: mapped.title, message: mapped.message });
       setBusyId(null);
     }
   }
@@ -311,8 +392,13 @@ export default function ShoppingListScreen() {
       setItems(res.items);
       setSummary(res.summary);
       setGeneration(res.generation);
-    } catch {
-      Alert.alert(language === "tr" ? "Hata" : "Error", language === "tr" ? "Temizleme işlemi başarısız." : "Could not clear checked items.");
+      showToast({
+        variant: "success",
+        title: language === "tr" ? "Tamamlananlar temizlendi" : "Checked items cleared",
+      });
+    } catch (error) {
+      const mapped = mapApiError(error, language);
+      showToast({ variant: "error", title: mapped.title, message: mapped.message });
     }
   }
 
@@ -448,7 +534,7 @@ export default function ShoppingListScreen() {
                   item.isChecked && { textDecorationLine: "line-through", color: theme.textMuted },
                 ]}
               >
-                {item.title}
+                {formatMeasuredName({ ...item, ingredientName: item.ingredientName ?? item.title })}
               </Text>
               <View style={[s.sourcePill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
                 <Text style={[s.sourcePillTxt, { color: theme.emerald }]}>{sourceLabel(item.sourceType)}</Text>
@@ -496,6 +582,82 @@ export default function ShoppingListScreen() {
               <ActivityIndicator size="small" color={theme.textSub} />
             ) : (
               <Ionicons name="close-outline" size={22} color={theme.textSub} />
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
+
+  function renderMarketItem(item: ShoppingListItem, index: number) {
+    const mealCaption = getMealCaption(item);
+    const roleSummary = getRoleSummary(item);
+    const primaryRole = roleSummary[0] ?? "Mandatory";
+    const tone = categoryTone(primaryRole);
+
+    return (
+      <Animated.View
+        key={item.id}
+        entering={FadeInDown.delay(Math.min(index * 18, 120)).duration(160)}
+        exiting={FadeOutUp.duration(130)}
+        layout={LinearTransition.duration(150)}
+      >
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={[
+            s.marketItemCard,
+            {
+              backgroundColor: item.isChecked ? theme.surfaceElevated : theme.surface,
+              borderColor: item.isChecked ? `${theme.emerald}36` : theme.border,
+            },
+          ]}
+          onPress={() => void handleToggle(item)}
+        >
+          <View style={[
+            s.marketCheck,
+            {
+              backgroundColor: item.isChecked ? theme.emerald : `${tone.fg}10`,
+              borderColor: item.isChecked ? `${theme.emerald}22` : `${tone.fg}2e`,
+            },
+          ]}>
+            <Ionicons
+              name={item.isChecked ? "checkmark" : "ellipse-outline"}
+              size={23}
+              color={item.isChecked ? "#FFFFFF" : tone.fg}
+            />
+          </View>
+          <View style={s.marketItemBody}>
+            <Text
+              style={[
+                s.marketItemTitle,
+                { color: theme.text },
+                item.isChecked && { textDecorationLine: "line-through", color: theme.textMuted },
+              ]}
+              numberOfLines={1}
+            >
+              {item.title}
+            </Text>
+            <View style={s.marketMetaRow}>
+              {!!mealCaption && (
+                <Text style={[s.marketMetaText, { color: theme.textMuted }]} numberOfLines={1}>
+                  {mealCaption}
+                </Text>
+              )}
+              <View style={[s.marketRolePill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
+                <Text style={[s.marketRoleText, { color: tone.fg }]}>{categoryLabel(primaryRole)}</Text>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={s.marketDelete}
+            onPress={() => void handleDelete(item)}
+            disabled={busyId === item.id}
+            activeOpacity={0.72}
+          >
+            {busyId === item.id ? (
+              <ActivityIndicator size="small" color={theme.textSub} />
+            ) : (
+              <Ionicons name="remove-circle-outline" size={22} color={theme.textSub} />
             )}
           </TouchableOpacity>
         </TouchableOpacity>
@@ -575,7 +737,7 @@ export default function ShoppingListScreen() {
               key={`${category}-${ingredient.ingredientId}`}
               style={[s.planCardIngredientChip, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
             >
-              <Text style={[s.planCardIngredientText, { color: theme.textSub }]}>{ingredient.ingredientName}</Text>
+              <Text style={[s.planCardIngredientText, { color: theme.textSub }]}>{formatMeasuredName(ingredient)}</Text>
             </View>
           ))}
         </View>
@@ -661,6 +823,7 @@ export default function ShoppingListScreen() {
         backgroundColor="transparent"
         translucent
       />
+      <DytopiaWatermark position="center" size={300} opacity={0.036} />
       <ProduceBubble
         icon="food-apple-outline"
         iconSize={30}
@@ -832,6 +995,15 @@ export default function ShoppingListScreen() {
 
         <AnimatedCard delay={270} style={[s.viewModeCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[s.viewModeTitle, { color: theme.textMuted }]}>{copy.mealBreakdown}</Text>
+          {viewMode === "market" && (
+            <View style={[s.marketModeNote, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+              <Ionicons name="bag-check-outline" size={16} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.marketModeTitle, { color: theme.text }]}>{copy.marketModeTitle}</Text>
+                <Text style={[s.marketModeHint, { color: theme.textSub }]}>{copy.marketModeHint}</Text>
+              </View>
+            </View>
+          )}
           <View style={s.viewModeRow}>
             <TouchableOpacity
               style={[
@@ -863,6 +1035,22 @@ export default function ShoppingListScreen() {
               <Ionicons name="grid-outline" size={15} color={viewMode === "meal" ? theme.primary : theme.textMuted} />
               <Text style={[s.viewModeBtnTxt, { color: viewMode === "meal" ? theme.primary : theme.textSub }]}>
                 {copy.mealView}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                s.viewModeBtn,
+                {
+                  backgroundColor: viewMode === "market" ? `${theme.emerald}12` : theme.surfaceElevated,
+                  borderColor: viewMode === "market" ? `${theme.emerald}2c` : theme.border,
+                },
+              ]}
+              onPress={() => setViewMode("market")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="bag-check-outline" size={15} color={viewMode === "market" ? theme.emerald : theme.textMuted} />
+              <Text style={[s.viewModeBtnTxt, { color: viewMode === "market" ? theme.emerald : theme.textSub }]}>
+                {copy.marketView}
               </Text>
             </TouchableOpacity>
           </View>
@@ -908,8 +1096,11 @@ export default function ShoppingListScreen() {
         )}
 
         {loading ? (
-          <View style={[s.stateCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <ActivityIndicator size="large" color={theme.primary} />
+          <View style={s.loadingShell}>
+            <DytopiaLoadingState
+              title={language === "tr" ? "Liste hazırlanıyor" : "Preparing your list"}
+              subtitle={language === "tr" ? "Dytopia planını, dolabını ve eksikleri birlikte kontrol ediyor." : "Dytopia is checking your plan, pantry, and missing items together."}
+            />
           </View>
         ) : items.length === 0 ? (
           <AppEmptyState
@@ -929,7 +1120,9 @@ export default function ShoppingListScreen() {
                     <Text style={[s.sectionCountTxt, { color: theme.primary }]}>{activeItems.length}</Text>
                   </View>
                 </View>
-                {viewMode === "meal"
+                {viewMode === "market"
+                  ? marketRouteItems.map(renderMarketItem)
+                  : viewMode === "meal"
                   ? renderMealGroupedSections(activeMealGroups, theme.primary)
                   : activeItems.map(renderShoppingItem)}
               </View>
@@ -943,7 +1136,9 @@ export default function ShoppingListScreen() {
                     <Text style={[s.sectionCountTxt, { color: theme.emerald }]}>{completedItems.length}</Text>
                   </View>
                 </View>
-                {viewMode === "meal"
+                {viewMode === "market"
+                  ? completedItems.map(renderMarketItem)
+                  : viewMode === "meal"
                   ? renderMealGroupedSections(completedMealGroups, theme.emerald)
                   : completedItems.map(renderShoppingItem)}
               </View>
@@ -1174,6 +1369,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
   },
   viewModeBtnTxt: { fontSize: 12, fontWeight: "800" },
+  marketModeNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  marketModeTitle: { fontSize: 12.5, fontWeight: "900", marginBottom: 2 },
+  marketModeHint: { fontSize: 11.5, lineHeight: 16 },
   aiCard: {
     borderWidth: 1,
     borderRadius: radii.xxl,
@@ -1313,6 +1519,10 @@ const s = StyleSheet.create({
     paddingVertical: 36,
     alignItems: "center",
   },
+  loadingShell: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
   list: { gap: spacing.sm },
   sectionBlock: { gap: spacing.sm },
   sectionHeader: {
@@ -1343,6 +1553,46 @@ const s = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 2,
+  },
+  marketItemCard: {
+    borderWidth: 1,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.045,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  marketCheck: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  marketItemBody: { flex: 1, gap: 6 },
+  marketItemTitle: { fontSize: 17, fontWeight: "900", letterSpacing: -0.2 },
+  marketMetaRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  marketMetaText: { flexShrink: 1, fontSize: 11.5, fontWeight: "700" },
+  marketRolePill: {
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  marketRoleText: { fontSize: 10.5, fontWeight: "900" },
+  marketDelete: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
   },
   checkWrap: {
     width: 42,

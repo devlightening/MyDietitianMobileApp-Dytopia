@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   ActivityIndicator, RefreshControl, StatusBar, Alert,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle,
@@ -14,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../auth/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Routes } from '../navigation/routes';
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from '../context/I18nContext';
@@ -24,10 +25,15 @@ import { useGamification } from '../queries/useGamification';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFadeRise, useStaggerItem, useHeroEntrance, useHaloBreathe, useShimmerBand, useFloating } from '../hooks/useAuraMotion';
 import api from '../api/client';
-import { getTodayTracking, updateTodayTracking } from '../api/progress';
+import { getTodayTracking, updateTodayTracking, type TodayTracking } from '../api/progress';
 import { getPantry } from '../api/pantry';
 import { getShoppingList, type ShoppingListSummary } from '../api/shopping-list';
+import { getActiveAnnouncement, type ActiveAnnouncement } from '../api/announcements';
+import { getFavoriteRecipesSummary, type FavoriteRecipesSummaryDto } from '../api/favorites';
+import { getDailyGames, type DailyGamePack } from '../api/games';
 import ProduceBubble from '../components/decor/ProduceBubble';
+import DytopiaWatermark from '../components/decor/DytopiaWatermark';
+import DytopiaLogoBubble from '../components/decor/DytopiaLogoBubble';
 import BadgeDetailSheet from '../components/gamification/BadgeDetailSheet';
 import { refreshWidgetsFromApp } from '../widgets/services/widgetSyncService';
 import * as Haptics from 'expo-haptics';
@@ -51,6 +57,7 @@ import {
   type TodayPanelItem,
 } from '../features/smartInsights';
 import { runCoachTaskAction } from '../features/coachTasks';
+import { getResponsiveGridItemWidth } from '../utils/responsiveLayout';
 
 interface Measurement {
   waistCm: number | null;
@@ -83,6 +90,9 @@ const WATER_GOAL = 10;
 const WATER_GLASS_ML = 200;
 const WATER_MAX_GLASSES = 50;
 const EMPTY_SHOPPING_SUMMARY: ShoppingListSummary = { total: 0, checkedCount: 0, activeCount: 0 };
+const ACTION_RAIL_GAP = 8;
+const ACTION_RAIL_COLUMNS = 3;
+const TODAY_PULSE_GAP = 9;
 
 type ContinueCardModel = {
   eyebrow: string;
@@ -128,18 +138,8 @@ function DayHeaderBand({
 }) {
   return (
     <View style={[s.dayBand, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
-      <ProduceBubble
-        icon="food-apple-outline"
-        iconSize={24}
-        iconColor={`${theme.primary}34`}
-        style={[s.dayBandBlobA, { backgroundColor: theme.primaryGlow }]}
-      />
-      <ProduceBubble
-        icon="leaf"
-        iconSize={18}
-        iconColor={`${theme.emerald}3A`}
-        style={[s.dayBandBlobB, { backgroundColor: theme.emeraldGlow }]}
-      />
+      <DytopiaLogoBubble size={110} opacity={0.22} logoOpacity={0.36} style={s.dayBandBlobA} />
+      <DytopiaLogoBubble size={86} opacity={0.18} logoOpacity={0.34} style={s.dayBandBlobB} />
       <View style={s.dayBandTop}>
         <View style={[s.dayBandChip, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
           <Ionicons name="leaf-outline" size={14} color={theme.primaryDark} />
@@ -159,59 +159,50 @@ function DayHeaderBand({
   );
 }
 
-function AmbientProduceBubbles({
-  theme,
-}: {
-  theme: import('../theme/tokens').Theme;
-}) {
+function AmbientProduceBubbles() {
   const bubbles = [
     {
       key: 'apple-top',
-      icon: 'food-apple-outline' as const,
       size: 134,
       top: 96,
       right: 12,
-      iconSize: 32,
-      iconColor: `${theme.primary}46`,
-      bg: `${theme.primary}18`,
+      opacity: 0.2,
+      logoOpacity: 0.34,
     },
     {
       key: 'carrot-mid',
-      icon: 'carrot' as const,
       size: 118,
       top: 352,
       left: -12,
-      iconSize: 28,
-      iconColor: `${theme.emerald}44`,
-      bg: `${theme.emerald}16`,
+      opacity: 0.17,
+      logoOpacity: 0.32,
     },
     {
       key: 'pear-lower',
-      icon: 'fruit-pear' as const,
       size: 112,
       top: 652,
       right: -10,
-      iconSize: 26,
-      iconColor: `${theme.primary}40`,
-      bg: `${theme.primary}14`,
+      opacity: 0.15,
+      logoOpacity: 0.3,
     },
     {
       key: 'leaf-bottom',
-      icon: 'leaf' as const,
       size: 124,
       top: 974,
       left: -24,
-      iconSize: 30,
-      iconColor: `${theme.emerald}42`,
-      bg: `${theme.emerald}15`,
+      opacity: 0.16,
+      logoOpacity: 0.31,
     },
   ];
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {bubbles.map(bubble => (
-        <View
+        <DytopiaLogoBubble
           key={bubble.key}
+          size={bubble.size}
+          opacity={bubble.opacity}
+          logoOpacity={bubble.logoOpacity}
           style={[
             s.produceBubble,
             {
@@ -221,16 +212,9 @@ function AmbientProduceBubbles({
               top: bubble.top,
               left: bubble.left,
               right: bubble.right,
-              backgroundColor: bubble.bg,
             },
           ]}
-        >
-          <MaterialCommunityIcons
-            name={bubble.icon}
-            size={bubble.iconSize}
-            color={bubble.iconColor}
-          />
-        </View>
+        />
       ))}
     </View>
   );
@@ -240,11 +224,13 @@ export default function DashboardScreen({
   onPressPlans,
   onPressKitchen,
   onPressMessages,
+  onTabSwipeEnabledChange,
   isActive = true,
 }: {
   onPressPlans?: () => void;
   onPressKitchen?: () => void;
   onPressMessages?: () => void;
+  onTabSwipeEnabledChange?: (enabled: boolean) => void;
   isActive?: boolean;
 } = {}) {
   const { user } = useAuth();
@@ -261,6 +247,25 @@ export default function DashboardScreen({
   });
   const activePlan = plansData?.plans.find(p => p.isActive) ?? null;
 
+  const { data: activeAnnouncement } = useQuery({
+    queryKey: ['active-announcement'],
+    queryFn: getActiveAnnouncement,
+    enabled: (user?.isPremium ?? false) && isActive,
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: favoriteSummary } = useQuery({
+    queryKey: ['favorite-recipes-summary'],
+    queryFn: getFavoriteRecipesSummary,
+    enabled: (user?.isPremium ?? false) && isActive,
+    staleTime: 60_000,
+  });
+  const { data: dailyGames } = useQuery({
+    queryKey: ['daily-games', language],
+    queryFn: () => getDailyGames(language),
+    enabled: (user?.isPremium ?? false) && isActive,
+    staleTime: 45_000,
+  });
+
   const compliancePercent = data?.compliancePercent ?? 0;
   const todayStatus       = data?.todayStatus ?? 'on-track';
   const nextMeal          = data?.nextMeal;
@@ -270,20 +275,39 @@ export default function DashboardScreen({
   const motivation        = mapGamificationToMotivation(gamification) ?? data?.motivation;
   const streakValue = gamification?.currentStreak ?? summary?.streak ?? 0;
 
-  // Water: getTodayTracking() yetkili kaynak ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â‚¬Å¡Ã‚¬Ãƒ¢Ã¢â€š¬Ã‚ her focus'ta taze veri ÃƒÆ’Ã†'Ãƒâ€šÃ‚§ek
+  // Water uses tracking as the source of truth so dashboard, hydration screen, and widgets stay aligned.
+  const [waterTracking, setWaterTracking] = useState<TodayTracking | null>(null);
   const [waterGlasses, setWaterGlasses] = useState(0);
   const [waterBusy, setWaterBusy] = useState(false);
   const [pantryCount, setPantryCount] = useState(0);
   const [shoppingSummary, setShoppingSummary] = useState<ShoppingListSummary>(EMPTY_SHOPPING_SUMMARY);
   const waterBusyRef = useRef(false);
 
+  const applyWaterTracking = useCallback((nextTracking: TodayTracking) => {
+    setWaterTracking(nextTracking);
+    setWaterGlasses(Math.max(0, nextTracking.waterGlasses));
+  }, []);
+
+  const loadWaterTracking = useCallback(async () => {
+    try {
+      const nextTracking = await getTodayTracking();
+      applyWaterTracking(nextTracking);
+    } catch {
+      // Dashboard should not block if the hydration endpoint is temporarily unavailable.
+    }
+  }, [applyWaterTracking]);
+
   useEffect(() => {
     if (!isActive) return;
+    void loadWaterTracking();
+  }, [isActive, loadWaterTracking]);
 
-    getTodayTracking()
-      .then(t => setWaterGlasses(Math.max(0, t.waterGlasses)))
-      .catch(() => {});
-  }, [isActive]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!isActive) return;
+      void loadWaterTracking();
+    }, [isActive, loadWaterTracking]),
+  );
 
   useEffect(() => {
     if (!isActive || !isStale || isLoading || isRefetching) return;
@@ -319,44 +343,67 @@ export default function DashboardScreen({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const prev = waterGlasses;
     const next = prev + 1;
+    const prevTracking = waterTracking;
     waterBusyRef.current = true;
     setWaterBusy(true);
     setWaterGlasses(next);
+    if (prevTracking) {
+      setWaterTracking({ ...prevTracking, waterGlasses: next });
+    }
     try {
-      const updated = await updateTodayTracking(next);
-      setWaterGlasses(Math.max(0, updated.waterGlasses));
+      const updated = await updateTodayTracking(
+        next,
+        prevTracking?.steps ?? 0,
+        prevTracking?.notes ?? null,
+      );
+      applyWaterTracking(updated);
       void refreshWidgetsFromApp(user?.isPremium ?? false);
     } catch {
       setWaterGlasses(prev);
+      if (prevTracking) {
+        setWaterTracking(prevTracking);
+      }
     } finally {
       waterBusyRef.current = false;
       setWaterBusy(false);
     }
-  }, [user?.isPremium, waterGlasses]);
+  }, [applyWaterTracking, user?.isPremium, waterGlasses, waterTracking]);
 
   const handleRemoveWater = useCallback(async () => {
     if (waterBusyRef.current || waterGlasses <= 0) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const prev = waterGlasses;
     const next = prev - 1;
+    const prevTracking = waterTracking;
     waterBusyRef.current = true;
     setWaterBusy(true);
     setWaterGlasses(next);
+    if (prevTracking) {
+      setWaterTracking({ ...prevTracking, waterGlasses: next });
+    }
     try {
-      const updated = await updateTodayTracking(next);
-      setWaterGlasses(Math.max(0, updated.waterGlasses));
+      const updated = await updateTodayTracking(
+        next,
+        prevTracking?.steps ?? 0,
+        prevTracking?.notes ?? null,
+      );
+      applyWaterTracking(updated);
       void refreshWidgetsFromApp(user?.isPremium ?? false);
     } catch {
       setWaterGlasses(prev);
+      if (prevTracking) {
+        setWaterTracking(prevTracking);
+      }
     } finally {
       waterBusyRef.current = false;
       setWaterBusy(false);
     }
-  }, [user?.isPremium, waterGlasses]);
+  }, [applyWaterTracking, user?.isPremium, waterGlasses, waterTracking]);
 
   const heroStyle     = useHeroEntrance();
   const continueStyle = useFadeRise(220, 12);
   const actionsStyle  = useFadeRise(160, 10);
+  const favoritePocketStyle = useFadeRise(240, 10);
   const gridStyle     = useFadeRise(280, 12);
 
   const handleActivate = useCallback(() => {
@@ -382,6 +429,18 @@ export default function DashboardScreen({
   const handleOpenShoppingList = useCallback(() => {
     (navigation as any).navigate(Routes.App.ShoppingList);
   }, [navigation]);
+  const handleOpenFavorites = useCallback(() => {
+    (navigation as any).navigate(Routes.App.Favorites);
+  }, [navigation]);
+  const handleOpenGames = useCallback(() => {
+    (navigation as any).navigate(Routes.App.GameCenter);
+  }, [navigation]);
+  const lockTabSwipe = useCallback(() => {
+    onTabSwipeEnabledChange?.(false);
+  }, [onTabSwipeEnabledChange]);
+  const releaseTabSwipe = useCallback(() => {
+    onTabSwipeEnabledChange?.(true);
+  }, [onTabSwipeEnabledChange]);
 
   const handleCoachTask = useCallback((task?: DashboardCoachTask | null) => {
     if (!task) return;
@@ -540,19 +599,9 @@ export default function DashboardScreen({
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
-      <AmbientProduceBubbles theme={theme} />
-      <ProduceBubble
-        icon="food-apple-outline"
-        iconSize={34}
-        iconColor={`${theme.primary}44`}
-        style={[s.screenGlowA, { backgroundColor: theme.primaryGlow }]}
-      />
-      <ProduceBubble
-        icon="carrot"
-        iconSize={28}
-        iconColor={`${theme.emerald}42`}
-        style={[s.screenGlowB, { backgroundColor: theme.emeraldGlow }]}
-      />
+      <DytopiaWatermark position="center" size={310} opacity={0.036} />
+      <AmbientProduceBubbles />
+      <DytopiaLogoBubble size={220} opacity={0.26} logoOpacity={0.34} style={s.screenGlowA} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -570,7 +619,7 @@ export default function DashboardScreen({
         <DayHeaderBand
           theme={theme}
           language={language}
-          title={user?.isPremium ? "Bugün için iyi bir ritim kur." : "MyDietitian'a yeni bir görünüm geldi."}
+          title={user?.isPremium ? "Bugün için iyi bir ritim kur." : "Dytopia'ya yeni bir görünüm geldi."}
           subtitle={user?.isPremium ? "Planın, ölçümlerin ve tarif akışın tek bir merkezde." : "Tarifleri keşfet, profilini hazırla ve premium plana daha güçlü bir deneyimle geç."}
         />
         <Animated.View style={[heroStyle]}>
@@ -584,6 +633,11 @@ export default function DashboardScreen({
             onActivate={handleActivate}
           />
         </Animated.View>
+
+        {activeAnnouncement && (
+          <AnnouncementBanner theme={theme} announcement={activeAnnouncement} language={language} />
+        )}
+
         <Animated.View style={[continueStyle]}>
           <ContinueJourneyCard
             theme={theme}
@@ -610,7 +664,7 @@ export default function DashboardScreen({
 
         {/* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ CONTENT GRID ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */}
         {isLoading ? (
-          <DashboardLoadingState theme={theme} />
+          <DashboardLoadingState theme={theme} language={language} />
         ) : (
           <Animated.View style={[gridStyle]}>
             {user?.isPremium ? (
@@ -625,6 +679,7 @@ export default function DashboardScreen({
                 motivation={motivation}
                 todayPanelItems={todayPanelItems}
                 rescueMission={rescueMission}
+                dailyGames={dailyGames}
                 nextMeal={upcomingNextMeal}
                 coachTask={data?.coachTask}
                 dietitianNote={data?.dietitianNote}
@@ -636,8 +691,11 @@ export default function DashboardScreen({
                   onPressMeasurements={handleMeasurements}
                   onPressPantry={handleOpenPantry}
                   onPressBadgeVault={handleOpenBadgeVault}
+                  onPressGames={handleOpenGames}
                   onPressWater={handleAddWater}
                   onRemoveWater={handleRemoveWater}
+                onHorizontalGestureStart={lockTabSwipe}
+                onHorizontalGestureEnd={releaseTabSwipe}
                 language={language}
               />
             ) : (
@@ -653,6 +711,17 @@ export default function DashboardScreen({
           </Animated.View>
         )}
 
+        {user?.isPremium ? (
+          <Animated.View style={[favoritePocketStyle]}>
+            <FavoritesPocketCard
+              theme={theme}
+              language={language}
+              summary={favoriteSummary}
+              onPress={handleOpenFavorites}
+            />
+          </Animated.View>
+        ) : null}
+
         <View style={s.bottomPad} />
       </ScrollView>
     </View>
@@ -662,6 +731,91 @@ export default function DashboardScreen({
 /* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    HERO CAPSULE
 ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
+function AnnouncementBanner({
+  theme,
+  announcement,
+  language,
+}: {
+  theme: import('../theme/tokens').Theme;
+  announcement: ActiveAnnouncement;
+  language: 'tr' | 'en';
+}) {
+  const shimmer = useShimmerBand(true);
+  const endsDate = new Date(announcement.endsAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+
+  return (
+    <View style={[annS.card, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, annS.shimmerOverlay, shimmer]} pointerEvents="none" />
+      <View style={annS.iconWrap}>
+        <Ionicons name="megaphone-outline" size={18} color={theme.primary} />
+      </View>
+      <View style={annS.content}>
+        <Text style={[annS.label, { color: theme.primary }]} numberOfLines={1}>
+          {language === 'tr' ? 'Diyetisyeninden' : 'From your dietitian'}
+        </Text>
+        <Text style={[annS.title, { color: theme.text }]} numberOfLines={2}>
+          {announcement.title}
+        </Text>
+        <Text style={[annS.body, { color: theme.textSub }]} numberOfLines={4}>
+          {announcement.body}
+        </Text>
+        <Text style={[annS.date, { color: theme.textMuted }]}>
+          {language === 'tr' ? `${endsDate} tarihine kadar geçerli` : `Valid until ${endsDate}`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const annS = StyleSheet.create({
+  card: {
+    borderRadius: radii.xxl,
+    borderWidth: 1.5,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    overflow: 'hidden',
+  },
+  shimmerOverlay: {
+    borderRadius: radii.xxl,
+    opacity: 0.06,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    marginTop: 2,
+  },
+  content: {
+    flex: 1,
+    gap: 4,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  body: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  date: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+});
+
 function HeroCapsule({
   theme, isPremium, name, clinicName, compliancePercent, todayStatus, onActivate,
 }: {
@@ -810,6 +964,13 @@ function SmartActionsRail({
 }) {
   const { user } = useAuth();
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const railWidth = Math.max(0, width - spacing.base * 2);
+  const chipWidth = getResponsiveGridItemWidth(
+    railWidth,
+    ACTION_RAIL_COLUMNS,
+    ACTION_RAIL_GAP,
+  );
 
   function handleShare() {
     if (user?.publicUserId) {
@@ -841,6 +1002,7 @@ function SmartActionsRail({
           color={action.color}
           theme={theme}
           index={i}
+          width={chipWidth}
           onPress={handlers[action.id] ?? noop}
         />
       ))}
@@ -849,15 +1011,15 @@ function SmartActionsRail({
 }
 
 function ActionChip({
-  icon, label, color, theme, index, onPress,
+  icon, label, color, theme, index, width, onPress,
 }: {
   icon: any; label: string; color: string;
   theme: import('../theme/tokens').Theme;
-  index: number; onPress: () => void;
+  index: number; width: number; onPress: () => void;
 }) {
   const style = useStaggerItem(index, 160, 45);
   return (
-    <Animated.View style={[style, s.actionChipSlot]}>
+    <Animated.View style={[style, s.actionChipSlot, { width }]}>
       <TouchableOpacity
         style={[s.actionChip, { backgroundColor: `${color}12`, borderColor: `${color}28` }]}
         onPress={onPress}
@@ -866,7 +1028,15 @@ function ActionChip({
         <View style={[s.actionIconWrap, { backgroundColor: `${color}20` }]}>
           <Ionicons name={icon} size={16} color={color} />
         </View>
-        <Text style={[s.actionLabel, { color: theme.text }]}>{label}</Text>
+        <Text
+          style={[s.actionLabel, { color: theme.text }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}
+          maxFontSizeMultiplier={1.1}
+        >
+          {label}
+        </Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -875,6 +1045,102 @@ function ActionChip({
 /* ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚
    PREMIUM GRID
 ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ÃƒÆ’Ã‚¢Ãƒ¢Ã¢â€š¬Ã‚¢Ãƒâ€šÃ‚ */
+function FavoritesPocketCard({
+  theme,
+  language,
+  summary,
+  onPress,
+}: {
+  theme: import('../theme/tokens').Theme;
+  language: 'tr' | 'en';
+  summary?: FavoriteRecipesSummaryDto;
+  onPress: () => void;
+}) {
+  const totalFavorites = summary?.totalFavorites ?? 0;
+  const bestMatched = summary?.bestMatchedFavorite;
+  const recentFavorites = summary?.recentFavorites ?? [];
+
+  return (
+    <TouchableOpacity
+      style={[s.favoritePocket, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}
+      onPress={onPress}
+      activeOpacity={0.88}
+    >
+      <ProduceBubble
+        icon="food-apple-outline"
+        iconSize={26}
+        iconColor={`${theme.accentCoral}40`}
+        style={[s.favoritePocketGlow, { backgroundColor: `${theme.accentCoral}18` }]}
+      />
+      <View style={s.favoritePocketTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.favoritePocketEyebrow, { color: theme.primary }]}>
+            {language === 'tr' ? 'FAVORİLERİM' : 'MY FAVORITES'}
+          </Text>
+          <Text style={[s.favoritePocketTitle, { color: theme.text }]}>
+            {language === 'tr' ? 'Sevdiğin tarifler elinin altında' : 'Keep your favorite recipes close'}
+          </Text>
+        </View>
+        <View style={[s.favoritePocketBadge, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+          <Text style={[s.favoritePocketBadgeValue, { color: theme.primaryDark }]}>{totalFavorites}</Text>
+          <Text style={[s.favoritePocketBadgeLabel, { color: theme.textMuted }]}>
+            {language === 'tr' ? 'aktif' : 'active'}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={[s.favoritePocketBody, { color: theme.textSub }]} numberOfLines={2}>
+        {totalFavorites > 0
+          ? (language === 'tr'
+            ? 'Premium süren boyunca sevdiğin tarifleri sakla ve dolabına en uygun olanları tek dokunuşla geri aç.'
+            : 'Keep favorite recipes while premium is active and reopen the ones that best fit your pantry.')
+          : (language === 'tr'
+            ? 'Henüz favori tarif eklemedin. Beğendiğin tarifleri kalp ikonuyla burada biriktirebilirsin.'
+            : 'You have not saved any favorites yet. Use the heart icon to collect recipes here.')}
+      </Text>
+
+      <View style={s.favoritePocketMetrics}>
+        <View style={[s.favoritePocketMetricCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <Text style={[s.favoritePocketMetricLabel, { color: theme.textMuted }]}>
+            {language === 'tr' ? 'En hazır favori' : 'Best pantry fit'}
+          </Text>
+          <Text style={[s.favoritePocketMetricValue, { color: theme.emerald }]}>
+            {bestMatched ? `%${bestMatched.pantryCoverage.percent}` : '—'}
+          </Text>
+          <Text style={[s.favoritePocketMetricSub, { color: theme.textSub }]} numberOfLines={1}>
+            {bestMatched?.name ?? (language === 'tr' ? 'Hazır favorin burada görünür' : 'Your ready favorite appears here')}
+          </Text>
+        </View>
+
+        <View style={[s.favoritePocketMetricCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+          <Text style={[s.favoritePocketMetricLabel, { color: theme.textMuted }]}>
+            {language === 'tr' ? 'Son eklenenler' : 'Recently saved'}
+          </Text>
+          <View style={s.favoritePocketRecentList}>
+            {recentFavorites.slice(0, 2).map(item => (
+              <Text key={item.recipeId} style={[s.favoritePocketRecentItem, { color: theme.text }]} numberOfLines={1}>
+                • {item.name}
+              </Text>
+            ))}
+            {recentFavorites.length === 0 ? (
+              <Text style={[s.favoritePocketMetricSub, { color: theme.textSub }]}>
+                {language === 'tr' ? 'İlk beğendiğin tarif burada yer alır' : 'Your first saved recipe will appear here'}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      <View style={s.favoritePocketFooter}>
+        <Text style={[s.favoritePocketFooterText, { color: theme.primaryDark }]}>
+          {language === 'tr' ? 'Tümünü gör' : 'See all'}
+        </Text>
+        <Ionicons name="chevron-forward" size={16} color={theme.primaryDark} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 function ContinueJourneyCard({
   theme,
   language,
@@ -915,12 +1181,20 @@ function ContinueJourneyCard({
 
 function DashboardLoadingState({
   theme,
+  language,
 }: {
   theme: import('../theme/tokens').Theme;
+  language: "tr" | "en";
 }) {
   return (
     <View style={s.loadingWrap}>
       <View style={[s.loadingCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+        <View style={[s.loadingBrandPill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+          <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+          <Text style={[s.loadingBrandText, { color: theme.primaryDark }]}>
+            {language === "tr" ? "Dytopia gününü hazırlıyor" : "Dytopia is preparing your day"}
+          </Text>
+        </View>
         <View style={[s.loadingBarLg, { backgroundColor: theme.glassEmerald }]} />
         <View style={[s.loadingBarMd, { backgroundColor: theme.surfaceElevated }]} />
         <View style={s.loadingRow}>
@@ -938,9 +1212,9 @@ function DashboardLoadingState({
 }
 
 function PremiumGrid({
-  theme, compliancePercent, streak, water, waterBusy, pantryCount, shoppingSummary, motivation, todayPanelItems, rescueMission, nextMeal, coachTask, dietitianNote,
-  activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressCoachTask, onPressMeasurements, onPressPantry, onPressBadgeVault,
-  onPressWater, onRemoveWater, language,
+  theme, compliancePercent, streak, water, waterBusy, pantryCount, shoppingSummary, motivation, todayPanelItems, rescueMission, dailyGames, nextMeal, coachTask, dietitianNote,
+  activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressCoachTask, onPressMeasurements, onPressPantry, onPressBadgeVault, onPressGames,
+  onPressWater, onRemoveWater, onHorizontalGestureStart, onHorizontalGestureEnd, language,
 }: {
   theme: import('../theme/tokens').Theme;
   compliancePercent: number;
@@ -952,6 +1226,7 @@ function PremiumGrid({
   motivation?: DashboardMotivation;
   todayPanelItems: TodayPanelItem[];
   rescueMission: RescueMission;
+  dailyGames?: DailyGamePack;
   nextMeal?: any;
   coachTask?: DashboardCoachTask;
   dietitianNote?: string;
@@ -963,8 +1238,11 @@ function PremiumGrid({
   onPressMeasurements: () => void;
   onPressPantry: () => void;
   onPressBadgeVault: () => void;
+  onPressGames: () => void;
   onPressWater?: () => void;
   onRemoveWater?: () => void;
+  onHorizontalGestureStart?: () => void;
+  onHorizontalGestureEnd?: () => void;
   language: 'tr' | 'en';
 }) {
   let idx = 0;
@@ -1000,12 +1278,12 @@ function PremiumGrid({
         index={idx++}
       />
 
-      <MotivationShelf
+      <DailyGamesCard
         theme={theme}
-        motivation={motivation}
         language={language}
+        pack={dailyGames}
+        onPress={onPressGames}
         index={idx++}
-        onPressBadgeVault={onPressBadgeVault}
       />
 
       <RescueMissionCard
@@ -1017,6 +1295,16 @@ function PremiumGrid({
         onPressPlans={onPressPlans}
         onPressWater={onPressWater}
         index={idx++}
+      />
+
+      <MotivationShelf
+        theme={theme}
+        motivation={motivation}
+        language={language}
+        index={idx++}
+        onPressBadgeVault={onPressBadgeVault}
+        onHorizontalGestureStart={onHorizontalGestureStart}
+        onHorizontalGestureEnd={onHorizontalGestureEnd}
       />
 
       {nextMeal && (
@@ -1064,6 +1352,88 @@ function PremiumGrid({
         index={idx++}
       />
     </View>
+  );
+}
+
+function DailyGamesCard({
+  theme,
+  language,
+  pack,
+  onPress,
+  index,
+}: {
+  theme: import('../theme/tokens').Theme;
+  language: 'tr' | 'en';
+  pack?: DailyGamePack;
+  onPress: () => void;
+  index: number;
+}) {
+  const style = useStaggerItem(index, 300, 60);
+  const total = pack?.totalCount ?? 3;
+  const completed = pack?.completedCount ?? 0;
+  const ratio = Math.min(1, completed / Math.max(1, total));
+  const challengeMeta = [
+    { type: 'memory', icon: 'grid-outline' as const, label: language === 'tr' ? 'Eşleştir' : 'Match', color: theme.accentCyan },
+    { type: 'quiz', icon: 'help-circle-outline' as const, label: language === 'tr' ? 'Sorular' : 'Quiz', color: theme.accentGold },
+    { type: 'word', icon: 'text-outline' as const, label: language === 'tr' ? 'Kelime' : 'Words', color: theme.primary },
+  ];
+  const completedTypes = new Set((pack?.challenges ?? [])
+    .filter(challenge => challenge.status === 'completed')
+    .map(challenge => challenge.type));
+
+  return (
+    <Animated.View style={style}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        style={[s.dailyGamesCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}
+      >
+        <View style={[s.dailyGamesGlow, { backgroundColor: `${theme.accentCyan}18` }]} />
+        <View style={s.dailyGamesTop}>
+          <View style={[s.dailyGamesIcon, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
+            <Ionicons name="game-controller-outline" size={21} color={theme.primaryDark} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.dailyGamesEyebrow, { color: theme.primary }]}>
+              {language === 'tr' ? 'BUGÜNÜN MİNİ OYUNLARI' : "TODAY'S MINI GAMES"}
+            </Text>
+            <Text style={[s.dailyGamesTitle, { color: theme.text }]}>
+              {language === 'tr' ? 'Oyun Canavarı rozetine koş' : 'Chase the Game Monster badge'}
+            </Text>
+            <Text style={[s.dailyGamesBody, { color: theme.textSub }]}>
+              {language === 'tr'
+                ? 'Kolay kartlar, tatlı sorular ve kelime bulmaca. Hepsi kısa, hepsi rozetli.'
+                : 'Easy cards, gentle questions, and a word puzzle. Short, friendly, badge-ready.'}
+            </Text>
+          </View>
+          <View style={[s.dailyGamesScore, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+            <Text style={[s.dailyGamesScoreValue, { color: theme.primaryDark }]}>{completed}/{total}</Text>
+            <Text style={[s.dailyGamesScoreLabel, { color: theme.textMuted }]}>
+              {language === 'tr' ? 'bitti' : 'done'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[s.dailyGamesTrack, { backgroundColor: theme.borderLight }]}>
+          <View style={[s.dailyGamesFill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: theme.primary }]} />
+        </View>
+
+        <View style={s.dailyGamesPills}>
+          {challengeMeta.map((item) => {
+            const done = completedTypes.has(item.type as any);
+            return (
+              <View
+                key={item.type}
+                style={[s.dailyGamesPill, { backgroundColor: `${item.color}12`, borderColor: `${item.color}26` }]}
+              >
+                <Ionicons name={done ? 'checkmark-circle' : item.icon} size={14} color={item.color} />
+                <Text style={[s.dailyGamesPillText, { color: done ? item.color : theme.textSub }]}>{item.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -1118,14 +1488,31 @@ function TodayPulsePanel({
             return (
               <View
                 key={item.key}
-                style={[s.todayPulseTile, { backgroundColor: theme.surfaceElevated, borderColor: `${accent}28` }]}
+                style={[
+                  s.todayPulseTile,
+                  { backgroundColor: theme.surfaceElevated, borderColor: `${accent}28` },
+                ]}
               >
                 <View style={[s.todayPulseIcon, { backgroundColor: `${accent}14`, borderColor: `${accent}2A` }]}>
                   <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={16} color={accent} />
                 </View>
                 <Text style={[s.todayPulseValue, { color: theme.text }]}>{item.value}</Text>
-                <Text style={[s.todayPulseTileTitle, { color: theme.text }]}>{item.title}</Text>
-                <Text style={[s.todayPulseTileBody, { color: theme.textMuted }]}>{item.body}</Text>
+                <Text
+                  style={[s.todayPulseTileTitle, { color: theme.text }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.78}
+                  maxFontSizeMultiplier={1.1}
+                >
+                  {item.title}
+                </Text>
+                <Text
+                  style={[s.todayPulseTileBody, { color: theme.textMuted }]}
+                  numberOfLines={3}
+                  maxFontSizeMultiplier={1.1}
+                >
+                  {item.body}
+                </Text>
               </View>
             );
           })}
@@ -1333,12 +1720,16 @@ function MotivationShelf({
   language,
   index,
   onPressBadgeVault,
+  onHorizontalGestureStart,
+  onHorizontalGestureEnd,
 }: {
   theme: import('../theme/tokens').Theme;
   motivation?: DashboardMotivation;
   language: 'tr' | 'en';
   index: number;
   onPressBadgeVault: () => void;
+  onHorizontalGestureStart?: () => void;
+  onHorizontalGestureEnd?: () => void;
 }) {
   const style = useStaggerItem(index, 300, 60);
   const floatStyle = useFloating(80, 4, 2600);
@@ -1540,7 +1931,17 @@ function MotivationShelf({
           </Pressable>
         ) : null}
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.badgeRail}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.badgeRail}
+          onTouchStart={onHorizontalGestureStart}
+          onTouchEnd={onHorizontalGestureEnd}
+          onTouchCancel={onHorizontalGestureEnd}
+          onScrollBeginDrag={onHorizontalGestureStart}
+          onScrollEndDrag={onHorizontalGestureEnd}
+          onMomentumScrollEnd={onHorizontalGestureEnd}
+        >
           {badges.map((badge) => {
             const accent = getToneColor(theme, badge.tone);
             return (
@@ -1680,7 +2081,7 @@ function MiniGlass({ water, goal, busy, theme, language, label, onAdd, onRemove 
   const pct   = Math.min(1, water / goal);
   const litersText = `${((water * WATER_GLASS_ML) / 1000).toFixed(1)}L`;
   const statusText = overGoal > 0
-    ? (language === 'tr' ? `+${overGoal} tasma` : `+${overGoal} spill`)
+    ? (language === 'tr' ? `+${overGoal} taşma` : `+${overGoal} spill`)
     : litersText;
 
   const fillH      = useSharedValue(pct * MG_H);
@@ -2284,13 +2685,29 @@ const s = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
   },
-  scroll:      { paddingTop: 68, paddingHorizontal: spacing.base },
+  scroll:      { paddingTop: 62, paddingHorizontal: spacing.base },
   loadingWrap: { paddingTop: 8, gap: spacing.sm },
   loadingCard: {
     borderRadius: radii.xl,
     borderWidth: 1,
     padding: 16,
     minHeight: 148,
+  },
+  loadingBrandPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    marginBottom: 14,
+  },
+  loadingBrandText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
   },
   loadingBarLg: {
     width: '56%',
@@ -2322,7 +2739,7 @@ const s = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: 1,
   },
-  bottomPad:   { height: 138 },
+  bottomPad:   { height: 180 },
   screenGlowA: {
     position: 'absolute',
     top: 18,
@@ -2332,21 +2749,18 @@ const s = StyleSheet.create({
     borderRadius: 110,
     opacity: 0.72,
   },
-  screenGlowB: {
-    position: 'absolute',
-    top: 330,
-    left: -70,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    opacity: 0.5,
-  },
   dayBand: {
     borderWidth: 1,
-    borderRadius: radii.xxl,
-    padding: 16,
-    marginBottom: spacing.md,
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: spacing.sm,
     overflow: 'hidden',
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 22,
+    elevation: 3,
   },
   dayBandBlobA: {
     position: 'absolute',
@@ -2371,7 +2785,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   dayBandChip: {
     flexDirection: 'row',
@@ -2380,25 +2794,25 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radii.full,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   dayBandChipText: { fontSize: 11, fontWeight: '800' },
   dayBandMini: {
     borderRadius: radii.full,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   dayBandMiniText: { fontSize: 10, fontWeight: '800' },
   dayBandTitle: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 23,
+    fontWeight: '900',
     letterSpacing: -0.5,
     lineHeight: 28,
     marginBottom: 4,
     maxWidth: 280,
   },
   dayBandSubtitle: {
-    fontSize: 12,
+    fontSize: 12.5,
     lineHeight: 18,
     maxWidth: 310,
     opacity: 0.88,
@@ -2406,14 +2820,14 @@ const s = StyleSheet.create({
 
   /* Hero Capsule */
   heroCapsule: {
-    borderRadius: radii.xxl, borderWidth: 1, padding: 22, marginBottom: spacing.md,
-    overflow: 'hidden', shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 12,
+    borderRadius: 28, borderWidth: 1, padding: 18, marginBottom: spacing.sm,
+    overflow: 'hidden', shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.10, shadowRadius: 18, elevation: 7,
   },
   heroHaloRing: { borderRadius: radii.xxl, borderWidth: 1.5 },
   heroGlowTR: { position: 'absolute', top: -50, right: -50, width: 160, height: 160, borderRadius: 80, opacity: 0.20 },
   heroGlowBL: { position: 'absolute', bottom: -30, left: -40, width: 120, height: 120, borderRadius: 60, opacity: 0.12 },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   heroClinicRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   heroClinicDot: { width: 6, height: 6, borderRadius: 3 },
   heroClinicName: { fontSize: 12, fontWeight: '600', flex: 1 },
@@ -2425,10 +2839,10 @@ const s = StyleSheet.create({
   },
   heroStatusDot:   { width: 5, height: 5, borderRadius: 2.5 },
   heroStatusLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
-  heroGreetingBlock: { marginBottom: 16 },
+  heroGreetingBlock: { marginBottom: 14 },
   heroGreeting:      { fontSize: 12, fontWeight: '500', marginBottom: 3 },
-  heroName:          { fontSize: 28, fontWeight: '800', letterSpacing: -0.6, lineHeight: 33 },
-  heroProgressBlock:  { marginBottom: 14 },
+  heroName:          { fontSize: 27, fontWeight: '900', letterSpacing: -0.6, lineHeight: 32 },
+  heroProgressBlock:  { marginBottom: 10 },
   heroProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 },
   heroProgressLabel:  { fontSize: 9, fontWeight: '700', letterSpacing: 0.7, textTransform: 'uppercase' },
   heroProgressPct:    { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
@@ -2445,27 +2859,136 @@ const s = StyleSheet.create({
   heroActivateTxt: { color: '#FFF', fontSize: 13, fontWeight: '800' },
 
   /* Smart Actions Rail */
-  actionsRail: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md },
-  actionChipSlot: { width: '31.9%' },
+  actionsRail: { flexDirection: 'row', flexWrap: 'wrap', gap: ACTION_RAIL_GAP, marginBottom: spacing.sm },
+  actionChipSlot: { flexShrink: 0 },
   actionChip: {
-    alignItems: 'center', borderRadius: radii.lg, borderWidth: 1,
-    paddingVertical: 12, paddingHorizontal: 6, gap: 6,
+    alignItems: 'center', borderRadius: 22, borderWidth: 1,
+    paddingVertical: 10, paddingHorizontal: 6, gap: 6,
+    minHeight: 88,
   },
-  actionIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  actionLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  actionIconWrap: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  actionLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center', width: '100%' },
+
+  /* Favorites Pocket */
+  favoritePocket: {
+    borderRadius: 28,
+    borderWidth: 1.2,
+    padding: 15,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+    gap: 11,
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  favoritePocketGlow: {
+    position: 'absolute',
+    top: -28,
+    right: -16,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  favoritePocketTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  favoritePocketEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  favoritePocketTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 22,
+    maxWidth: 245,
+  },
+  favoritePocketBadge: {
+    minWidth: 56,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  favoritePocketBadgeValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  favoritePocketBadgeLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  favoritePocketBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: 520,
+  },
+  favoritePocketMetrics: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  favoritePocketMetricCard: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 10,
+    gap: 5,
+  },
+  favoritePocketMetricLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  favoritePocketMetricValue: {
+    fontSize: 21,
+    fontWeight: '900',
+    lineHeight: 26,
+  },
+  favoritePocketMetricSub: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  favoritePocketRecentList: {
+    gap: 4,
+    minHeight: 34,
+  },
+  favoritePocketRecentItem: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  favoritePocketFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2,
+  },
+  favoritePocketFooterText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
 
   /* Continue Card */
   continueCard: {
-    borderRadius: radii.xl,
+    borderRadius: 26,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: spacing.md,
+    padding: 15,
+    marginBottom: spacing.sm,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    elevation: 7,
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 4,
   },
   continueAccent: {
     position: 'absolute',
@@ -2540,19 +3063,30 @@ const s = StyleSheet.create({
   },
 
   todayPulseCard: {
-    borderRadius: radii.xl,
+    borderRadius: 26,
     borderWidth: 1,
-    padding: 16,
+    padding: 15,
     marginBottom: spacing.sm,
     overflow: 'hidden',
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
   todayPulseHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, alignItems: 'flex-start' },
   todayPulseEyebrow: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0.8 },
-  todayPulseTitle: { fontSize: 16, fontWeight: '900', lineHeight: 21, marginTop: 4 },
-  todayPulseMeta: { borderRadius: radii.full, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
-  todayPulseMetaTxt: { fontSize: 10.5, fontWeight: '700' },
-  todayPulseGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  todayPulseTile: { width: '48%', minHeight: 126, borderRadius: radii.lg, borderWidth: 1, padding: 12 },
+  todayPulseTitle: { fontSize: 15.5, fontWeight: '900', lineHeight: 20, marginTop: 4 },
+  todayPulseMeta: { borderRadius: radii.full, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6 },
+  todayPulseMetaTxt: { fontSize: 10, fontWeight: '800' },
+  todayPulseGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: TODAY_PULSE_GAP,
+    marginTop: 6,
+  },
+  todayPulseTile: { width: '48.4%', flexGrow: 0, flexShrink: 0, minHeight: 116, borderRadius: 20, borderWidth: 1, padding: 11 },
   todayPulseIcon: {
     width: 34,
     height: 34,
@@ -2560,17 +3094,22 @@ const s = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  todayPulseValue: { fontSize: 15, fontWeight: '900', marginBottom: 2 },
+  todayPulseValue: { fontSize: 15, fontWeight: '900', marginBottom: 1 },
   todayPulseTileTitle: { fontSize: 11.5, fontWeight: '800', marginBottom: 4 },
-  todayPulseTileBody: { fontSize: 10.5, lineHeight: 15.5, fontWeight: '500' },
+  todayPulseTileBody: { fontSize: 10, lineHeight: 14.5, fontWeight: '500' },
   rescueCard: {
-    borderRadius: radii.xl,
+    borderRadius: 26,
     borderWidth: 1,
-    padding: 16,
+    padding: 15,
     marginBottom: spacing.sm,
     overflow: 'hidden',
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 3,
   },
   rescueAccent: {
     position: 'absolute',
@@ -2600,11 +3139,69 @@ const s = StyleSheet.create({
   /* Grid */
   grid: { gap: spacing.sm },
 
+  dailyGamesCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 15,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  dailyGamesGlow: {
+    position: 'absolute',
+    top: -28,
+    right: -18,
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+  },
+  dailyGamesTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dailyGamesIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyGamesEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 0.9, marginBottom: 3 },
+  dailyGamesTitle: { fontSize: 17, fontWeight: '900', lineHeight: 21, letterSpacing: -0.2 },
+  dailyGamesBody: { fontSize: 12, lineHeight: 17, fontWeight: '600', marginTop: 4 },
+  dailyGamesScore: {
+    minWidth: 58,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  dailyGamesScoreValue: { fontSize: 18, fontWeight: '900' },
+  dailyGamesScoreLabel: { fontSize: 10, fontWeight: '700' },
+  dailyGamesTrack: { height: 7, borderRadius: radii.full, overflow: 'hidden', marginTop: 13 },
+  dailyGamesFill: { height: '100%', borderRadius: radii.full },
+  dailyGamesPills: { flexDirection: 'row', gap: 7, marginTop: 11 },
+  dailyGamesPill: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 6,
+  },
+  dailyGamesPillText: { fontSize: 10, fontWeight: '900' },
+
   /* Stats Shelf */
   statsShelf: {
-    flexDirection: 'row', borderRadius: radii.xl, borderWidth: 1,
+    flexDirection: 'row', borderRadius: 26, borderWidth: 1,
     paddingVertical: 16, marginBottom: spacing.sm,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
+    shadowColor: '#0F3D2E', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 14, elevation: 5,
   },
   statCell:    { flex: 1, alignItems: 'center', paddingVertical: 2 },
   statDivider: { width: 1, marginVertical: 8 },
@@ -2616,16 +3213,16 @@ const s = StyleSheet.create({
 
   /* Motivation Card */
   motivationCard: {
-    borderRadius: radii.xl,
+    borderRadius: 26,
     borderWidth: 1,
-    padding: 16,
+    padding: 15,
     marginBottom: spacing.sm,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
   motivationGlow: {
     position: 'absolute',
@@ -2866,9 +3463,9 @@ const s = StyleSheet.create({
 
   /* Next Meal Card */
   nextMealCard: {
-    borderRadius: radii.xl, borderWidth: 1, padding: 16, marginBottom: spacing.sm,
+    borderRadius: 26, borderWidth: 1, padding: 15, marginBottom: spacing.sm,
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 5,
+    shadowColor: '#0F3D2E', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 3,
   },
   nextMealGlow: { position: 'absolute', top: -40, right: -30, width: 120, height: 120, borderRadius: 60, opacity: 0.15 },
   nextMealHeader: {
@@ -2891,7 +3488,7 @@ const s = StyleSheet.create({
 
   /* Dietitian Note Card */
   noteCard: {
-    borderRadius: radii.xl, borderWidth: 1, padding: 16, marginBottom: spacing.sm,
+    borderRadius: 26, borderWidth: 1, padding: 15, marginBottom: spacing.sm,
   },
   notePinRow:   { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
   notePinDot:   { width: 5, height: 5, borderRadius: 2.5 },
@@ -2905,8 +3502,8 @@ const s = StyleSheet.create({
 
   /* Measurements Card */
   measCard: {
-    borderRadius: radii.xl, borderWidth: 1, padding: 16, marginBottom: spacing.sm,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 10, elevation: 4,
+    borderRadius: 26, borderWidth: 1, padding: 15, marginBottom: spacing.sm,
+    shadowColor: '#0F3D2E', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 3,
   },
   measHeader:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   measIconWrap:{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
@@ -2930,8 +3527,8 @@ const s = StyleSheet.create({
   /* Kitchen Entry Card */
   kitchenCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderRadius: radii.xl, borderWidth: 1, padding: 16, marginBottom: spacing.sm, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 5,
+    borderRadius: 26, borderWidth: 1, padding: 15, marginBottom: spacing.sm, overflow: 'hidden',
+    shadowColor: '#0F3D2E', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 3,
   },
   kitchenShimmer: {
     position: 'absolute', top: 0, bottom: 0, width: 56,
@@ -2948,8 +3545,8 @@ const s = StyleSheet.create({
 
   /* Active Plan Block */
   activePlanCard: {
-    borderRadius: radii.xl, borderWidth: 1, padding: 16, marginBottom: spacing.sm,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3,
+    borderRadius: 26, borderWidth: 1, padding: 15, marginBottom: spacing.sm,
+    shadowColor: '#0F3D2E', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 3,
   },
   activePlanHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   activePlanBadge: {

@@ -1,16 +1,18 @@
 'use client'
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
   ChevronLeft, ChevronRight, Loader2, Plus, X, CheckCircle2,
   Clock, Send, Eye, EyeOff, Trash2, Users, AlertCircle,
-  CalendarDays, Flame, RefreshCw, Copy, BookOpen, ChevronDown, LayoutTemplate,
+  CalendarDays, Flame, RefreshCw, Copy, BookOpen, ChevronDown, LayoutTemplate, Search,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getRecipes, type Recipe } from '@/lib/api/recipes'
+import { Dropdown } from '@/components/ui/Dropdown'
+import { TimeField } from '@/components/ui/TimeField'
 import {
   listTemplates, createTemplateFromPlan, deleteTemplate, applyTemplate,
   type TemplateSummary,
@@ -26,6 +28,7 @@ interface ClientRow {
 
 type MealType = 'Breakfast' | 'MidMorning' | 'Lunch' | 'Afternoon' | 'Dinner' | 'Evening' | 'Snack'
 type PlanStatus = 'Draft' | 'Published'
+type RecipeDockSort = 'recommended' | 'alphabetical'
 
 interface MealItemData {
   id: string
@@ -63,6 +66,35 @@ const MEAL_TYPE_CONFIG: Record<MealType, { label: string; color: string; dot: st
 
 const MEAL_TYPES = Object.keys(MEAL_TYPE_CONFIG) as MealType[]
 const DAYS_TR = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
+
+const RECIPE_DOCK_MEAL_FILTERS: Array<{ label: string; mealType: MealType }> = [
+  { label: 'Kahvaltı', mealType: 'Breakfast' },
+  { label: 'Ara Öğün', mealType: 'MidMorning' },
+  { label: 'Öğle', mealType: 'Lunch' },
+  { label: 'İkindi', mealType: 'Afternoon' },
+  { label: 'Akşam', mealType: 'Dinner' },
+  { label: 'Gece', mealType: 'Evening' },
+  { label: 'Atıştırmalık', mealType: 'Snack' },
+]
+
+const DEFAULT_TIME_BY_MEALTYPE: Record<MealType, string> = {
+  Breakfast: '08:00',
+  MidMorning: '11:00',
+  Lunch: '14:00',
+  Afternoon: '16:00',
+  Dinner: '19:00',
+  Evening: '22:00',
+  Snack: '15:00',
+}
+
+function getQuickTimeChips(mealType: MealType): string[] {
+  const base = DEFAULT_TIME_BY_MEALTYPE[mealType] ?? '12:00'
+  const [hh, mm] = base.split(':').map((p) => parseInt(p, 10))
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return [base]
+  const clamp = (v: number) => Math.max(0, Math.min(23, v))
+  const toStr = (h: number) => `${String(clamp(h)).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+  return [toStr(hh - 1), base, toStr(hh + 1)]
+}
 
 // ── Date helpers ───────────────────────────────────────────────────────────────
 
@@ -140,28 +172,42 @@ function AddMealModal({
   planId,
   planDate,
   existingItem,
+  initialValues,
   onClose,
   onSaved,
 }: {
   planId: string
   planDate: string
   existingItem?: MealItemData
+  initialValues?: Partial<AddMealForm>
   onClose: () => void
   onSaved: (item: MealItemData) => void
 }) {
   const isTodayPlan = planDate === toDateStr(new Date())
   const minAllowedTime = isTodayPlan ? toCurrentTimeStr() : undefined
-  const [form, setForm] = useState<AddMealForm>({
-    time:         existingItem?.time ?? (minAllowedTime && minAllowedTime > '08:00' ? minAllowedTime : '08:00'),
-    mealType:     existingItem?.mealType           ?? 'Breakfast',
-    title:        existingItem?.title              ?? '',
-    note:         existingItem?.note               ?? '',
-    calories:     existingItem?.calories?.toString()     ?? '',
-    proteinGrams: existingItem?.proteinGrams?.toString() ?? '',
-    carbsGrams:   existingItem?.carbsGrams?.toString()   ?? '',
-    fatGrams:     existingItem?.fatGrams?.toString()     ?? '',
-    recipeId:     existingItem?.recipeId           ?? null,
-    recipeName:   null,
+  const [form, setForm] = useState<AddMealForm>(() => {
+    const base: AddMealForm = {
+      time:         existingItem?.time ?? (minAllowedTime && minAllowedTime > '08:00' ? minAllowedTime : '08:00'),
+      mealType:     existingItem?.mealType           ?? 'Breakfast',
+      title:        existingItem?.title              ?? '',
+      note:         existingItem?.note               ?? '',
+      calories:     existingItem?.calories?.toString()     ?? '',
+      proteinGrams: existingItem?.proteinGrams?.toString() ?? '',
+      carbsGrams:   existingItem?.carbsGrams?.toString()   ?? '',
+      fatGrams:     existingItem?.fatGrams?.toString()     ?? '',
+      recipeId:     existingItem?.recipeId           ?? null,
+      recipeName:   null,
+    }
+
+    if (!existingItem && initialValues)
+    {
+      return {
+        ...base,
+        ...initialValues,
+      }
+    }
+
+    return base
   })
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -252,6 +298,9 @@ function AddMealModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim()) { setError('Başlık zorunludur.'); return }
+    const timeOk = !!form.time && form.time.length === 5 && form.time[2] === ':'
+    if (!timeOk) { setError('Saat seÃ§iniz.'); return }
+    if (minAllowedTime && form.time < minAllowedTime) { setError('BugÃ¼n iÃ§in yalnÄ±zca ' + minAllowedTime + ' ve sonrasÄ± seÃ§ilebilir.'); return }
     setError(null)
     mutation.mutate(form)
   }
@@ -296,12 +345,11 @@ function AddMealModal({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Saat</label>
-                <input
-                  type="time"
+                <TimeField
                   value={form.time}
-                  onChange={set('time')}
+                  onChange={(time) => setForm((prev) => ({ ...prev, time }))}
                   min={minAllowedTime}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                  disabled={mutation.isPending}
                 />
                 {minAllowedTime && (
                   <p className="text-[11px] text-amber-400">
@@ -311,15 +359,12 @@ function AddMealModal({
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Öğün Tipi</label>
-                <select
+                <Dropdown
+                  options={MEAL_TYPES.map((t) => ({ label: MEAL_TYPE_CONFIG[t].label, value: t }))}
                   value={form.mealType}
-                  onChange={set('mealType')}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
-                >
-                  {MEAL_TYPES.map(t => (
-                    <option key={t} value={t}>{MEAL_TYPE_CONFIG[t].label}</option>
-                  ))}
-                </select>
+                  onChange={(mealType) => setForm((prev) => ({ ...prev, mealType: mealType as MealType }))}
+                  disabled={mutation.isPending}
+                />
               </div>
             </div>
 
@@ -493,24 +538,25 @@ function AddMealModal({
 
 function MealCard({
   meal,
-  onEdit,
+  onOpenDetails,
   onDelete,
   isDeleting,
 }: {
   meal: MealItemData
-  onEdit: () => void
+  onOpenDetails: () => void
   onDelete: () => void
   isDeleting: boolean
 }) {
   const cfg = MEAL_TYPE_CONFIG[meal.mealType] ?? MEAL_TYPE_CONFIG.Snack
   return (
-    <div
+    <motion.div
+      layoutId={`meal-card-${meal.id}`}
       className="group flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
       style={{
         background: `${cfg.dotHex}18`,
         borderColor: `${cfg.dotHex}40`,
       }}
-      onClick={onEdit}
+      onClick={onOpenDetails}
     >
       <div
         className="mt-0.5 h-full min-h-[40px] w-1.5 flex-shrink-0 rounded-full"
@@ -540,7 +586,7 @@ function MealCard({
           <X className="w-3 h-3 text-red-600" />
         )}
       </button>
-    </div>
+    </motion.div>
   )
 }
 
@@ -550,6 +596,11 @@ function DayColumn({
   date, isToday, plan, clientId,
   onPlanCreated, onMealAdded, onMealDeleted, onPublishToggle, onPlanDeleted, onPlanCopied,
   onSaveAsTemplate,
+  onDropRecipe,
+  dropMealType,
+  dropColorHex,
+  isDropOver,
+  setDropOverDay,
 }: {
   date: Date
   isToday: boolean
@@ -562,10 +613,17 @@ function DayColumn({
   onPlanDeleted:  (planId: string) => void
   onPlanCopied:   (p: DailyPlanData) => void
   onSaveAsTemplate: (plan: DailyPlanData) => void
+  onDropRecipe?: (dateStr: string, recipeId: string) => void
+  dropMealType?: MealType
+  dropColorHex?: string
+  isDropOver?: boolean
+  setDropOverDay?: (dateStr: string | null) => void
 }) {
   const dateStr = toDateStr(date)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingMeal, setEditingMeal] = useState<MealItemData | null>(null)
+  const [expandedMeal, setExpandedMeal] = useState<MealItemData | null>(null)
+  const [expandedDay, setExpandedDay] = useState(false)
   const [localPlan, setLocalPlan] = useState<DailyPlanData | undefined>(undefined)
   const [deletingMealId, setDeletingMealId] = useState<string | null>(null)
   const [showCopyModal, setShowCopyModal] = useState(false)
@@ -576,6 +634,8 @@ function DayColumn({
   const isPublished   = effectivePlan?.status === 'Published'
   const meals         = effectivePlan?.meals ?? []
   const totalCal      = meals.reduce((s, m) => s + (m.calories ?? 0), 0)
+  const expandedCfg   = expandedMeal ? (MEAL_TYPE_CONFIG[expandedMeal.mealType] ?? MEAL_TYPE_CONFIG.Snack) : null
+  const dayLayoutId   = `day-card-${dateStr}`
 
   const createPlanMutation = useMutation({
     mutationFn: async () => {
@@ -652,18 +712,56 @@ function DayColumn({
 
   return (
     <>
-      <div className={cn(
-        'flex min-h-[420px] flex-col rounded-[26px] border bg-white/92 shadow-[0_10px_30px_rgba(31,73,46,0.05)] transition-all duration-200',
-        isToday && !isPublished ? 'border-primary/25 shadow-[0_16px_36px_rgba(71,185,114,0.10)]' : '',
-        isPublished ? 'border-primary/30 bg-[rgba(247,252,248,0.96)]' : 'border-border/80',
-        !effectivePlan ? 'bg-white/72' : '',
-      )}>
+      <motion.div
+        layoutId={dayLayoutId}
+        data-drop-day={dateStr}
+        className={cn(
+          'flex min-h-[420px] flex-col rounded-[26px] border bg-white/92 shadow-[0_10px_30px_rgba(31,73,46,0.05)] transition-all duration-200',
+          isToday && !isPublished ? 'border-primary/25 shadow-[0_16px_36px_rgba(71,185,114,0.10)]' : '',
+          isPublished ? 'border-primary/30 bg-[rgba(247,252,248,0.96)]' : 'border-border/80',
+          !effectivePlan ? 'bg-white/72' : '',
+          isDropOver ? 'ring-2 ring-offset-0 shadow-[0_18px_44px_rgba(71,185,114,0.18)]' : '',
+        )}
+        style={isDropOver && dropColorHex ? { boxShadow: `0 18px 44px ${dropColorHex}22`, borderColor: `${dropColorHex}55` } : undefined}
+        onDragOver={(e) => {
+          if (!onDropRecipe) return
+          e.preventDefault()
+        }}
+        onDragEnter={(e) => {
+          if (!onDropRecipe) return
+          e.preventDefault()
+          setDropOverDay?.(dateStr)
+        }}
+        onDragLeave={(e) => {
+          if (!onDropRecipe) return
+          // Avoid flicker when moving between children inside the column.
+          const next = e.relatedTarget as Node | null
+          if (next && e.currentTarget.contains(next)) return
+          setDropOverDay?.(null)
+        }}
+        onDrop={(e) => {
+          if (!onDropRecipe) return
+          e.preventDefault()
+          const recipeId = e.dataTransfer.getData('text/recipeId') || e.dataTransfer.getData('recipeId')
+          setDropOverDay?.(null)
+          if (!recipeId) return
+          onDropRecipe(dateStr, recipeId)
+        }}
+      >
         {/* Day header */}
-        <div className={cn(
-          'flex items-start justify-between rounded-t-[26px] border-b px-3.5 py-3.5',
+        <div
+          className={cn(
+          'flex cursor-pointer select-none items-start justify-between rounded-t-[26px] border-b px-3.5 py-3.5 transition-colors',
           isToday ? 'bg-primary/8 border-primary/15' : 'bg-surface-overlay/70 border-border/60',
           isPublished ? 'bg-primary/10 border-primary/15' : '',
-        )}>
+        )}
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpandedDay(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') setExpandedDay(true)
+          }}
+        >
           <div>
             <p className={cn(
               'text-[10px] font-bold uppercase tracking-widest',
@@ -702,7 +800,7 @@ function DayColumn({
               <MealCard
                 key={meal.id}
                 meal={meal}
-                onEdit={() => setEditingMeal(meal)}
+                onOpenDetails={() => setExpandedMeal(meal)}
                 onDelete={() => effectivePlan && deleteMealMutation.mutate({ planId: effectivePlan.id, mealId: meal.id })}
                 isDeleting={deletingMealId === meal.id}
               />
@@ -800,7 +898,279 @@ function DayColumn({
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
+
+      {/* Expanded meal details */}
+      <AnimatePresence>
+        {expandedMeal && expandedCfg && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.20 }}
+              onClick={() => setExpandedMeal(null)}
+            />
+
+            <motion.div
+              layoutId={`meal-card-${expandedMeal.id}`}
+              className="relative z-10 w-full max-w-md cursor-default rounded-[28px] border p-4 shadow-2xl backdrop-blur-xl"
+              style={{
+                background: `linear-gradient(135deg, ${expandedCfg.dotHex}16, rgba(255,255,255,0.40))`,
+                borderColor: `${expandedCfg.dotHex}55`,
+              }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-1.5 rounded-full" style={{ backgroundColor: expandedCfg.dotHex }} />
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3 w-3 opacity-80" style={{ color: expandedCfg.dotHex }} />
+                      <span className="text-xs font-bold" style={{ color: expandedCfg.dotHex }}>
+                        {expandedMeal.time}
+                      </span>
+                      <span className="truncate text-[11px] opacity-80" style={{ color: expandedCfg.dotHex }}>
+                        {expandedCfg.label}
+                      </span>
+                    </div>
+                  </div>
+                  <h3 className="mt-2 truncate text-base font-extrabold text-foreground">{expandedMeal.title}</h3>
+                </div>
+
+                <button
+                  onClick={() => setExpandedMeal(null)}
+                  className="flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white/35 text-muted-foreground transition-colors hover:bg-white/55"
+                  aria-label="Kapat"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {expandedMeal.note && (
+                <div className="mt-3 rounded-2xl border border-border/60 bg-white/30 px-3 py-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Not</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-snug text-foreground">{expandedMeal.note}</p>
+                </div>
+              )}
+
+              {(expandedMeal.calories != null ||
+                expandedMeal.proteinGrams != null ||
+                expandedMeal.carbsGrams != null ||
+                expandedMeal.fatGrams != null) && (
+                <div className="mt-3 rounded-2xl border border-border/60 bg-white/30 px-3 py-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Besin Değerleri</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[13px]">
+                    {expandedMeal.calories != null && (
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 bg-white/25 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">Kalori</span>
+                        <span className="font-extrabold text-foreground">{expandedMeal.calories} kcal</span>
+                      </div>
+                    )}
+                    {expandedMeal.proteinGrams != null && (
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 bg-white/25 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">Protein</span>
+                        <span className="font-extrabold text-foreground">{expandedMeal.proteinGrams} g</span>
+                      </div>
+                    )}
+                    {expandedMeal.carbsGrams != null && (
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 bg-white/25 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">Karb</span>
+                        <span className="font-extrabold text-foreground">{expandedMeal.carbsGrams} g</span>
+                      </div>
+                    )}
+                    {expandedMeal.fatGrams != null && (
+                      <div className="flex items-center justify-between rounded-xl border border-border/50 bg-white/25 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">Yağ</span>
+                        <span className="font-extrabold text-foreground">{expandedMeal.fatGrams} g</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => {
+                    setExpandedMeal(null)
+                    setEditingMeal(expandedMeal)
+                  }}
+                  className="flex-1 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Düzenle
+                </button>
+                <button
+                  onClick={() => {
+                    if (!effectivePlan) return
+                    setExpandedMeal(null)
+                    deleteMealMutation.mutate({ planId: effectivePlan.id, mealId: expandedMeal.id })
+                  }}
+                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100"
+                >
+                  Sil
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Expanded day details */}
+      <AnimatePresence>
+        {expandedDay && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+            <motion.div
+              className="absolute inset-0 bg-black/35 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.20 }}
+              onClick={() => setExpandedDay(false)}
+            />
+
+            <motion.div
+              layoutId={dayLayoutId}
+              className={cn(
+                'relative z-10 w-full max-w-5xl overflow-hidden rounded-[30px] border shadow-2xl backdrop-blur-xl',
+                isPublished ? 'border-primary/25' : 'border-border/70',
+              )}
+              style={{
+                background: isPublished ? 'rgba(247,252,248,0.92)' : 'rgba(255,255,255,0.80)',
+              }}
+              transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={cn(
+                'flex items-start justify-between border-b px-5 py-4',
+                isToday ? 'bg-primary/10 border-primary/15' : 'bg-surface-overlay/70 border-border/60',
+                isPublished ? 'bg-primary/12 border-primary/15' : '',
+              )}>
+                <div>
+                  <p className={cn(
+                    'text-[11px] font-bold uppercase tracking-widest',
+                    isToday ? 'text-primary' : 'text-muted-foreground',
+                  )}>
+                    {DAYS_TR[dayIdx]}
+                  </p>
+                  <p className={cn(
+                    'text-lg font-extrabold leading-tight',
+                    isToday ? 'text-primary' : 'text-foreground',
+                  )}>
+                    {formatDay(date)}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setExpandedDay(false)}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-white/35 text-muted-foreground transition-colors hover:bg-white/55"
+                  aria-label="Kapat"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+                <div className="rounded-3xl border border-border/60 bg-white/30 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-muted-foreground">Öğünler</p>
+                    {totalCal > 0 && (
+                      <span className="text-xs font-extrabold text-foreground flex items-center gap-1">
+                        <Flame className="h-4 w-4 text-[var(--brand-coral)]" />
+                        {totalCal} kcal
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 max-h-[62vh] space-y-2 overflow-y-auto pr-1">
+                    {meals.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <CalendarDays className="mb-2 h-7 w-7 text-muted-foreground/35" />
+                        <p className="text-sm font-semibold text-muted-foreground/70">Henüz öğün yok</p>
+                      </div>
+                    ) : (
+                      meals.map(meal => (
+                        <MealCard
+                          key={`expanded-${meal.id}`}
+                          meal={meal}
+                          onOpenDetails={() => setExpandedMeal(meal)}
+                          onDelete={() => effectivePlan && deleteMealMutation.mutate({ planId: effectivePlan.id, mealId: meal.id })}
+                          isDeleting={deletingMealId === meal.id}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-border/60 bg-white/30 p-4">
+                  <p className="text-xs font-bold text-muted-foreground">İşlemler</p>
+
+                  <div className="mt-3 space-y-2">
+                    <button
+                      onClick={handleAddClick}
+                      disabled={createPlanMutation.isPending}
+                      className={cn(
+                        'w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-sm font-bold transition-all',
+                        'border-border/70 bg-white/30 text-muted-foreground hover:border-primary/30 hover:bg-primary/10 hover:text-primary',
+                        createPlanMutation.isPending && 'opacity-60 cursor-not-allowed',
+                      )}
+                    >
+                      {createPlanMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                      Öğün Ekle
+                    </button>
+
+                    {effectivePlan && (
+                      <button
+                        onClick={() => publishMutation.mutate({ planId: effectivePlan.id, publish: !isPublished })}
+                        disabled={publishMutation.isPending || (!isPublished && meals.length === 0)}
+                        className={cn(
+                          'w-full flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold transition-all',
+                          isPublished
+                            ? 'border border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100/80'
+                            : 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40',
+                        )}
+                      >
+                        {publishMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : isPublished ? (
+                          <><EyeOff className="w-4 h-4" /> Taslağa Al</>
+                        ) : (
+                          <><Send className="w-4 h-4" /> Yayınla</>
+                        )}
+                      </button>
+                    )}
+
+                    {effectivePlan && (
+                      <button
+                        onClick={() => { setCopyTargetDate(''); setCopyError(null); setShowCopyModal(true) }}
+                        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-border/70 bg-white/30 py-3 text-sm font-bold text-muted-foreground transition-colors hover:bg-white/45 hover:text-foreground"
+                      >
+                        <Copy className="w-4 h-4" />
+                        Günü Kopyala
+                      </button>
+                    )}
+
+                    {effectivePlan && meals.length > 0 && (
+                      <button
+                        onClick={() => onSaveAsTemplate(effectivePlan)}
+                        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-border/70 bg-white/30 py-3 text-sm font-bold text-muted-foreground transition-colors hover:bg-white/45 hover:text-foreground"
+                      >
+                        <LayoutTemplate className="w-4 h-4" />
+                        Şablon Olarak Kaydet
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add/Edit meal modal */}
       {(showAddModal || editingMeal) && effectivePlan && (
@@ -839,7 +1209,7 @@ function DayColumn({
                   value={copyTargetDate}
                   onChange={e => { setCopyTargetDate(e.target.value); setCopyError(null) }}
                   min={toDateStr(new Date())}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                  className="select-sfcos h-11"
                 />
               </div>
               {copyError && (
@@ -876,11 +1246,215 @@ function DayColumn({
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+// ── Recipe dock + drag/drop helpers ──────────────────────────────────────────────
+
+function normalizeTr(value: string): string {
+  return value.trim().toLocaleLowerCase('tr-TR')
+}
+
+function RecipeMiniCard({
+  recipe,
+  dragging,
+  onPointerDown,
+  isSelected,
+}: {
+  recipe: Recipe
+  dragging: boolean
+  onPointerDown: (recipe: Recipe, e: React.PointerEvent<HTMLDivElement>) => void
+  isSelected: boolean
+}) {
+  const primaryTag = recipe.tags?.[0]
+  const secondaryTag = recipe.tags?.[1]
+  return (
+    <div
+      className={cn(
+        'rounded-2xl border border-border/70 bg-gradient-to-b from-white/55 to-emerald-50/35 px-3 py-2.5 shadow-sm backdrop-blur-[1px] transition-all',
+        'hover:-translate-y-0.5 hover:shadow-md hover:border-primary/20',
+        dragging ? 'opacity-50 scale-[0.99]' : '',
+        isSelected ? 'ring-2 ring-primary/35 border-primary/35 bg-primary/[0.06]' : '',
+      )}
+      role="button"
+      tabIndex={0}
+      draggable={false}
+      onPointerDown={(e) => onPointerDown(recipe, e)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onPointerDown(recipe, e as any)
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-bold text-foreground">{recipe.name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+            {recipe.caloriesKcal != null && <span>{recipe.caloriesKcal} kcal</span>}
+            {recipe.proteinGrams != null && <span>• P {Number(recipe.proteinGrams).toFixed(0)}g</span>}
+            {recipe.carbsGrams != null && <span>• K {Number(recipe.carbsGrams).toFixed(0)}g</span>}
+            {recipe.fatGrams != null && <span>• Y {Number(recipe.fatGrams).toFixed(0)}g</span>}
+          </div>
+        </div>
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-border/60 bg-white/45 text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+          <span className="text-[12px] font-black">≡</span>
+        </div>
+      </div>
+
+      {(primaryTag || secondaryTag) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {primaryTag && (
+            <span className="rounded-full border border-border/60 bg-white/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+              {primaryTag}
+            </span>
+          )}
+          {secondaryTag && (
+            <span className="rounded-full border border-border/60 bg-white/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+              {secondaryTag}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QuickAddRecipeModal({
+  open,
+  recipe,
+  mealType,
+  dateStr,
+  timeValue,
+  noteValue,
+  onChangeTime,
+  onChangeNote,
+  onClose,
+  onConfirm,
+  onOpenFull,
+}: {
+  open: boolean
+  recipe: Recipe | null
+  mealType: MealType
+  dateStr: string
+  timeValue: string
+  noteValue: string
+  onChangeTime: (value: string) => void
+  onChangeNote: (value: string) => void
+  onClose: () => void
+  onConfirm: () => void
+  onOpenFull: () => void
+}) {
+  const cfg = MEAL_TYPE_CONFIG[mealType] ?? MEAL_TYPE_CONFIG.Snack
+  const chips = getQuickTimeChips(mealType)
+
+  return (
+    <AnimatePresence>
+      {open && recipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
+          />
+
+          <motion.div
+            className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] border border-border/70 bg-white/80 shadow-2xl backdrop-blur-xl"
+            initial={{ opacity: 0, scale: 0.98, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: 10 }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-border/60" style={{ background: `${cfg.dotHex}10` }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: cfg.dotHex }}>
+                    Hızlı Ekle • {dateStr}
+                  </p>
+                  <p className="mt-1 truncate text-lg font-extrabold text-foreground">{recipe.name}</p>
+                  <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                    Öğün: <span className="font-extrabold" style={{ color: cfg.dotHex }}>{cfg.label}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-white/35 text-muted-foreground transition-colors hover:bg-white/55"
+                  aria-label="Kapat"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted-foreground">Saat</label>
+                <div className="flex items-center gap-2">
+                  <TimeField
+                    value={timeValue}
+                    onChange={onChangeTime}
+                    className="flex-1"
+                  />
+                  <div className="flex gap-1.5">
+                    {chips.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => onChangeTime(t)}
+                        className={cn(
+                          'h-11 rounded-2xl border px-3 text-xs font-extrabold transition-colors',
+                          timeValue === t
+                            ? 'border-primary/30 bg-primary/10 text-primary'
+                            : 'border-border/70 bg-white/45 text-muted-foreground hover:bg-white/60',
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <details className="rounded-2xl border border-border/60 bg-white/35 px-4 py-3">
+                <summary className="cursor-pointer select-none text-sm font-bold text-foreground">
+                  Not ekle <span className="text-xs text-muted-foreground font-semibold">(isteğe bağlı)</span>
+                </summary>
+                <textarea
+                  value={noteValue}
+                  onChange={(e) => onChangeNote(e.target.value)}
+                  placeholder="Danışana not..."
+                  className="mt-3 min-h-[72px] w-full resize-none rounded-2xl border border-border/70 bg-white/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/30"
+                />
+              </details>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={onOpenFull}
+                  className="flex-1 rounded-2xl border border-border/70 bg-white/45 px-4 py-3 text-sm font-bold text-foreground transition-colors hover:bg-white/60"
+                >
+                  Ayrıntılı ekle
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirm}
+                  className="flex-1 rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Ekle
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export default function PlansPage() {
   const today = useMemo(() => new Date(), [])
   const [weekStart, setWeekStart] = useState(() => getIsoWeekMonday(today))
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [plans, setPlans] = useState<DailyPlanData[]>([])
+  const pageRootRef = useRef<HTMLDivElement | null>(null)
 
   // Template panel state
   const [applyTemplateModal, setApplyTemplateModal] = useState<{ template: TemplateSummary } | null>(null)
@@ -889,6 +1463,37 @@ export default function PlansPage() {
   const [saveFromPlanModal, setSaveFromPlanModal] = useState<{ plan: DailyPlanData } | null>(null)
   const [newTemplateName, setNewTemplateName] = useState('')
   const [savingTemplate, setSavingTemplate] = useState(false)
+
+  // Recipe dock + drag/drop state
+  const [recipeDockOpen, setRecipeDockOpen] = useState(true)
+  const [recipeMealFilter, setRecipeMealFilter] = useState<MealType>('Breakfast')
+  const [recipeSearchTerm, setRecipeSearchTerm] = useState('')
+  const [recipeSelectedTag, setRecipeSelectedTag] = useState<string | null>(null)
+  const [recipeSort, setRecipeSort] = useState<RecipeDockSort>('recommended')
+  const [activeDragRecipeId, setActiveDragRecipeId] = useState<string | null>(null)
+  const [dropOverDay, setDropOverDay] = useState<string | null>(null)
+  const dropOverDayRef = useRef<string | null>(null)
+  const [pointerDrag, setPointerDrag] = useState<{
+    recipe: Recipe
+    startX: number
+    startY: number
+    x: number
+    y: number
+    started: boolean
+  } | null>(null)
+  const pointerDragPosRef = useRef<{ x: number; y: number; started: boolean }>({ x: 0, y: 0, started: false })
+  const [quickAdd, setQuickAdd] = useState<{ recipe: Recipe; dateStr: string; mealType: MealType } | null>(null)
+  const [quickAddTime, setQuickAddTime] = useState('')
+  const [quickAddNote, setQuickAddNote] = useState('')
+  const [globalAddModal, setGlobalAddModal] = useState<{ planId: string; planDate: string; initialValues: Partial<AddMealForm> } | null>(null)
+  const [leftPanelsCollapsed, setLeftPanelsCollapsed] = useState(false)
+  const clientsPanelRef = useRef<HTMLDivElement | null>(null)
+  const templatesPanelRef = useRef<HTMLDivElement | null>(null)
+
+  const getDashboardScrollEl = useCallback((): HTMLElement | null => {
+    const byClosest = pageRootRef.current?.closest?.('main') as HTMLElement | null
+    return byClosest ?? (document.querySelector('main') as HTMLElement | null) ?? null
+  }, [])
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
   const fromStr  = toDateStr(weekStart)
@@ -905,6 +1510,56 @@ export default function PlansPage() {
   })
   const clients        = clientsData?.items ?? []
   const selectedClient = clients.find(c => c.clientId === selectedClientId)
+
+  // ── Recipes (dock) query ──────────────────────────────────────────────────────
+  const recipesQuery = useQuery({
+    queryKey: ['recipes', 'dock', '30d'],
+    queryFn: () => getRecipes({ page: 1, pageSize: 200, status: 'all', source: 'clinic', range: '30d' }),
+    staleTime: 60000,
+    retry: 1,
+    retryDelay: 1200,
+  })
+  const recipes = recipesQuery.data?.items ?? []
+
+  const availableTags = useMemo(() => {
+    const counts = new Map<string, number>()
+    recipes.forEach((recipe) => {
+      recipe.tags?.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1))
+    })
+
+    return Array.from(counts.entries())
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'tr'))
+      .slice(0, 12)
+      .map(([tag]) => tag)
+  }, [recipes])
+
+  const filteredRecipes = useMemo(() => {
+    const q = normalizeTr(recipeSearchTerm)
+
+    let result = recipes.filter((r) => {
+      if (recipeSelectedTag && !(r.tags ?? []).includes(recipeSelectedTag)) return false
+      if (!q) return true
+      const hay = normalizeTr([r.name, r.description, ...(r.tags ?? [])].filter(Boolean).join(' '))
+      return hay.includes(q)
+    })
+
+    const mealLabel = (MEAL_TYPE_CONFIG[recipeMealFilter]?.label ?? '').toLocaleLowerCase('tr-TR')
+    if (mealLabel) {
+      const hasAnyMealTag = result.some((r) => (r.tags ?? []).some((t) => normalizeTr(t).includes(mealLabel)))
+      if (hasAnyMealTag) {
+        result = result.filter((r) => (r.tags ?? []).some((t) => normalizeTr(t).includes(mealLabel)))
+      }
+    }
+
+    result = recipeSort === 'alphabetical'
+      ? result.sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+      : result.sort((a, b) =>
+        (b.analyticsPreview?.preferenceScore ?? 0) - (a.analyticsPreview?.preferenceScore ?? 0) ||
+        a.name.localeCompare(b.name, 'tr'),
+      )
+
+    return result
+  }, [recipes, recipeSearchTerm, recipeSelectedTag, recipeMealFilter, recipeSort])
 
   // ── Week plans query ─────────────────────────────────────────────────────────
 
@@ -944,11 +1599,253 @@ export default function PlansPage() {
     }))
   }, [])
 
+  const ensurePlanForDate = useCallback(async (dateStr: string) => {
+    const existing = plans.find(p => p.date === dateStr)
+    if (existing) return existing
+    if (!selectedClientId) return null
+    const res = await api.post(`/api/dietitian/daily-plans/clients/${selectedClientId}`, { date: dateStr })
+    const created = res.data as DailyPlanData
+    handlePlanCreated(created)
+    return created
+  }, [plans, selectedClientId, handlePlanCreated])
+
   const handleMealDeleted = useCallback((planId: string, mealId: string) => {
     setPlans(prev => prev.map(p =>
       p.id === planId ? { ...p, meals: p.meals.filter(m => m.id !== mealId) } : p
     ))
   }, [])
+
+  const handleRecipePointerDown = useCallback((recipe: Recipe, e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    pointerDragPosRef.current = { x: e.clientX, y: e.clientY, started: false }
+    setPointerDrag({
+      recipe,
+      startX: e.clientX,
+      startY: e.clientY,
+      x: e.clientX,
+      y: e.clientY,
+      started: false,
+    })
+  }, [])
+
+  useEffect(() => {
+    dropOverDayRef.current = dropOverDay
+  }, [dropOverDay])
+
+  useEffect(() => {
+    if (!pointerDrag) return
+
+    const threshold = 6
+
+    const hitTestDay = (clientX: number, clientY: number) => {
+      const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-drop-day]'))
+      for (const node of nodes) {
+        const rect = node.getBoundingClientRect()
+        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+          return node.getAttribute('data-drop-day')
+        }
+      }
+      return null
+    }
+
+    const onMove = (ev: PointerEvent) => {
+      setPointerDrag((current) => {
+        if (!current) return current
+        const dx = Math.abs(ev.clientX - current.startX)
+        const dy = Math.abs(ev.clientY - current.startY)
+        const started = current.started || dx > threshold || dy > threshold
+        if (started && !current.started) {
+          setActiveDragRecipeId(current.recipe.id)
+          setDropOverDay(null)
+        }
+        if (started) {
+          const over = hitTestDay(ev.clientX, ev.clientY)
+          setDropOverDay(over)
+          dropOverDayRef.current = over
+        }
+        pointerDragPosRef.current = { x: ev.clientX, y: ev.clientY, started }
+        return { ...current, x: ev.clientX, y: ev.clientY, started }
+      })
+    }
+
+    const refreshOverFromCurrent = () => {
+      setPointerDrag((current) => {
+        if (!current || !current.started) return current
+        const over = hitTestDay(current.x, current.y)
+        setDropOverDay(over)
+        dropOverDayRef.current = over
+        return current
+      })
+    }
+
+    const finish = (confirm: boolean) => {
+      setPointerDrag((current) => {
+        if (!current) return current
+        const targetDay = dropOverDayRef.current
+        const shouldConfirm = confirm && current.started && !!targetDay
+        const recipeId = current.recipe.id
+        window.setTimeout(() => {
+          setPointerDrag(null)
+          setActiveDragRecipeId(null)
+          setDropOverDay(null)
+          pointerDragPosRef.current = { x: 0, y: 0, started: false }
+          if (shouldConfirm && targetDay) handleRecipeDrop(targetDay, recipeId)
+        }, 0)
+        return null
+      })
+    }
+
+    const onUp = () => finish(true)
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') finish(false)
+    }
+
+    const scrollEl = getDashboardScrollEl()
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp, { once: true })
+    window.addEventListener('keydown', onKeyDown)
+    scrollEl?.addEventListener('scroll', refreshOverFromCurrent, { passive: true })
+    document.body.classList.add('select-none')
+    document.body.style.cursor = 'grabbing'
+
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('keydown', onKeyDown)
+      scrollEl?.removeEventListener('scroll', refreshOverFromCurrent as any)
+      document.body.classList.remove('select-none')
+      document.body.style.cursor = ''
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointerDrag, getDashboardScrollEl])
+
+  // Auto-scroll while pointer-dragging (user can move cursor to top/bottom to scroll the page).
+  useEffect(() => {
+    if (!pointerDrag?.started) return
+
+    const thresholdPx = 130
+    const maxSpeedPx = 44
+    let rafId = 0
+    let running = true
+    const scrollEl = getDashboardScrollEl()
+
+    const performScroll = (delta: number) => {
+      if (!delta) return
+      if (scrollEl) scrollEl.scrollTop += delta
+      else window.scrollBy({ top: delta, behavior: 'auto' })
+    }
+
+    const loop = () => {
+      if (!running) return
+      const y = pointerDragPosRef.current.y
+      const vh = window.innerHeight || 0
+      let delta = 0
+      if (y < thresholdPx) {
+        const t = (thresholdPx - y) / thresholdPx
+        delta = -Math.max(1, Math.round(maxSpeedPx * t))
+      } else if (y > vh - thresholdPx) {
+        const t = (y - (vh - thresholdPx)) / thresholdPx
+        delta = Math.max(1, Math.round(maxSpeedPx * t))
+      }
+      performScroll(delta)
+      rafId = window.requestAnimationFrame(loop)
+    }
+
+    rafId = window.requestAnimationFrame(loop)
+    return () => {
+      running = false
+      if (rafId) window.cancelAnimationFrame(rafId)
+    }
+  }, [pointerDrag?.started, getDashboardScrollEl])
+
+  function handleRecipeDrop(dateStr: string, recipeId: string) {
+    const recipe = recipes.find(r => r.id === recipeId)
+    if (!recipe) {
+      toast('Tarif bulunamadı.')
+      return
+    }
+
+    setQuickAdd({ recipe, dateStr, mealType: recipeMealFilter })
+    setQuickAddTime(DEFAULT_TIME_BY_MEALTYPE[recipeMealFilter] ?? '12:00')
+    setQuickAddNote('')
+  }
+
+  const closeQuickAdd = useCallback(() => {
+    setQuickAdd(null)
+    setQuickAddTime('')
+    setQuickAddNote('')
+  }, [])
+
+  const confirmQuickAdd = useCallback(async () => {
+    if (!quickAdd) return
+    if (!selectedClientId) {
+      toast('Önce danışan seçin.')
+      return
+    }
+
+    try {
+      const plan = await ensurePlanForDate(quickAdd.dateStr)
+      if (!plan) {
+        toast('Plan oluşturulamadı.')
+        return
+      }
+
+      const payload = {
+        time: quickAddTime || (DEFAULT_TIME_BY_MEALTYPE[quickAdd.mealType] ?? '12:00'),
+        mealType: quickAdd.mealType,
+        title: quickAdd.recipe.name.trim(),
+        note: quickAddNote.trim() || null,
+        calories: quickAdd.recipe.caloriesKcal ?? null,
+        proteinGrams: quickAdd.recipe.proteinGrams ?? null,
+        carbsGrams: quickAdd.recipe.carbsGrams ?? null,
+        fatGrams: quickAdd.recipe.fatGrams ?? null,
+        recipeId: quickAdd.recipe.id,
+      }
+
+      const res = await api.post(`/api/dietitian/daily-plans/${plan.id}/meals`, payload)
+      handleMealAdded(plan.id, res.data as MealItemData)
+      toast('Eklendi')
+      closeQuickAdd()
+    } catch (e: any) {
+      toast(e?.response?.data?.message ?? 'Öğün eklenemedi.')
+    }
+  }, [quickAdd, selectedClientId, ensurePlanForDate, quickAddTime, quickAddNote, handleMealAdded, closeQuickAdd])
+
+  const openFullFromQuickAdd = useCallback(async () => {
+    if (!quickAdd) return
+    if (!selectedClientId) {
+      toast('Önce danışan seçin.')
+      return
+    }
+
+    try {
+      const plan = await ensurePlanForDate(quickAdd.dateStr)
+      if (!plan) {
+        toast('Plan oluşturulamadı.')
+        return
+      }
+
+      setGlobalAddModal({
+        planId: plan.id,
+        planDate: plan.date,
+        initialValues: {
+          time: quickAddTime || (DEFAULT_TIME_BY_MEALTYPE[quickAdd.mealType] ?? '12:00'),
+          mealType: quickAdd.mealType,
+          title: quickAdd.recipe.name,
+          note: quickAddNote,
+          calories: quickAdd.recipe.caloriesKcal != null ? String(quickAdd.recipe.caloriesKcal) : '',
+          proteinGrams: quickAdd.recipe.proteinGrams != null ? String(quickAdd.recipe.proteinGrams) : '',
+          carbsGrams: quickAdd.recipe.carbsGrams != null ? String(quickAdd.recipe.carbsGrams) : '',
+          fatGrams: quickAdd.recipe.fatGrams != null ? String(quickAdd.recipe.fatGrams) : '',
+          recipeId: quickAdd.recipe.id,
+          recipeName: quickAdd.recipe.name,
+        },
+      })
+
+      closeQuickAdd()
+    } catch (e: any) {
+      toast(e?.response?.data?.message ?? 'Detay açılamadı.')
+    }
+  }, [quickAdd, selectedClientId, ensurePlanForDate, quickAddTime, quickAddNote, closeQuickAdd])
 
   const handlePublishToggle = useCallback((planId: string, isPublished: boolean) => {
     setPlans(prev => prev.map(p =>
@@ -1092,6 +1989,7 @@ export default function PlansPage() {
 
   return (
     <motion.div
+      ref={pageRootRef}
       className="space-y-6"
       initial="hidden"
       animate="visible"
@@ -1137,15 +2035,67 @@ export default function PlansPage() {
       </motion.div>
 
       <motion.div
-        className="grid items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)]"
+        className="flex flex-col items-start gap-5 lg:flex-row"
         variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.36, ease: [0.16, 1, 0.3, 1] } } }}
       >
 
         {/* ── Left column: Clients + Templates ── */}
-        <div className="space-y-4">
+        <motion.div
+          className="space-y-3 w-full lg:flex-none"
+          animate={{ width: leftPanelsCollapsed ? 56 : 240 }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="flex items-center justify-between px-1">
+            <span className={cn(
+              'text-[11px] font-bold uppercase tracking-widest text-muted-foreground',
+              leftPanelsCollapsed ? 'sr-only' : '',
+            )}>
+              Paneller
+            </span>
+            <button
+              type="button"
+              onClick={() => setLeftPanelsCollapsed(v => !v)}
+              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white/40 text-muted-foreground transition-colors hover:bg-white/55"
+              title={leftPanelsCollapsed ? 'Panelleri Aç' : 'Panelleri Kapat'}
+            >
+              {leftPanelsCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          </div>
 
+          {leftPanelsCollapsed ? (
+            <motion.div
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="sticky top-4 flex flex-col items-center gap-2"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setLeftPanelsCollapsed(false)
+                  window.setTimeout(() => clientsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220)
+                }}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-white/55 text-muted-foreground transition-colors hover:bg-white/70"
+                title="DanÄ±ÅŸanlar"
+              >
+                <Users className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLeftPanelsCollapsed(false)
+                  window.setTimeout(() => templatesPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220)
+                }}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-white/55 text-muted-foreground transition-colors hover:bg-white/70"
+                title="Åablonlar"
+              >
+                <LayoutTemplate className="h-5 w-5" />
+              </button>
+            </motion.div>
+          ) : (
+            <>
           {/* Client Sidebar */}
-          <div className="card-sfcos sticky top-4 overflow-hidden p-0">
+          <div ref={clientsPanelRef} className="card-sfcos sticky top-4 overflow-hidden p-0">
             <div className="border-b border-border/70 bg-surface-overlay/70 px-4 py-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                 <Users className="w-3.5 h-3.5" /> Danışanlar
@@ -1194,7 +2144,7 @@ export default function PlansPage() {
           </div>
 
           {/* Template Panel */}
-          <div className="card-sfcos overflow-hidden p-0">
+          <div ref={templatesPanelRef} className="card-sfcos overflow-hidden p-0">
             <div className="border-b border-border/70 bg-surface-overlay/70 px-4 py-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                 <LayoutTemplate className="w-3.5 h-3.5" /> Şablonlar
@@ -1250,10 +2200,13 @@ export default function PlansPage() {
             </div>
           </div>
 
-        </div>
+            </>
+          )}
+
+        </motion.div>
 
         {/* ── Week content ── */}
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-w-0">
 
           {/* Stats bar (when client selected) */}
           {selectedClientId && !plansLoading && !plansError && (
@@ -1360,6 +2313,11 @@ export default function PlansPage() {
                       onPlanDeleted={handlePlanDeleted}
                       onPlanCopied={handlePlanCopied}
                       onSaveAsTemplate={(plan) => { setNewTemplateName(''); setSaveFromPlanModal({ plan }) }}
+                      onDropRecipe={handleRecipeDrop}
+                      dropMealType={recipeMealFilter}
+                      dropColorHex={MEAL_TYPE_CONFIG[recipeMealFilter]?.dotHex}
+                      isDropOver={!!activeDragRecipeId && dropOverDay === ds}
+                      setDropOverDay={setDropOverDay}
                     />
                   )
                 })}
@@ -1380,10 +2338,234 @@ export default function PlansPage() {
                   Bugün
                 </span>
               </div>
+
+              {/* Recipe library dock */}
+              <div className="mt-4 rounded-[32px] border border-border bg-[rgba(247,252,248,0.70)] shadow-[0_12px_34px_rgba(31,73,46,0.06)] backdrop-blur-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setRecipeDockOpen(v => !v)}
+                  className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
+                >
+                  <div>
+                    <p className="text-sm font-extrabold text-foreground">Tarif Kütüphanesi</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Kartı sürükleyip bir güne bırakın. Seçili öğün filtresi drop türünü belirler.
+                    </p>
+                  </div>
+                  <div className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-white/35 text-muted-foreground transition-transform',
+                    recipeDockOpen ? 'rotate-180' : 'rotate-0',
+                  )}>
+                    <ChevronDown className="h-5 w-5" />
+                  </div>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {recipeDockOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                      className="px-5 pb-5"
+                    >
+                      <div className="rounded-[28px] border border-border/70 bg-gradient-to-b from-white/40 to-emerald-50/40 p-4 backdrop-blur-[2px]">
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px]">
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-4 top-1/2 flex h-11 -translate-y-1/2 items-center">
+                              <Search className="h-4 w-4 text-muted-foreground" />
+                            </span>
+                            <input
+                              value={recipeSearchTerm}
+                              onChange={(e) => setRecipeSearchTerm(e.target.value)}
+                              placeholder="Tarif adı, açıklama veya etikete göre ara"
+                              className="h-11 w-full rounded-2xl border border-border/70 bg-white/45 pl-11 pr-11 text-sm font-semibold text-foreground outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] focus:border-primary/30"
+                            />
+                            {recipeSearchTerm ? (
+                              <button
+                                type="button"
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
+                                onClick={() => setRecipeSearchTerm('')}
+                                aria-label="Aramayı temizle"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                          </div>
+
+                          <label className="space-y-2 text-sm font-medium text-foreground">
+                            <span>Sıralama</span>
+                            <select
+                              className="select-sfcos h-11"
+                              value={recipeSort}
+                              onChange={(e) => setRecipeSort(e.target.value as RecipeDockSort)}
+                            >
+                              <option value="recommended">Önerilen sıralama</option>
+                              <option value="alphabetical">A’dan Z’ye</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Öğün</span>
+                          {RECIPE_DOCK_MEAL_FILTERS.map((item) => (
+                            <button
+                              key={item.mealType}
+                              type="button"
+                              onClick={() => setRecipeMealFilter(item.mealType)}
+                              className={cn(
+                                'h-9 rounded-full border px-3 text-xs font-bold transition-colors',
+                                recipeMealFilter === item.mealType
+                                  ? 'border-primary/30 bg-primary/10 text-primary'
+                                  : 'border-border/70 bg-white/30 text-muted-foreground hover:bg-white/45',
+                              )}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Etiketler</span>
+                          <button
+                            type="button"
+                            onClick={() => setRecipeSelectedTag(null)}
+                            className={cn(
+                              'h-9 rounded-full border px-3 text-xs font-bold transition-colors',
+                              recipeSelectedTag === null
+                                ? 'border-primary/30 bg-primary/10 text-primary'
+                                : 'border-border/70 bg-white/30 text-muted-foreground hover:bg-white/45',
+                            )}
+                          >
+                            Tümü
+                          </button>
+                          {availableTags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setRecipeSelectedTag(tag)}
+                              className={cn(
+                                'h-9 rounded-full border px-3 text-xs font-bold transition-colors',
+                                recipeSelectedTag === tag
+                                  ? 'border-primary/30 bg-primary/10 text-primary'
+                                  : 'border-border/70 bg-white/30 text-muted-foreground hover:bg-white/45',
+                              )}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                          <p>{filteredRecipes.length} tarif gösteriliyor</p>
+                          {(recipeSearchTerm || recipeSelectedTag || recipeSort !== 'recommended') ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-2 font-medium text-primary transition hover:text-primary/80"
+                              onClick={() => {
+                                setRecipeSearchTerm('')
+                                setRecipeSelectedTag(null)
+                                setRecipeSort('recommended')
+                              }}
+                            >
+                              Filtreleri temizle
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+                        {recipesQuery.isLoading ? (
+                          Array.from({ length: 12 }).map((_, i) => (
+                            <div key={i} className="h-[92px] rounded-2xl border border-border/60 bg-white/30 animate-pulse" />
+                          ))
+                        ) : filteredRecipes.length === 0 ? (
+                          <div className="col-span-full rounded-3xl border border-border bg-white/30 px-6 py-10 text-center">
+                            <p className="text-sm font-bold text-foreground">Tarif bulunamadı</p>
+                            <p className="mt-1 text-sm text-muted-foreground">Arama kelimesini değiştirin veya farklı etiket seçin.</p>
+                          </div>
+                        ) : (
+                          filteredRecipes.map((recipe) => (
+                            <RecipeMiniCard
+                              key={recipe.id}
+                              recipe={recipe}
+                              dragging={activeDragRecipeId === recipe.id}
+                              onPointerDown={handleRecipePointerDown}
+                              isSelected={pointerDrag?.recipe.id === recipe.id}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </>
           )}
         </div>
       </motion.div>
+
+      {/* Quick add recipe modal */}
+      <QuickAddRecipeModal
+        open={!!quickAdd}
+        recipe={quickAdd?.recipe ?? null}
+        mealType={quickAdd?.mealType ?? recipeMealFilter}
+        dateStr={quickAdd?.dateStr ?? ''}
+        timeValue={quickAddTime}
+        noteValue={quickAddNote}
+        onChangeTime={setQuickAddTime}
+        onChangeNote={setQuickAddNote}
+        onClose={closeQuickAdd}
+        onConfirm={confirmQuickAdd}
+        onOpenFull={openFullFromQuickAdd}
+      />
+
+      {/* Global add meal modal (prefilled) */}
+      {globalAddModal && (
+        <AddMealModal
+          planId={globalAddModal.planId}
+          planDate={globalAddModal.planDate}
+          initialValues={globalAddModal.initialValues}
+          onClose={() => setGlobalAddModal(null)}
+          onSaved={(item) => {
+            handleMealAdded(globalAddModal.planId, item)
+            setGlobalAddModal(null)
+          }}
+        />
+      )}
+
+      {/* Pointer-drag overlay (wheel scroll works while dragging) */}
+      <AnimatePresence>
+        {pointerDrag && (
+          <motion.div
+            className="fixed left-0 top-0 z-[60] pointer-events-none"
+            initial={{ opacity: 0, scale: 0.98, x: pointerDrag.x + 12, y: pointerDrag.y + 12 }}
+            animate={{ opacity: pointerDrag.started ? 1 : 0.75, scale: 1, x: pointerDrag.x + 12, y: pointerDrag.y + 12 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.12 }}
+          >
+            <div className={cn(
+              'w-[260px] rounded-2xl border border-border/70 shadow-2xl backdrop-blur-xl',
+              'bg-white/75',
+              pointerDrag.started ? 'opacity-70' : 'opacity-55',
+              'ring-2 ring-primary/20',
+            )}>
+              <div className="px-3 py-2.5">
+                <p className="truncate text-[12px] font-bold text-foreground">{pointerDrag.recipe.name}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                  {pointerDrag.recipe.caloriesKcal != null && <span>{pointerDrag.recipe.caloriesKcal} kcal</span>}
+                  {pointerDrag.recipe.proteinGrams != null && <span>• P {Number(pointerDrag.recipe.proteinGrams).toFixed(0)}g</span>}
+                  {pointerDrag.recipe.carbsGrams != null && <span>• K {Number(pointerDrag.recipe.carbsGrams).toFixed(0)}g</span>}
+                  {pointerDrag.recipe.fatGrams != null && <span>• Y {Number(pointerDrag.recipe.fatGrams).toFixed(0)}g</span>}
+                </div>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {MEAL_TYPE_CONFIG[recipeMealFilter]?.label ?? 'Öğün'} • bırakınca ekle
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Apply Template Modal ── */}
       {applyTemplateModal && (

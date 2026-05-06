@@ -1,4 +1,5 @@
 import api from '../api';
+import type { ActivityMetadata, ActivityType } from '@/lib/activity-format';
 
 export interface Client {
   id: string;
@@ -95,32 +96,9 @@ export interface DietitianMeasurementPayload {
 
 export interface ClientActivity {
   id: string;
-  type:
-    | 'meal_logged'
-    | 'meal_alternative'
-    | 'meal_skipped'
-    | 'kitchen_used'
-    | 'water_goal_hit'
-    | 'measurement_logged'
-    | 'weight_update'
-    | 'login'
-    | 'plan_assigned'
-    | 'badge_unlocked'
-    | 'streak_milestone'
-    | 'streak_at_risk'
-    | 'compliance';
+  type: ActivityType;
   timestamp: string;
-  metadata?: {
-    mealName?: string;
-    weight?: number;
-    planName?: string;
-    isCompliant?: boolean;
-    badgeId?: string;
-    currentStreak?: number;
-    glasses?: number;
-    recipeName?: string;
-    alternativeRecipeName?: string;
-  };
+  metadata?: ActivityMetadata | string | null;
 }
 
 export interface ClientNote {
@@ -162,6 +140,26 @@ export interface ClientCareHubResponse {
   };
   appointments: ClientAppointment[];
   items: CareTimelineItem[];
+}
+
+export interface DietitianClientFavoriteRecipe {
+  recipeId: string;
+  recipeName: string;
+  recipeSlug: string;
+  sourceType: 'clinic' | 'general';
+  favoritedAtUtc: string;
+  pantryCoveragePercent: number;
+  missingMandatoryNames: string[];
+  caloriesKcal?: number | null;
+  proteinGrams?: number | null;
+  carbsGrams?: number | null;
+  fatGrams?: number | null;
+}
+
+export interface DietitianClientFavoriteRecipesResponse {
+  clientName: string;
+  clientIsPremium: boolean;
+  items: DietitianClientFavoriteRecipe[];
 }
 
 // Query parameters for clients list
@@ -275,6 +273,34 @@ export async function getPlanTemplates(): Promise<{ templates: PlanTemplate[] }>
 }
 
 /**
+ * Delete a client meal plan (and all its meals)
+ */
+export async function deleteClientPlan(planId: string): Promise<void> {
+  await api.delete(`/api/dietitian/plans/${planId}`);
+}
+
+export async function getClientFavoriteRecipes(clientId: string): Promise<DietitianClientFavoriteRecipesResponse> {
+  const res = await api.get(`/api/dietitian/clients/${clientId}/favorite-recipes`);
+  return res.data;
+}
+
+/**
+ * Deactivate a client meal plan
+ */
+export async function deactivateClientPlan(planId: string): Promise<{ id: string; isActive: boolean }> {
+  const res = await api.post(`/api/dietitian/plans/${planId}/deactivate`);
+  return res.data;
+}
+
+/**
+ * Reactivate a client meal plan
+ */
+export async function reactivateClientPlan(planId: string): Promise<{ id: string; isActive: boolean }> {
+  const res = await api.post(`/api/dietitian/plans/${planId}/reactivate`);
+  return res.data;
+}
+
+/**
  * Update name/description/dates of an existing client meal plan
  */
 export async function updateClientPlan(
@@ -375,4 +401,46 @@ export async function createClientAppointment(
 
 export async function cancelClientAppointment(clientId: string, appointmentId: string): Promise<void> {
   await api.delete(`/api/dietitian/clients/${clientId}/care/appointments/${appointmentId}`);
+}
+
+export interface ClientAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+}
+
+export interface AnnouncementPayload {
+  title: string;
+  body: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export async function getClientAnnouncements(clientId: string): Promise<{ items: ClientAnnouncement[] }> {
+  const res = await api.get(`/api/dietitian/clients/${clientId}/announcements`);
+  return res.data;
+}
+
+export async function createClientAnnouncement(
+  clientId: string,
+  payload: AnnouncementPayload,
+): Promise<ClientAnnouncement> {
+  const res = await api.post(`/api/dietitian/clients/${clientId}/announcements`, payload);
+  return res.data;
+}
+
+export async function updateClientAnnouncement(
+  clientId: string,
+  id: string,
+  payload: AnnouncementPayload,
+): Promise<ClientAnnouncement> {
+  const res = await api.put(`/api/dietitian/clients/${clientId}/announcements/${id}`, payload);
+  return res.data;
+}
+
+export async function deleteClientAnnouncement(clientId: string, id: string): Promise<void> {
+  await api.delete(`/api/dietitian/clients/${clientId}/announcements/${id}`);
 }

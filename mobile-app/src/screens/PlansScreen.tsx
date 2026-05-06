@@ -24,10 +24,12 @@ import { buildMotivationSummary, mapGamificationToMotivation, type DashboardMoti
 import {
   getPlansData, getTodayPlan, completeMeal, skipMeal, undoMealCompletion,
   saveMealFeedback, selectMealRecipe,
-  type ClientPlan, type TodayPlan, type MealItem, type MealType, type MealCompletionStatus,
+  type ClientPlan, type TodayPlan, type MealItem, type MealType, type MealCompletionStatus, type MealCompletionTarget,
 } from "../data/plansRepo";
 import AppEmptyState from "../components/ui/AppEmptyState";
+import DytopiaLoadingState from "../components/ui/DytopiaLoadingState";
 import ProduceBubble from "../components/decor/ProduceBubble";
+import DytopiaWatermark from "../components/decor/DytopiaWatermark";
 import AlternativePickerSheet from "../components/AlternativePickerSheet";
 import AlternativeCompareSheet from "../components/AlternativeCompareSheet";
 import RecipeNutritionPanel from "../components/recipes/RecipeNutritionPanel";
@@ -35,7 +37,7 @@ import { buildWeeklyDigest } from "../features/smartInsights";
 import {
   buildAlternateRecipeAppliedNotification,
   buildMealCompletedNotification,
-  buildMealFeedbackNotification,
+  buildMealFeedbackNotificationForSource,
 } from "../notifications/notificationEvents";
 
 /* ── helpers ── */
@@ -59,6 +61,80 @@ function updateItemStatus(plan: TodayPlan, itemId: string, status: MealCompletio
   };
 }
 
+type MealTypeGroup = {
+  key: MealType;
+  label: string;
+  order: number;
+  items: MealItem[];
+  indexById: Record<string, number>;
+};
+
+function getMealGroupLabel(mealType: MealType): string {
+  switch (mealType) {
+    case "Breakfast": return "Kahvaltı";
+    case "MidMorning": return "Ara Öğün";
+    case "Lunch": return "Öğle";
+    case "Afternoon": return "İkindi";
+    case "Dinner": return "Akşam Yemeği";
+    case "Evening": return "Gece";
+    case "Snack": return "Atıştırmalık";
+    default: return "Öğün";
+  }
+}
+
+function getMealGroupOrder(mealType: MealType): number {
+  switch (mealType) {
+    case "Breakfast": return 1;
+    case "MidMorning": return 2;
+    case "Lunch": return 3;
+    case "Afternoon": return 4;
+    case "Dinner": return 5;
+    case "Evening": return 6;
+    case "Snack": return 7;
+    default: return 999;
+  }
+}
+
+function parseTimeToMinutes(time: string): number {
+  const raw = String(time ?? "").trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(raw);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return Number.MAX_SAFE_INTEGER;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return Number.MAX_SAFE_INTEGER;
+  return hours * 60 + minutes;
+}
+
+function groupPlanItemsByMealType(items: MealItem[]): MealTypeGroup[] {
+  const grouped = new Map<MealType, MealItem[]>();
+
+  for (const item of items) {
+    const list = grouped.get(item.mealType);
+    if (list) list.push(item);
+    else grouped.set(item.mealType, [item]);
+  }
+
+  const groups = Array.from(grouped.entries())
+    .map(([mealType, groupItems]) => ({
+      key: mealType,
+      label: getMealGroupLabel(mealType),
+      order: getMealGroupOrder(mealType),
+      items: [...groupItems].sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time)),
+      indexById: {} as Record<string, number>,
+    }))
+    .sort((a, b) => a.order - b.order);
+
+  let runningIndex = 0;
+  for (const group of groups) {
+    for (const item of group.items) {
+      group.indexById[item.id] = runningIndex++;
+    }
+  }
+
+  return groups;
+}
+
 function getSelectedMealRecipeLabel(item: MealItem, language: "tr" | "en"): string | null {
   if (item.selectedRecipeSource === "Alternative" && item.selectedRecipeName) {
     return language === "tr"
@@ -68,11 +144,37 @@ function getSelectedMealRecipeLabel(item: MealItem, language: "tr" | "en"): stri
   return null;
 }
 
-function getEffectiveRecipeForMeal(item: MealItem) {
-  const isSelectedAlternative =
-    item.selectedRecipeSource === "Alternative" &&
+function hasSelectedAlternativeRecipe(item: MealItem): boolean {
+  return item.selectedRecipeSource === "Alternative" &&
     !!item.selectedRecipeId &&
     item.selectedRecipeId !== item.recipeId;
+}
+
+function hasAlternativeComparisonState(item: MealItem): boolean {
+  return item.completionStatus === "Alternative" || hasSelectedAlternativeRecipe(item);
+}
+
+function getAlternativeRecipeForMeal(item: MealItem) {
+  const selectedAlternative = hasSelectedAlternativeRecipe(item);
+
+  return {
+    recipeId: selectedAlternative
+      ? item.selectedRecipeId
+      : (item.alternativeRecipeId ?? item.selectedRecipeId),
+    recipeName: selectedAlternative
+      ? (item.selectedRecipeName ?? item.alternativeRecipeName ?? "Alternatif tarif")
+      : (item.alternativeRecipeName ?? item.selectedRecipeName ?? "Alternatif tarif"),
+    calories: selectedAlternative
+      ? (item.selectedCalories ?? item.alternativeCalories)
+      : (item.alternativeCalories ?? item.selectedCalories),
+    macros: selectedAlternative
+      ? (item.selectedMacros ?? item.alternativeMacros)
+      : (item.alternativeMacros ?? item.selectedMacros),
+  };
+}
+
+function getEffectiveRecipeForMeal(item: MealItem) {
+  const isSelectedAlternative = hasSelectedAlternativeRecipe(item);
 
   return {
     recipeId: isSelectedAlternative ? item.selectedRecipeId : item.recipeId,
@@ -82,6 +184,43 @@ function getEffectiveRecipeForMeal(item: MealItem) {
     calories: isSelectedAlternative ? item.selectedCalories : item.calories,
     macros: isSelectedAlternative ? item.selectedMacros : item.macros,
   };
+}
+
+function getRecipeForMealTarget(item: MealItem, target?: MealCompletionTarget) {
+  if (target === "Original") {
+    return {
+      recipeId: item.recipeId,
+      recipeName: item.recipeName ?? item.title,
+      calories: item.calories,
+      macros: item.macros,
+    };
+  }
+
+  if (target === "Alternative") {
+    const alternativeRecipe = getAlternativeRecipeForMeal(item);
+    return {
+      recipeId: alternativeRecipe.recipeId,
+      recipeName: alternativeRecipe.recipeName,
+      calories: alternativeRecipe.calories,
+      macros: alternativeRecipe.macros,
+    };
+  }
+
+  return getEffectiveRecipeForMeal(item);
+}
+
+function getDefaultCompletionTarget(item: MealItem): MealCompletionTarget {
+  return hasSelectedAlternativeRecipe(item)
+    ? "Alternative"
+    : "Original";
+}
+
+function getCompletionRecipeName(item: MealItem, target: MealCompletionTarget): string {
+  if (target === "Alternative") {
+    return item.selectedRecipeName ?? item.alternativeRecipeName ?? item.title;
+  }
+
+  return item.recipeName ?? item.title;
 }
 
 /* ── constants ── */
@@ -303,7 +442,10 @@ export default function PlansScreen({
   }, [isActive, isPremium, load]);
 
   /* ── actions (preserve existing logic exactly) ── */
-  const handleComplete = useCallback(async (item: MealItem) => {
+  const handleComplete = useCallback(async (
+    item: MealItem,
+    completionTarget: MealCompletionTarget = getDefaultCompletionTarget(item),
+  ) => {
     if (actingOn) return;
     const lockMessage = buildMealLockMessage(item, language);
     if (lockMessage) {
@@ -323,10 +465,10 @@ export default function PlansScreen({
     }
     setActingOn(item.id);
     try {
-      await completeMeal(item.id);
+      await completeMeal(item.id, undefined, completionTarget);
       await syncSchedules();
       await load();
-      notify(buildMealCompletedNotification(language, item.selectedRecipeName ?? item.title));
+      notify(buildMealCompletedNotification(language, getCompletionRecipeName(item, completionTarget)));
     } catch {
       Alert.alert("Hata", "Öğün tamamlanamadı. Lütfen tekrar deneyin.");
     } finally { setActingOn(null); }
@@ -367,8 +509,8 @@ export default function PlansScreen({
     }
   }, [actingOn, load]);
 
-  const handleViewRecipe = useCallback((item: MealItem) => {
-    const effectiveRecipe = getEffectiveRecipeForMeal(item);
+  const handleViewRecipe = useCallback((item: MealItem, target?: MealCompletionTarget) => {
+    const effectiveRecipe = getRecipeForMealTarget(item, target);
     if (!effectiveRecipe.recipeId) return;
     // Pass calories/macros from MealItem for immediate display; RecipeDetailScreen fetches
     // full ingredient/step data via plan-context endpoint when explanation is absent.
@@ -400,11 +542,12 @@ export default function PlansScreen({
   }, [navigation]);
 
   const handleViewAlternativeRecipeForMeal = useCallback((item: MealItem) => {
-    if (!item.alternativeRecipeId) return;
+    const alternativeRecipe = getAlternativeRecipeForMeal(item);
+    if (!alternativeRecipe.recipeId) return;
     (navigation as any).navigate(Routes.App.RecipeDetail, {
       result: {
-        recipeId: item.alternativeRecipeId,
-        name: item.alternativeRecipeName ?? "Alternatif Tarif",
+        recipeId: alternativeRecipe.recipeId,
+        name: alternativeRecipe.recipeName,
         description: "",
         score: 0,
         matchStatus: "FULL_MATCH" as const,
@@ -420,12 +563,16 @@ export default function PlansScreen({
         isDietitianRecipe: true,
         motivationText: "",
         isOwnedByActiveDietitian: true,
+        caloriesKcal: alternativeRecipe.calories,
+        proteinGrams: alternativeRecipe.macros?.proteinGrams,
+        carbsGrams: alternativeRecipe.macros?.carbsGrams,
+        fatGrams: alternativeRecipe.macros?.fatGrams,
       },
     });
   }, [navigation]);
 
   const handleOpenMealDetail = useCallback((item: MealItem) => {
-    if (item.completionStatus === "Alternative") {
+    if (hasAlternativeComparisonState(item)) {
       setAltCompareMeal(item);
     } else {
       setSelectedMeal(item);
@@ -491,6 +638,7 @@ export default function PlansScreen({
   const pendingItems = todayItems.filter(i => i.completionStatus === "Planned");
   const doneItems    = todayItems.filter(i => i.completionStatus === "Done" || i.completionStatus === "Alternative");
   const skippedItems = todayItems.filter(i => i.completionStatus === "Skipped");
+  const groupedPending = useMemo(() => groupPlanItemsByMealType(pendingItems), [pendingItems]);
   const doneCount    = doneItems.length;
   const totalCount   = todayItems.length;
   const nextMeal     = pendingItems[0] ?? null;
@@ -513,12 +661,23 @@ export default function PlansScreen({
     setMealFeedback(seeded);
   }, [todayPlan]);
 
-  const handleQuickFeedback = useCallback(async (item: MealItem, feedbackKey: string, _label: string) => {
+  const handleQuickFeedback = useCallback(async (
+    item: MealItem,
+    feedbackKey: string,
+    _label: string,
+    recipeSource: MealCompletionTarget = "Original",
+  ) => {
     const previous = mealFeedback[item.id];
     setMealFeedback((current) => ({ ...current, [item.id]: feedbackKey }));
     try {
-      await saveMealFeedback(item.id, feedbackKey);
-      notify(buildMealFeedbackNotification(language, item.title, feedbackKey as "filling" | "light" | "repeat" | "hard"));
+      await saveMealFeedback(item.id, feedbackKey, recipeSource);
+      const feedbackRecipe = getRecipeForMealTarget(item, recipeSource);
+      notify(buildMealFeedbackNotificationForSource(
+        language,
+        feedbackRecipe.recipeName ?? item.title,
+        feedbackKey as "filling" | "light" | "repeat" | "hard",
+        recipeSource,
+      ));
     } catch {
       setMealFeedback((current) => {
         const next = { ...current };
@@ -538,8 +697,12 @@ export default function PlansScreen({
   /* ── loading state ── */
   if (loading) {
     return (
-      <View style={[s.root, s.centered, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
+      <View style={[s.root, s.centered, { backgroundColor: theme.bg, padding: spacing.lg }]}>
+        <DytopiaWatermark position="center" size={300} opacity={0.036} />
+        <DytopiaLoadingState
+          title={language === "tr" ? "Plan akışın hazırlanıyor" : "Preparing your plan flow"}
+          subtitle={language === "tr" ? "Dytopia bugünkü öğünlerini ve ritmini senkronize ediyor." : "Dytopia is syncing your meals and daily rhythm."}
+        />
       </View>
     );
   }
@@ -548,6 +711,7 @@ export default function PlansScreen({
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <DytopiaWatermark position="center" size={300} opacity={0.036} />
       <ProduceBubble
         icon="food-apple-outline"
         iconSize={32}
@@ -662,7 +826,7 @@ export default function PlansScreen({
             {todayItems.length === 0 ? (
               <AppEmptyState
                 icon="🌿"
-                title="Bugün için plan yok"
+                title="Bugün için plan tanımlanmamış"
                 description="Diyetisyeniniz size özel bir plan hazırladığında burada görünecek."
               />
             ) : (
@@ -693,21 +857,30 @@ export default function PlansScreen({
                       accentColor={theme.primary}
                       theme={theme}
                     />
-                    {pendingItems.map((item, i) => (
-                      <PendingCard
-                          key={item.id}
-                          item={item}
-                          index={i}
-                          language={language}
+                    {groupedPending.map((group) => (
+                      <View key={`pending-group-${group.key}`}>
+                        <GroupHeader
+                          label={group.label}
+                          count={group.items.length}
                           theme={theme}
-                          isActing={actingOn === item.id}
-                          onOpenDetail={() => handleOpenMealDetail(item)}
-                          onComplete={() => void handleComplete(item)}
-                          onSkip={() => void handleSkip(item)}
-                          onAlternative={() => void handleAlternative(item)}
-                          onResetSelection={() => void handleResetSelectedRecipe(item)}
-                          onViewRecipe={() => handleViewRecipe(item)}
-                      />
+                        />
+                        {group.items.map((item) => (
+                          <PendingCard
+                              key={item.id}
+                              item={item}
+                              index={group.indexById[item.id] ?? 0}
+                              language={language}
+                              theme={theme}
+                              isActing={actingOn === item.id}
+                              onOpenDetail={() => handleOpenMealDetail(item)}
+                              onComplete={(target) => void handleComplete(item, target)}
+                              onSkip={() => void handleSkip(item)}
+                              onAlternative={() => void handleAlternative(item)}
+                              onResetSelection={() => void handleResetSelectedRecipe(item)}
+                              onViewRecipe={(target) => handleViewRecipe(item, target)}
+                          />
+                        ))}
+                      </View>
                     ))}
                   </>
                 )}
@@ -810,7 +983,7 @@ export default function PlansScreen({
         onClose={() => setAltCompareMeal(null)}
         onUndo={() => { if (altCompareMeal) void handleComplete(altCompareMeal); }}
         onChooseAnotherAlternative={altCompareMeal?.recipeId ? handleChooseAnotherAlternative : undefined}
-        onViewAlternativeRecipe={altCompareMeal?.alternativeRecipeId ? handleViewAlternativeRecipe : undefined}
+        onViewAlternativeRecipe={altCompareMeal && getAlternativeRecipeForMeal(altCompareMeal).recipeId ? handleViewAlternativeRecipe : undefined}
       />
     </View>
   );
@@ -927,6 +1100,26 @@ function DayProgressCard({
         ) : null}
       </View>
     </Animated.View>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   MEAL GROUP HEADER (mealType grouping inside Pending)
+═══════════════════════════════════════════════════════ */
+function GroupHeader({
+  label,
+  count,
+  theme,
+}: {
+  label: string;
+  count: number;
+  theme: import("../theme/tokens").Theme;
+}) {
+  return (
+    <View style={s.mealGroupHeaderRow}>
+      <Text style={[s.mealGroupHeaderLabel, { color: theme.textMuted }]}>{label}</Text>
+      <Text style={[s.mealGroupHeaderCount, { color: theme.textMuted }]}>{`• ${count} öğün`}</Text>
+    </View>
   );
 }
 
@@ -1075,11 +1268,12 @@ function MealDetailSheet({
   const isCompleted = item.completionStatus === "Done" || item.completionStatus === "Alternative";
   const lockMessage = buildMealLockMessage(item, language);
   const isLocked = !!lockMessage;
+  const isAlternativeCompletion = hasAlternativeComparisonState(item);
   const statusTone =
     item.completionStatus === "Skipped"
       ? { label: "Atlandı", color: theme.textMuted, bg: theme.borderLight, border: theme.border }
       : isCompleted
-        ? { label: item.completionStatus === "Alternative" ? "Alternatif" : "Tamamlandı", color: theme.emerald, bg: theme.glassEmerald, border: theme.borderEmerald }
+        ? { label: isAlternativeCompletion ? "Alternatif" : "Tamamlandı", color: theme.emerald, bg: theme.glassEmerald, border: theme.borderEmerald }
         : { label: "Bekliyor", color: theme.primary, bg: theme.primaryLight, border: theme.borderEmerald };
   const selectedRecipeLabel = getSelectedMealRecipeLabel(item, language);
 
@@ -1248,11 +1442,11 @@ function PendingCard({
   theme: import("../theme/tokens").Theme;
   isActing: boolean;
   onOpenDetail: () => void;
-  onComplete: () => void;
+  onComplete: (target: MealCompletionTarget) => void;
   onSkip: () => void;
   onAlternative: () => void;
   onResetSelection: () => void;
-  onViewRecipe: () => void;
+  onViewRecipe: (target: MealCompletionTarget) => void;
 }) {
   const style = useStaggerItem(index, 120, 60);
   const meta  = MEAL_TYPE_META[item.mealType] ?? MEAL_TYPE_META.Snack;
@@ -1334,10 +1528,17 @@ function PendingCard({
   }, []);
 
   return (
-    <Animated.View style={style}>
+    <Animated.View style={[style, s.timelineRow]}>
+      <View style={s.timelineRail}>
+        <View style={[s.timelineLine, { backgroundColor: index === 0 ? `${theme.primary}55` : theme.border }]} />
+        <View style={[s.timelineDot, { backgroundColor: theme.surface, borderColor: index === 0 ? theme.primary : theme.border }]}>
+          <View style={[s.timelineDotCore, { backgroundColor: index === 0 ? theme.primary : theme.textMuted }]} />
+        </View>
+      </View>
       <RNAnimated.View style={[
         s.pendingCard,
         {
+          flex: 1,
           backgroundColor: theme.surface,
           borderColor: displayAlternativeSide ? `${theme.accentGold}38` : theme.border,
           transform: [{ scaleX: flipScaleX }],
@@ -1425,11 +1626,10 @@ function PendingCard({
                   onPress={onResetSelection}
                   disabled={isActing}
                   activeOpacity={0.76}
+                  accessibilityRole="button"
+                  accessibilityLabel={language === "tr" ? "Orijinale dön" : "Use original"}
                 >
-                  <Ionicons name="refresh-outline" size={13} color={theme.primary} />
-                  <Text style={[s.selectedRecipeResetTxt, { color: theme.primary }]}>
-                    {language === "tr" ? "Orijinale Dön" : "Use original"}
-                  </Text>
+                  <Ionicons name="refresh-outline" size={21} color={theme.primary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1444,61 +1644,59 @@ function PendingCard({
 
           {/* Actions */}
           <View style={s.pendingActions}>
-            {/* Primary: Yaptım */}
             <TouchableOpacity
               style={[s.doneBtn, { backgroundColor: theme.primary, shadowColor: theme.primaryGlow }]}
-              onPress={onComplete}
+              onPress={() => onComplete(displayAlternativeSide ? "Alternative" : "Original")}
               disabled={isActing || isLocked}
               activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={isLocked
+                ? (language === "tr" ? "Saati bekliyor" : "Waiting for time")
+                : (language === "tr" ? "Yaptım" : "Complete")}
             >
               {isActing ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <>
-                  <Ionicons name={isLocked ? "lock-closed-outline" : "checkmark-circle-outline"} size={15} color="#fff" />
-                  <Text style={s.doneBtnTxt}>{isLocked ? (language === "tr" ? "Saati Bekliyor" : "Waiting") : "Yaptım"}</Text>
-                </>
+                <Ionicons name={isLocked ? "lock-closed-outline" : "checkmark-circle-outline"} size={23} color="#fff" />
               )}
             </TouchableOpacity>
 
-            {/* Secondary row: Atladım + Alternatif + Tarif */}
-            <View style={s.secondaryBtnRow}>
+            <TouchableOpacity
+              style={[s.ghostBtn, { borderColor: `${theme.accentCoral}22`, backgroundColor: `${theme.accentCoral}0D` }]}
+              onPress={onSkip}
+              disabled={isActing || isLocked}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={language === "tr" ? "Atla" : "Skip"}
+            >
+              <Ionicons name="close-circle-outline" size={23} color={theme.accentCoral} />
+            </TouchableOpacity>
+
+            {!!item.recipeId && (
               <TouchableOpacity
-                style={[s.ghostBtn, { borderColor: theme.border }]}
-                onPress={onSkip}
-                disabled={isActing || isLocked}
+                style={[s.ghostBtn, { borderColor: `${theme.accentCyan}30`, backgroundColor: `${theme.accentCyan}12` }]}
+                onPress={onAlternative}
+                disabled={isActing}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={language === "tr" ? "Alternatif seç" : "Choose alternative"}
               >
-                <Ionicons name="close-circle-outline" size={13} color={theme.textMuted} />
-                <Text style={[s.ghostBtnTxt, { color: theme.textMuted }]}>Atladım</Text>
+                <Ionicons name="shuffle-outline" size={23} color={theme.accentCyan} />
               </TouchableOpacity>
+            )}
 
-              {!!item.recipeId && (
-                <TouchableOpacity
-                  style={[s.ghostBtn, { borderColor: theme.border }]}
-                  onPress={onAlternative}
-                  disabled={isActing}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="swap-horizontal-outline" size={13} color={theme.textMuted} />
-                  <Text style={[s.ghostBtnTxt, { color: theme.textMuted }]}>
-                    {language === "tr" ? "Alternatif Seç" : "Choose alternative"}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {!!item.recipeId && (
-                <TouchableOpacity
-                  style={[s.ghostBtn, { borderColor: theme.borderEmerald }]}
-                  onPress={onViewRecipe}
-                  disabled={isActing}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="book-outline" size={13} color={theme.primary} />
-                  <Text style={[s.ghostBtnTxt, { color: theme.primary }]}>Tarif</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            {!!item.recipeId && (
+              <TouchableOpacity
+                style={[s.ghostBtn, { borderColor: theme.borderEmerald, backgroundColor: `${theme.primary}08` }]}
+                onPress={() => onViewRecipe(displayAlternativeSide ? "Alternative" : "Original")}
+                disabled={isActing}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={language === "tr" ? "Tarifi gör" : "View recipe"}
+              >
+                <Ionicons name="book-outline" size={23} color={theme.primary} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </RNAnimated.View>
@@ -1518,7 +1716,7 @@ function DoneCard({
   theme: import("../theme/tokens").Theme;
   isActing: boolean;
   currentFeedback?: string;
-  onSelectFeedback: (item: MealItem, feedbackKey: string, label: string) => void;
+  onSelectFeedback: (item: MealItem, feedbackKey: string, label: string, recipeSource: MealCompletionTarget) => void;
   onOpenDetail: () => void;
   onViewRecipe: () => void;
   onViewAlternativeRecipe: () => void;
@@ -1527,9 +1725,10 @@ function DoneCard({
 }) {
   const style  = useStaggerItem(index, 180, 50);
   const meta   = MEAL_TYPE_META[item.mealType] ?? MEAL_TYPE_META.Snack;
-  const isAlt  = item.completionStatus === "Alternative";
+  const isAlt  = hasAlternativeComparisonState(item);
+  const alternativeRecipe = getAlternativeRecipeForMeal(item);
   const hasMacros    = item.calories || item.macros?.proteinGrams || item.macros?.carbsGrams || item.macros?.fatGrams;
-  const hasAltMacros = item.alternativeCalories || item.alternativeMacros?.proteinGrams || item.alternativeMacros?.carbsGrams || item.alternativeMacros?.fatGrams;
+  const hasAltMacros = alternativeRecipe.calories || alternativeRecipe.macros?.proteinGrams || alternativeRecipe.macros?.carbsGrams || alternativeRecipe.macros?.fatGrams;
   const accentColor = isAlt ? theme.accentGold : theme.emerald;
   const statusBorder = `${accentColor}2C`;
   const statusSurface = `${accentColor}12`;
@@ -1556,10 +1755,10 @@ function DoneCard({
   const flipScaleX                = useRef(new RNAnimated.Value(1)).current;
   const prevResetKey              = useRef(flipResetKey);
   const contextualTitle = showBack && isAlt
-    ? (item.alternativeRecipeName ?? "Alternatif tarif")
+    ? alternativeRecipe.recipeName
     : (item.recipeName ?? item.title);
   const contextualRecipeHandler = showBack && isAlt ? onViewAlternativeRecipe : onViewRecipe;
-  const contextualRecipeAvailable = showBack && isAlt ? !!item.alternativeRecipeId : !!item.recipeId;
+  const contextualRecipeAvailable = showBack && isAlt ? !!alternativeRecipe.recipeId : !!item.recipeId;
   const contextualMeta = isAlt
     ? `${item.time} • ${showBack ? "Alternatif tarif" : "Planlanan tarif"}`
     : item.time;
@@ -1652,6 +1851,10 @@ function DoneCard({
   });
 
   const selectedFeedbackLabel = feedbackOptions.find((option) => option.key === currentFeedback)?.label;
+  const canEvaluateCurrentFace = true;
+  const evaluationTargetLabel = isAlt
+    ? (alternativeRecipe.recipeName ?? item.title)
+    : (item.recipeName ?? item.title);
 
   return (
     <Animated.View style={style}>
@@ -1728,27 +1931,27 @@ function DoneCard({
 
             {!!(showBack && isAlt ? hasAltMacros : hasMacros) && (
               <View style={s.doneMacroRow}>
-                {!!(showBack && isAlt ? item.alternativeCalories : item.calories) && (
+                {!!(showBack && isAlt ? alternativeRecipe.calories : item.calories) && (
                   <MacroChip
-                    value={`${showBack && isAlt ? item.alternativeCalories : item.calories} kcal`}
+                    value={`${showBack && isAlt ? alternativeRecipe.calories : item.calories} kcal`}
                     color={theme.macroCalorie}
                   />
                 )}
-                {!!(showBack && isAlt ? item.alternativeMacros?.proteinGrams : item.macros?.proteinGrams) && (
+                {!!(showBack && isAlt ? alternativeRecipe.macros?.proteinGrams : item.macros?.proteinGrams) && (
                   <MacroChip
-                    value={`P ${showBack && isAlt ? item.alternativeMacros?.proteinGrams : item.macros?.proteinGrams}g`}
+                    value={`P ${showBack && isAlt ? alternativeRecipe.macros?.proteinGrams : item.macros?.proteinGrams}g`}
                     color={theme.macroProtein}
                   />
                 )}
-                {!!(showBack && isAlt ? item.alternativeMacros?.carbsGrams : item.macros?.carbsGrams) && (
+                {!!(showBack && isAlt ? alternativeRecipe.macros?.carbsGrams : item.macros?.carbsGrams) && (
                   <MacroChip
-                    value={`K ${showBack && isAlt ? item.alternativeMacros?.carbsGrams : item.macros?.carbsGrams}g`}
+                    value={`K ${showBack && isAlt ? alternativeRecipe.macros?.carbsGrams : item.macros?.carbsGrams}g`}
                     color={theme.macroCarb}
                   />
                 )}
-                {!!(showBack && isAlt ? item.alternativeMacros?.fatGrams : item.macros?.fatGrams) && (
+                {!!(showBack && isAlt ? alternativeRecipe.macros?.fatGrams : item.macros?.fatGrams) && (
                   <MacroChip
-                    value={`Y ${showBack && isAlt ? item.alternativeMacros?.fatGrams : item.macros?.fatGrams}g`}
+                    value={`Y ${showBack && isAlt ? alternativeRecipe.macros?.fatGrams : item.macros?.fatGrams}g`}
                     color={theme.macroFat}
                   />
                 )}
@@ -1776,38 +1979,45 @@ function DoneCard({
               onPress={contextualRecipeHandler}
               disabled={!contextualRecipeAvailable}
               activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={language === "tr" ? "Tarifi gör" : "View recipe"}
             >
               <Ionicons
                 name="book-outline"
-                size={14}
+                size={22}
                 color={contextualRecipeAvailable ? accentColor : theme.textMuted}
               />
-              <Text style={[s.doneDetailBtnTxt, { color: contextualRecipeAvailable ? accentColor : theme.textMuted }]}>
-                Tarifi Gör
-              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 s.doneFeedbackBtn,
                 {
-                  borderColor: currentFeedback ? `${theme.primary}34` : theme.border,
-                  backgroundColor: currentFeedback ? `${theme.primary}12` : theme.surfaceElevated,
+                  borderColor: canEvaluateCurrentFace
+                    ? (currentFeedback ? `${theme.primary}34` : theme.border)
+                    : theme.border,
+                  backgroundColor: canEvaluateCurrentFace
+                    ? (currentFeedback ? `${theme.primary}12` : theme.surfaceElevated)
+                    : `${theme.textMuted}10`,
                 },
               ]}
-              onPress={() => setFeedbackExpanded((value) => !value)}
+              onPress={() => canEvaluateCurrentFace && setFeedbackExpanded((value) => !value)}
+              disabled={!canEvaluateCurrentFace}
               activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={currentFeedback
+                ? (language === "tr" ? "Notu güncelle" : "Update note")
+                : (language === "tr" ? "Değerlendir" : "Review")}
             >
               <Ionicons
-                name={currentFeedback ? "chatbubble-ellipses-outline" : "sparkles-outline"}
-                size={14}
-                color={currentFeedback ? theme.primary : theme.textMuted}
+                name={canEvaluateCurrentFace
+                  ? (currentFeedback ? "chatbubble-ellipses-outline" : "sparkles-outline")
+                  : "lock-closed-outline"}
+                size={22}
+                color={canEvaluateCurrentFace
+                  ? (currentFeedback ? theme.primary : theme.textMuted)
+                  : theme.textMuted}
               />
-              <Text style={[s.doneFeedbackBtnTxt, { color: currentFeedback ? theme.primary : theme.textSub }]}>
-                {currentFeedback
-                  ? (language === "tr" ? "Notu güncelle" : "Update note")
-                  : (language === "tr" ? "Değerlendir" : "Review")}
-              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1815,14 +2025,13 @@ function DoneCard({
               onPress={onUndo}
               disabled={isActing}
               activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={language === "tr" ? "Geri al" : "Undo"}
             >
               {isActing ? (
                 <ActivityIndicator size="small" color={theme.textMuted} />
               ) : (
-                <>
-                  <Ionicons name="arrow-undo-outline" size={14} color={theme.textSub} />
-                  <Text style={[s.doneUndoBtnTxt, { color: theme.textSub }]}>Geri Al</Text>
-                </>
+                <Ionicons name="arrow-undo-outline" size={22} color={theme.textSub} />
               )}
             </TouchableOpacity>
           </View>
@@ -1844,8 +2053,16 @@ function DoneCard({
                   </Text>
                   <Text style={[s.doneFeedbackPanelSub, { color: theme.textMuted }]}>
                     {language === "tr"
-                      ? (selectedFeedbackLabel ? `Seçili not: ${selectedFeedbackLabel}` : "Tek dokunuşla deneyimini işaretle.")
-                      : (selectedFeedbackLabel ? `Selected note: ${selectedFeedbackLabel}` : "Mark your experience in one tap.")}
+                      ? (selectedFeedbackLabel
+                        ? `Seçili not: ${selectedFeedbackLabel}`
+                        : isAlt
+                        ? `${evaluationTargetLabel} için deneyimini işaretle.`
+                        : "Tek dokunuşla deneyimini işaretle.")
+                      : (selectedFeedbackLabel
+                        ? `Selected note: ${selectedFeedbackLabel}`
+                        : isAlt
+                        ? `Rate your experience for ${evaluationTargetLabel}.`
+                        : "Mark your experience in one tap.")}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -1864,7 +2081,12 @@ function DoneCard({
                     <TouchableOpacity
                       key={option.key}
                       activeOpacity={0.82}
-                      onPress={() => onSelectFeedback(item, option.key, option.label)}
+                      onPress={() => onSelectFeedback(
+                        item,
+                        option.key,
+                        option.label,
+                        showBack && isAlt ? "Alternative" : "Original",
+                      )}
                       style={[
                         s.doneFeedbackChip,
                         {
@@ -2049,8 +2271,8 @@ function PlanCard({
 const s = StyleSheet.create({
   root:    { flex: 1 },
   centered:{ justifyContent: "center", alignItems: "center" },
-  scroll:  { paddingHorizontal: spacing.lg, paddingTop: spacing.xl + 18 },
-  bottomPad: { height: 132 },
+  scroll:  { paddingHorizontal: spacing.lg, paddingTop: spacing.xl + 12 },
+  bottomPad: { height: 176 },
   screenGlowA: {
     position: "absolute",
     top: 24,
@@ -2072,9 +2294,15 @@ const s = StyleSheet.create({
   plansHeroBand: {
     borderRadius: radii.xxl,
     borderWidth: 1,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     marginBottom: spacing.md,
     overflow: "hidden",
+    shadowColor: "#0F3D2E",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    elevation: 3,
   },
   plansHeroBlobA: {
     position: "absolute",
@@ -2099,7 +2327,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   plansHeroChip: {
     flexDirection: "row",
@@ -2108,47 +2336,52 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radii.full,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   plansHeroChipText: { fontSize: 12, fontWeight: "800" },
   plansHeroMini: {
     borderRadius: radii.full,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   plansHeroMiniText: { fontSize: 11, fontWeight: "800" },
   plansHeroTitle: {
-    fontSize: 28,
+    fontSize: 25,
     fontWeight: "900",
     letterSpacing: -0.8,
-    lineHeight: 32,
+    lineHeight: 30,
     marginBottom: 6,
-    maxWidth: 280,
+    maxWidth: 270,
   },
   plansHeroSubtitle: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12.5,
+    lineHeight: 19,
     maxWidth: 310,
   },
 
-  header:    { marginBottom: spacing.lg },
-  pageTitle: { fontSize: 36, fontWeight: "900", letterSpacing: -0.5, marginBottom: 4 },
-  todayLine: { fontSize: 13, fontWeight: "600" },
+  header:    { marginBottom: spacing.md },
+  pageTitle: { fontSize: 34, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
+  todayLine: { fontSize: 13, fontWeight: "700" },
 
   shoppingLink: {
     borderWidth: 1,
-    borderRadius: radii.xl,
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.md,
+    paddingVertical: 14,
+    marginBottom: spacing.sm,
+    shadowColor: "#0F3D2E",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
   shoppingLinkIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -2161,7 +2394,7 @@ const s = StyleSheet.create({
   },
   shoppingLinkBadgeTxt: { fontSize: 11, fontWeight: "900" },
   shoppingLinkTitle: { fontSize: 14, fontWeight: "800", marginBottom: 2 },
-  shoppingLinkSub: { fontSize: 12, lineHeight: 17 },
+  shoppingLinkSub: { fontSize: 12, lineHeight: 16.5 },
   momentumCard: {
     borderRadius: radii.xl,
     borderWidth: 1,
@@ -2193,10 +2426,15 @@ const s = StyleSheet.create({
   momentumBadgeValue: { fontSize: 18, fontWeight: "900", letterSpacing: -0.4 },
   momentumBadgeLabel: { fontSize: 9, fontWeight: "700", marginTop: 1 },
   digestCard: {
-    borderRadius: radii.xl,
+    borderRadius: 24,
     borderWidth: 1,
-    padding: spacing.md,
+    padding: 16,
     marginBottom: spacing.md,
+    shadowColor: "#0F3D2E",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
   digestHead: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
   digestIcon: {
@@ -2223,14 +2461,14 @@ const s = StyleSheet.create({
 
   allPlansLabel: {
     fontSize: 11, fontWeight: "700", letterSpacing: 0.7, textTransform: "uppercase",
-    marginTop: spacing.xl, marginBottom: spacing.sm,
+    marginTop: spacing.lg, marginBottom: spacing.sm,
   },
 
   /* ── Progress Card ── */
   progressCard: {
-    borderRadius: radii.xl, borderWidth: 1, padding: 18, marginBottom: spacing.md,
+    borderRadius: 26, borderWidth: 1, padding: 18, marginBottom: spacing.md,
     overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 14, elevation: 6,
+    shadowColor: "#0F3D2E", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 5,
   },
   progressCardGlow: { position: "absolute", top: -50, right: -50, width: 160, height: 160, borderRadius: 80, opacity: 0.18 },
   progressCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
@@ -2249,7 +2487,7 @@ const s = StyleSheet.create({
   /* Next meal banner */
   nextBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: radii.md, borderWidth: 1,
+    borderRadius: 18, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 10,
   },
   nextBannerDot:    { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
@@ -2261,7 +2499,7 @@ const s = StyleSheet.create({
   /* Success banner */
   nextBannerSuccess: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: radii.md, borderWidth: 1,
+    borderRadius: 18, borderWidth: 1,
     paddingHorizontal: 14, paddingVertical: 12,
   },
   nextBannerSuccessEmoji: { fontSize: 22 },
@@ -2277,6 +2515,16 @@ const s = StyleSheet.create({
   sectionHeaderLabel: { fontSize: 10.5, fontWeight: "800", letterSpacing: 1.1, flex: 1 },
   sectionHeaderPill:  { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radii.full },
   sectionHeaderCount: { fontSize: 11, fontWeight: "900" },
+  mealGroupHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: spacing.sm,
+    marginBottom: 6,
+    paddingLeft: 6,
+  },
+  mealGroupHeaderLabel: { fontSize: 12, fontWeight: "800" },
+  mealGroupHeaderCount: { fontSize: 12, fontWeight: "600" },
 
   /* ── Shared card pieces ── */
   cardStrip: { width: 3, alignSelf: "stretch", marginVertical: 10, marginLeft: 6, borderRadius: 2 },
@@ -2333,12 +2581,17 @@ const s = StyleSheet.create({
   macroChipTxt: { fontSize: 10, fontWeight: "700" },
 
   macroSummaryBar: {
-    borderRadius: radii.xl,
+    borderRadius: 24,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     marginBottom: spacing.md,
     gap: spacing.sm,
+    shadowColor: "#0F3D2E",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
   macroSummaryLabel: {
     fontSize: 11,
@@ -2411,9 +2664,10 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderRadius: radii.full,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    borderRadius: 18,
+    width: 44,
+    height: 38,
+    justifyContent: "center",
   },
   selectedRecipeResetTxt: {
     fontSize: 11,
@@ -2532,36 +2786,70 @@ const s = StyleSheet.create({
   detailRowText: { fontSize: 11, fontWeight: "700" },
 
   /* ── Pending card ── */
-  pendingCard: {
-    borderRadius: radii.xl, borderWidth: 1, marginBottom: spacing.sm,
-    flexDirection: "row", overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
+  timelineRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 9,
   },
-  pendingBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.sm },
-  pendingActions: { marginTop: 12, gap: 8 },
+  timelineRail: {
+    width: 18,
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  timelineLine: {
+    position: "absolute",
+    top: 13,
+    bottom: -spacing.sm,
+    width: 2,
+    borderRadius: 999,
+  },
+  timelineDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+  },
+  timelineDotCore: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  pendingCard: {
+    borderRadius: 26, borderWidth: 1, marginBottom: spacing.sm,
+    flexDirection: "row", overflow: "hidden",
+    shadowColor: "#0F3D2E", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.08, shadowRadius: 14, elevation: 4,
+  },
+  pendingBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.sm, gap: 2 },
+  pendingActions: { marginTop: 12, flexDirection: "row", gap: 9, alignItems: "center" },
   doneBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    paddingVertical: 12, borderRadius: radii.md,
+    flex: 1,
+    height: 56,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 23,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 8, elevation: 4,
   },
   doneBtnTxt: { color: "#fff", fontSize: 13, fontWeight: "900" },
   secondaryBtnRow: { flexDirection: "row", gap: 8 },
   ghostBtn: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: radii.full, borderWidth: 1, backgroundColor: "transparent",
+    flex: 1,
+    height: 56,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 23, borderWidth: 1,
   },
   ghostBtnTxt: { fontSize: 11, fontWeight: "700" },
 
   /* ── Done card ── */
   doneCard: {
-    borderRadius: radii.xl, borderWidth: 1, marginBottom: spacing.sm,
+    borderRadius: 26, borderWidth: 1, marginBottom: spacing.sm,
     overflow: "hidden",
     shadowColor: "#22c55e",
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 14, elevation: 4,
   },
   doneAccentBar: { height: 3, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl },
-  doneBody: { padding: spacing.md, gap: 10 },
+  doneBody: { padding: spacing.md, gap: 11 },
   doneTopRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   doneTopMeta: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
   doneBodyTouch: { gap: 10 },
@@ -2612,21 +2900,23 @@ const s = StyleSheet.create({
   },
   doneGuideText: { fontSize: 11.5, fontWeight: "600", lineHeight: 16 },
   doneDivider: { height: 1, marginHorizontal: -spacing.md, opacity: 0.5 },
-  doneActionRow: { flexDirection: "row", gap: 8 },
+  doneActionRow: { flexDirection: "row", gap: 10, alignItems: "center", width: "100%" },
   doneDetailBtn: {
-    flex: 1,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
+    flex: 1, height: 56,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 23, borderWidth: 1,
   },
   doneDetailBtnTxt: { fontSize: 13, fontWeight: "800" },
   doneFeedbackBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
+    flex: 1, height: 56,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 23, borderWidth: 1,
   },
   doneFeedbackBtnTxt: { fontSize: 12.5, fontWeight: "800" },
   doneUndoBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    paddingHorizontal: 18, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1,
+    flex: 1, height: 56,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 23, borderWidth: 1,
   },
   doneUndoBtnTxt: { fontSize: 13, fontWeight: "700" },
   doneFeedbackPanelWrap: {
@@ -2686,9 +2976,9 @@ const s = StyleSheet.create({
 
   /* ── Plan card ── */
   planCard: {
-    borderRadius: radii.xl, borderWidth: 1, marginBottom: spacing.sm,
+    borderRadius: 26, borderWidth: 1, marginBottom: spacing.sm,
     flexDirection: "row", overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    shadowColor: "#0F3D2E", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
   },
   planBody: { flex: 1, padding: spacing.md },
   planTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 },

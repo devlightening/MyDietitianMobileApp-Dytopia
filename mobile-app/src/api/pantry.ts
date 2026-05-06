@@ -19,13 +19,19 @@ export async function getPantry(): Promise<PantryItem[]> {
   return res.data?.items ?? [];
 }
 
-export async function replacePantry(items: Ingredient[]): Promise<PantryItem[]> {
+export type PantryUpdateSource = "manual" | "barcode" | "photo" | "receipt";
+
+export async function replacePantry(
+  items: Ingredient[],
+  options?: { sourceType?: PantryUpdateSource },
+): Promise<PantryItem[]> {
   const res = await apiClient.put<PantryResponse>("/api/client/pantry", {
     items: items.map((item) => ({
       ingredientId: item.id,
       quantity: null,
       unit: null,
     })),
+    sourceType: options?.sourceType ?? "manual",
   });
 
   return res.data?.items ?? [];

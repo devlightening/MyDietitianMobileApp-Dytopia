@@ -8,6 +8,7 @@ import {
   StatusBar,
   SafeAreaView,
   ScrollView,
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ const JOURNEY_STEPS = [
   { icon: 'restaurant-outline', title: 'Malzeme seç', text: 'Elindekilerle sana uygun tarifleri bul.' },
   { icon: 'analytics-outline', title: 'Takip et', text: 'Ölçüm ve uyum görünümüyle motivasyonunu koru.' },
 ] as const;
+const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 
 export default function WelcomeScreen() {
   const navigation = useNavigation();
@@ -81,8 +83,9 @@ export default function WelcomeScreen() {
             <View style={s.heroTop}>
               <View style={[s.logoWrap, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
                 <View style={[s.logoGlow, { backgroundColor: theme.primaryLight }]} />
-                <Ionicons name="leaf-outline" size={34} color={theme.primaryDark} />
+                <Image source={BRAND_LOGO} style={s.logoImage} resizeMode="contain" />
               </View>
+              <Text style={[s.brandWord, { color: theme.primaryDark }]}>Dytopia</Text>
 
               <View style={[s.badge, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
                 <Ionicons name="heart-outline" size={14} color={theme.emerald} />
@@ -226,6 +229,13 @@ const s = StyleSheet.create({
     height: 88,
     borderRadius: 28,
     opacity: 0.9,
+  },
+  logoImage: { width: 78, height: 78, borderRadius: 24 },
+  brandWord: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    marginBottom: spacing.md,
   },
   badge: {
     flexDirection: 'row',

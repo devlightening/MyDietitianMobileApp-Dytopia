@@ -402,10 +402,7 @@ public class RecipeImportOrchestrator
                     existingRecipe.ClearProhibitedIngredients();
                     await ReplaceExplicitRecipeIngredientsAsync(
                         existingRecipe.Id,
-                        mandatory,
-                        optional,
-                        flavoring,
-                        prohibited,
+                        resolvedIngredients,
                         cancellationToken);
                     await AddIngredientsToRecipe(existingRecipe, mandatory, optional, flavoring, prohibited, cancellationToken);
                     updated++;
@@ -424,7 +421,7 @@ public class RecipeImportOrchestrator
                 ApplyMetadata(recipe, sessionRecipe);
                 _db.Recipes.Add(recipe);
                 await _db.SaveChangesAsync(cancellationToken);
-                await SyncExplicitRecipeIngredientsAsync(recipe.Id, mandatory, optional, flavoring, prohibited, cancellationToken);
+                await SyncExplicitRecipeIngredientsAsync(recipe.Id, resolvedIngredients, cancellationToken);
                 await AddIngredientsToRecipe(recipe, mandatory, optional, flavoring, prohibited, cancellationToken);
                 created++;
                 names.Add(sessionRecipe.NormalizedTitle);
@@ -566,33 +563,29 @@ public class RecipeImportOrchestrator
 
     private async Task SyncExplicitRecipeIngredientsAsync(
         Guid recipeId,
-        IEnumerable<Guid> mandatory,
-        IEnumerable<Guid> optional,
-        IEnumerable<Guid> flavoring,
-        IEnumerable<Guid> prohibited,
+        IEnumerable<RecipeImportSessionIngredient> resolvedIngredients,
         CancellationToken cancellationToken)
     {
-        foreach (var ingredientId in mandatory.Distinct())
-            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.MandatoryRole));
-
-        foreach (var ingredientId in optional.Distinct())
-            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.OptionalRole));
-
-        foreach (var ingredientId in flavoring.Distinct())
-            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.FlavoringRole));
-
-        foreach (var ingredientId in prohibited.Distinct())
-            _db.RecipeIngredients.Add(new RecipeIngredient(recipeId, ingredientId, RecipeIngredient.ProhibitedRole));
+        foreach (var ingredient in resolvedIngredients
+            .Where(item => item.MatchedIngredientId.HasValue)
+            .GroupBy(item => new { item.MatchedIngredientId, item.Role })
+            .Select(group => group.First()))
+        {
+            var role = ToRecipeIngredientRole(ingredient.Role);
+            _db.RecipeIngredients.Add(new RecipeIngredient(
+                recipeId,
+                ingredient.MatchedIngredientId!.Value,
+                role,
+                role == RecipeIngredient.ProhibitedRole ? null : ingredient.AmountValue,
+                role == RecipeIngredient.ProhibitedRole ? null : ingredient.UnitNormalized));
+        }
 
         await Task.CompletedTask;
     }
 
     private async Task ReplaceExplicitRecipeIngredientsAsync(
         Guid recipeId,
-        IEnumerable<Guid> mandatory,
-        IEnumerable<Guid> optional,
-        IEnumerable<Guid> flavoring,
-        IEnumerable<Guid> prohibited,
+        IEnumerable<RecipeImportSessionIngredient> resolvedIngredients,
         CancellationToken cancellationToken)
     {
         var existing = await _db.RecipeIngredients
@@ -601,6 +594,16 @@ public class RecipeImportOrchestrator
         if (existing.Count > 0)
             _db.RecipeIngredients.RemoveRange(existing);
 
-        await SyncExplicitRecipeIngredientsAsync(recipeId, mandatory, optional, flavoring, prohibited, cancellationToken);
+        await SyncExplicitRecipeIngredientsAsync(recipeId, resolvedIngredients, cancellationToken);
     }
+
+    private static string ToRecipeIngredientRole(ImportIngredientRole role)
+        => role switch
+        {
+            ImportIngredientRole.Mandatory => RecipeIngredient.MandatoryRole,
+            ImportIngredientRole.Optional => RecipeIngredient.OptionalRole,
+            ImportIngredientRole.Flavoring => RecipeIngredient.FlavoringRole,
+            ImportIngredientRole.Prohibited => RecipeIngredient.ProhibitedRole,
+            _ => RecipeIngredient.OptionalRole
+        };
 }

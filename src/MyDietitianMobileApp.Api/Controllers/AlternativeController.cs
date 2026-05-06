@@ -184,6 +184,13 @@ public class AlternativeController : ControllerBase
                 .Select(x => x.IngredientId)
                 .ToListAsync(cancellationToken))
                 .ToHashSet();
+            var isFavorited = await _appDb.ClientRecipeFavorites
+                .AsNoTracking()
+                .AnyAsync(
+                    item => item.ClientId == user.LinkedClientId.Value &&
+                            item.RecipeId == recipeId &&
+                            item.IsActive,
+                    cancellationToken);
 
             var mandatoryCoverage = BuildCoverageGroup(groups.Mandatory, pantryIds);
             var optionalCoverage = BuildCoverageGroup(groups.Optional, pantryIds);
@@ -199,6 +206,7 @@ public class AlternativeController : ControllerBase
                 ProteinGrams = recipe.ProteinGrams,
                 CarbsGrams = recipe.CarbsGrams,
                 FatGrams = recipe.FatGrams,
+                IsFavorited = isFavorited,
                 Ingredients = new RecipeIngredientGroupsDto
                 {
                     Mandatory = ToIngredientInfo(groups.Mandatory),
@@ -231,50 +239,50 @@ public class AlternativeController : ControllerBase
         }
     }
 
-    private static RecipeIngredientGroups BuildPlanContextIngredientGroups(
+    private static PlanContextIngredientGroups BuildPlanContextIngredientGroups(
         Recipe recipe,
         IReadOnlyCollection<RecipeIngredient> explicitRows)
     {
         var explicitMandatory = explicitRows
             .Where(x => x.Role == RecipeIngredient.MandatoryRole)
-            .Select(x => x.Ingredient!)
+            .Select(ToPlanContextIngredient)
             .DistinctBy(x => x.Id)
             .ToList();
         var explicitOptional = explicitRows
             .Where(x => x.Role == RecipeIngredient.OptionalRole)
-            .Select(x => x.Ingredient!)
+            .Select(ToPlanContextIngredient)
             .DistinctBy(x => x.Id)
             .ToList();
         var explicitFlavoring = explicitRows
             .Where(x => x.Role == RecipeIngredient.FlavoringRole)
-            .Select(x => x.Ingredient!)
+            .Select(ToPlanContextIngredient)
             .DistinctBy(x => x.Id)
             .ToList();
 
         var mandatory = explicitMandatory.Count > 0
             ? explicitMandatory
-            : recipe.MandatoryIngredients.DistinctBy(x => x.Id).ToList();
+            : recipe.MandatoryIngredients.DistinctBy(x => x.Id).Select(ToPlanContextIngredient).ToList();
 
         if (explicitOptional.Count > 0 || explicitFlavoring.Count > 0)
-            return new RecipeIngredientGroups(mandatory, explicitOptional, explicitFlavoring);
+            return new PlanContextIngredientGroups(mandatory, explicitOptional, explicitFlavoring);
 
-        return new RecipeIngredientGroups(
+        return new PlanContextIngredientGroups(
             mandatory,
-            recipe.OptionalIngredients.Where(x => !x.IsCondiment).DistinctBy(x => x.Id).ToList(),
-            recipe.OptionalIngredients.Where(x => x.IsCondiment).DistinctBy(x => x.Id).ToList());
+            recipe.OptionalIngredients.Where(x => !x.IsCondiment).DistinctBy(x => x.Id).Select(ToPlanContextIngredient).ToList(),
+            recipe.OptionalIngredients.Where(x => x.IsCondiment).DistinctBy(x => x.Id).Select(ToPlanContextIngredient).ToList());
     }
 
     private static RecipeCoverageGroupDto BuildCoverageGroup(
-        IReadOnlyCollection<Ingredient> ingredients,
+        IReadOnlyCollection<PlanContextIngredient> ingredients,
         IReadOnlySet<Guid> pantryIds)
     {
         var matched = ingredients
             .Where(x => pantryIds.Contains(x.Id))
-            .Select(x => new IngredientInfoDto { Id = x.Id, Name = x.CanonicalName })
+            .Select(ToIngredientInfo)
             .ToList();
         var missing = ingredients
             .Where(x => !pantryIds.Contains(x.Id))
-            .Select(x => new IngredientInfoDto { Id = x.Id, Name = x.CanonicalName })
+            .Select(ToIngredientInfo)
             .ToList();
 
         return new RecipeCoverageGroupDto
@@ -317,11 +325,42 @@ public class AlternativeController : ControllerBase
         };
     }
 
-    private static List<IngredientInfoDto> ToIngredientInfo(IEnumerable<Ingredient> ingredients)
+    private static List<IngredientInfoDto> ToIngredientInfo(IEnumerable<PlanContextIngredient> ingredients)
         => ingredients
             .DistinctBy(x => x.Id)
-            .Select(x => new IngredientInfoDto { Id = x.Id, Name = x.CanonicalName })
+            .Select(ToIngredientInfo)
             .ToList();
+
+    private static PlanContextIngredient ToPlanContextIngredient(RecipeIngredient row)
+        => new(
+            row.IngredientId,
+            row.Ingredient!.CanonicalName,
+            row.Quantity,
+            row.Unit);
+
+    private static PlanContextIngredient ToPlanContextIngredient(Ingredient ingredient)
+        => new(ingredient.Id, ingredient.CanonicalName, null, null);
+
+    private static IngredientInfoDto ToIngredientInfo(PlanContextIngredient ingredient)
+        => new()
+        {
+            Id = ingredient.Id,
+            Name = ingredient.Name,
+            Quantity = ingredient.Quantity,
+            Unit = ingredient.Unit,
+            DisplayAmount = FormatDisplayAmount(ingredient.Quantity, ingredient.Unit)
+        };
+
+    private static string? FormatDisplayAmount(decimal? quantity, string? unit)
+    {
+        if (!quantity.HasValue || string.IsNullOrWhiteSpace(unit))
+            return null;
+
+        var formatted = quantity.Value % 1 == 0
+            ? quantity.Value.ToString("0")
+            : quantity.Value.ToString("0.##");
+        return $"{formatted} {unit.Trim()}";
+    }
 }
 
 /// <summary>
@@ -337,6 +376,7 @@ public class RecipePlanContextResult
     public decimal? ProteinGrams { get; set; }
     public decimal? CarbsGrams { get; set; }
     public decimal? FatGrams { get; set; }
+    public bool IsFavorited { get; set; }
     public RecipeIngredientGroupsDto Ingredients { get; set; } = new();
     public RecipeIngredientGroupsDto MatchedGroups { get; set; } = new();
     public RecipeIngredientGroupsDto MissingGroups { get; set; } = new();
@@ -379,7 +419,21 @@ public class IngredientInfoDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public decimal? Quantity { get; set; }
+    public string? Unit { get; set; }
+    public string? DisplayAmount { get; set; }
 }
+
+internal sealed record PlanContextIngredient(
+    Guid Id,
+    string Name,
+    decimal? Quantity,
+    string? Unit);
+
+internal sealed record PlanContextIngredientGroups(
+    List<PlanContextIngredient> Mandatory,
+    List<PlanContextIngredient> Optional,
+    List<PlanContextIngredient> Flavoring);
 
 /// <summary>
 /// Request payload for alternative meal decision.

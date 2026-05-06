@@ -220,7 +220,7 @@ function Step1ClientSelection({ form, clients, onNext }: any) {
         <label className="block text-sm font-medium mb-2">Client *</label>
         <select
           {...form.register('clientId')}
-          className="w-full px-4 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+          className="select-sfcos h-11"
         >
           <option value="">Select a client...</option>
           {clients.map((client: any) => (
@@ -283,7 +283,7 @@ function Step2PlanDuration({ form, onNext, onBack }: any) {
           {...form.register('name')}
           type="text"
           placeholder="e.g., Weekly Meal Plan"
-          className="w-full px-4 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+          className="select-sfcos h-11"
         />
         {form.formState.errors.name && (
           <p className="text-sm text-destructive mt-1">{form.formState.errors.name.message}</p>
@@ -296,7 +296,7 @@ function Step2PlanDuration({ form, onNext, onBack }: any) {
           <input
             {...form.register('startDate')}
             type="date"
-            className="w-full px-4 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            className="select-sfcos h-11"
           />
           {form.formState.errors.startDate && (
             <p className="text-sm text-destructive mt-1">{form.formState.errors.startDate.message}</p>
@@ -307,7 +307,7 @@ function Step2PlanDuration({ form, onNext, onBack }: any) {
           <input
             {...form.register('endDate')}
             type="date"
-            className="w-full px-4 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            className="select-sfcos h-11"
           />
           {form.formState.errors.endDate && (
             <p className="text-sm text-destructive mt-1">{form.formState.errors.endDate.message}</p>
@@ -428,7 +428,7 @@ function DayMealCard({ day, dayIndex, form, recipes, getMealTypeLabel }: any) {
 
             <select
               {...form.register(`days.${dayIndex}.meals.${mealIndex}.plannedRecipeId`)}
-              className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background"
+              className="select-sfcos h-11"
             >
               <option value="">Select recipe...</option>
               {recipes.map((recipe: Recipe) => (

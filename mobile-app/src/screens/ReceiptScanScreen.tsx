@@ -1,6 +1,6 @@
-﻿import React, { useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  Image,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -12,6 +12,18 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeOutUp,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
 import { useTheme } from "../context/ThemeContext";
 import { analyzeReceiptPantryImage } from "../api/pantry";
@@ -22,8 +34,195 @@ import {
   type VisionFeatureStatus,
 } from "../api/vision";
 import { logIngredientAcquisition } from "../api/acquisition";
+import { compressImage } from "../utils/imageCompressor";
 import { radii, spacing } from "../theme/tokens";
 import type { Ingredient } from "../types/alternative";
+
+const BRAND_LOGO = require("../../assets/dytopia-logo.png");
+
+const SCAN_MESSAGES = [
+  "Fotoğraf analiz ediliyor...",
+  "Malzemeler tanımlanıyor...",
+  "Sonuçlar hazırlanıyor...",
+];
+
+function AnalyzingView({ theme }: { theme: any }) {
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  const ring1Scale = useSharedValue(1.0);
+  const ring1Opacity = useSharedValue(0.35);
+  const ring2Scale = useSharedValue(0.95);
+  const ring3Opacity = useSharedValue(0.55);
+  const logoScale = useSharedValue(1.0);
+  const scanAngle = useSharedValue(0);
+
+  useEffect(() => {
+    ring1Scale.value = withRepeat(
+      withSequence(
+        withTiming(1.18, { duration: 1600, easing: Easing.out(Easing.quad) }),
+        withTiming(1.0, { duration: 1600, easing: Easing.in(Easing.quad) }),
+      ), -1, false,
+    );
+    ring1Opacity.value = withRepeat(
+      withSequence(
+        withTiming(0, { duration: 1600, easing: Easing.out(Easing.quad) }),
+        withTiming(0.35, { duration: 1600, easing: Easing.in(Easing.quad) }),
+      ), -1, false,
+    );
+    ring2Scale.value = withDelay(
+      500,
+      withRepeat(
+        withSequence(
+          withTiming(1.1, { duration: 1600, easing: Easing.out(Easing.quad) }),
+          withTiming(0.95, { duration: 1600, easing: Easing.in(Easing.quad) }),
+        ), -1, false,
+      ),
+    );
+    ring3Opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.9, { duration: 1200 }),
+        withTiming(0.4, { duration: 1200 }),
+      ), -1, false,
+    );
+    logoScale.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 1400, easing: Easing.out(Easing.ease) }),
+        withTiming(0.97, { duration: 1400, easing: Easing.in(Easing.ease) }),
+      ), -1, false,
+    );
+    scanAngle.value = withRepeat(
+      withTiming(360, { duration: 2800, easing: Easing.linear }),
+      -1, false,
+    );
+
+    const timer = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % SCAN_MESSAGES.length);
+    }, 2400);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const ring1Style = useAnimatedStyle(() => ({
+    transform: [{ scale: ring1Scale.value }],
+    opacity: ring1Opacity.value,
+  }));
+  const ring2Style = useAnimatedStyle(() => ({
+    transform: [{ scale: ring2Scale.value }],
+  }));
+  const ring3Style = useAnimatedStyle(() => ({
+    opacity: ring3Opacity.value,
+  }));
+  const logoStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logoScale.value }],
+  }));
+  const scanStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${scanAngle.value}deg` }],
+  }));
+
+  return (
+    <View style={sa.container}>
+      <View style={sa.orbitArea}>
+        <Animated.View style={[sa.ring, sa.ring1, { borderColor: `${theme.primary}20` }, ring1Style]} />
+        <Animated.View style={[sa.ring, sa.ring2, { borderColor: `${theme.primary}36` }, ring2Style]} />
+        <Animated.View style={[sa.ring, sa.ring3, { borderColor: theme.borderEmerald }, ring3Style]} />
+        <Animated.View
+          style={[
+            sa.scanArc,
+            {
+              borderTopColor: theme.primary,
+              borderRightColor: `${theme.primary}40`,
+              borderBottomColor: "transparent",
+              borderLeftColor: "transparent",
+            },
+            scanStyle,
+          ]}
+        />
+        <Animated.View
+          style={[sa.logoBubble, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }, logoStyle]}
+        >
+          <Image source={BRAND_LOGO} style={sa.logoImg} resizeMode="contain" />
+        </Animated.View>
+      </View>
+
+      <Animated.Text
+        key={msgIndex}
+        entering={FadeInDown.duration(380)}
+        style={[sa.message, { color: theme.text }]}
+      >
+        {SCAN_MESSAGES[msgIndex]}
+      </Animated.Text>
+      <Text style={[sa.hint, { color: theme.textMuted }]}>Bu işlem 10–20 saniye sürebilir</Text>
+    </View>
+  );
+}
+
+const sa = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  // Fixed 200×200 canvas — all children absolutely positioned from (0,0)
+  orbitArea: {
+    width: 200,
+    height: 200,
+    marginBottom: 44,
+  },
+  ring: {
+    position: "absolute",
+    borderRadius: 9999,
+    borderWidth: 1.5,
+  },
+  // Each ring centered: top = left = (200 − size) / 2
+  ring1: { width: 200, height: 200, top: 0,  left: 0  },
+  ring2: { width: 152, height: 152, top: 24, left: 24 },
+  ring3: { width: 108, height: 108, top: 46, left: 46 },
+  // Scan sweep arc — slightly inset from ring1
+  scanArc: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    width: 176,
+    height: 176,
+    borderRadius: 88,
+    borderWidth: 2,
+  },
+  // Logo bubble — (200 − 76) / 2 = 62
+  logoBubble: {
+    position: "absolute",
+    top: 62,
+    left: 62,
+    width: 76,
+    height: 76,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  logoImg: {
+    width: 62,
+    height: 62,
+    borderRadius: 16,
+  },
+  message: {
+    fontSize: 17,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: -0.3,
+  },
+  hint: {
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 19,
+  },
+});
 
 type ReceiptScanParams = {
   ReceiptScan: {
@@ -63,12 +262,13 @@ export default function ReceiptScanScreen() {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ["images"],
       allowsEditing: false,
-      base64: true,
-      quality: 0.75,
+      base64: false,
+      quality: 1,
     });
 
-    if (!result.canceled && result.assets[0]?.base64) {
-      await submitImage(result.assets[0].base64, result.assets[0].mimeType ?? "image/jpeg");
+    if (!result.canceled && result.assets[0]?.uri) {
+      const compressed = await compressImage(result.assets[0].uri, "receipt");
+      await submitImage(compressed.base64, compressed.mediaType);
     }
   }
 
@@ -82,12 +282,13 @@ export default function ReceiptScanScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: false,
-      base64: true,
-      quality: 0.75,
+      base64: false,
+      quality: 1,
     });
 
-    if (!result.canceled && result.assets[0]?.base64) {
-      await submitImage(result.assets[0].base64, result.assets[0].mimeType ?? "image/jpeg");
+    if (!result.canceled && result.assets[0]?.uri) {
+      const compressed = await compressImage(result.assets[0].uri, "receipt");
+      await submitImage(compressed.base64, compressed.mediaType);
     }
   }
 
@@ -98,6 +299,13 @@ export default function ReceiptScanScreen() {
 
     try {
       const response = await analyzeReceiptPantryImage(base64Image, mediaType);
+
+      if (response.reason === "image_too_large") {
+        setError(response.userMessage ?? "Fotoğraf çok büyük. Lütfen tekrar deneyin.");
+        setPhase("picker");
+        return;
+      }
+
       setAnalysis(response);
       setSelectedIds(new Set(response.matched.filter((item) => item.isAutoSelected).map((item) => item.ingredientId)));
       setPhase("results");
@@ -224,15 +432,7 @@ export default function ReceiptScanScreen() {
         </View>
       )}
 
-      {phase === "analyzing" && (
-        <View style={s.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[s.title, { color: theme.text, marginTop: spacing.lg }]}>Fiş okunuyor</Text>
-          <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Ürün satırları ayrıştırılıyor ve pantry adayları hazırlanıyor.
-          </Text>
-        </View>
-      )}
+      {phase === "analyzing" && <AnalyzingView theme={theme} />}
 
       {phase === "results" && (
         <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
@@ -258,10 +458,10 @@ export default function ReceiptScanScreen() {
             <>
               <View style={[s.summaryCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
                 <Text style={[s.summaryTitle, { color: theme.text }]}>
-                  {analysis?.totalDetected ?? 0} pantry adayı bulundu
+                  {matched.length} ürün tespit edildi
                 </Text>
                 <Text style={[s.summarySub, { color: theme.textMuted }]}>
-                  Seçilen ürünler dolabına eklenecek. Gerekirse inceleyip düzelt.
+                  Eklemek istediklerini seç, geri kalanları geç.
                 </Text>
               </View>
 
@@ -287,11 +487,8 @@ export default function ReceiptScanScreen() {
                       >
                         <View style={s.itemMain}>
                           <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
-                          <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                            {item.detectedName} · %{Math.round(item.confidence * 100)}
-                          </Text>
                           <Text style={[s.itemHint, { color: accent }]}>
-                            {safe ? "Yüksek güven" : "Onay önerilir"}
+                            {safe ? "Otomatik eşleşti" : "Lütfen kontrol edin"}
                           </Text>
                         </View>
                         <View
@@ -452,7 +649,6 @@ function styles(theme: any) {
     },
     itemMain: { flex: 1, gap: 2 },
     itemTitle: { fontSize: 15, fontWeight: "800" },
-    itemMeta: { fontSize: 12, fontWeight: "500" },
     itemHint: { fontSize: 11, fontWeight: "800" },
     checkbox: {
       width: 24,

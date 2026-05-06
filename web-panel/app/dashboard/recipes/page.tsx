@@ -426,7 +426,7 @@ export default function RecipesPage() {
 
             <label className="space-y-2 text-sm font-medium text-foreground">
               <span>Sıralama</span>
-              <select className="input-sfcos h-11" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
+              <select className="select-sfcos h-11" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}>
                 {SORT_OPTIONS.map((option) => (
                   <option key={option.key} value={option.key}>
                     {option.label}

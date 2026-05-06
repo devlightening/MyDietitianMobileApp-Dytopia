@@ -1,4 +1,0 @@
-﻿timestamp=20260407-225724
-configuration=Release
-repoRoot=C:\Users\hy971\source\repos\MyDietitianMobileApp
-gitCommit=be04f7b156811e6d0f96b7b14e3cc80d0453f70d

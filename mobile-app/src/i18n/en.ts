@@ -41,7 +41,7 @@ export const en: Translations = {
   },
 
   welcome: {
-    tagline:     'Clinical-grade personal nutrition',
+    tagline:     'Clinical-grade personal nutrition with Dytopia',
     signUp:      'Get Started Free',
     signIn:      'Log In',
     terms:       'Terms of Service',
@@ -53,10 +53,10 @@ export const en: Translations = {
   },
 
   auth: {
-    loginTitle:       'Welcome Back',
-    loginSubtitle:    'Sign in to your account',
-    registerTitle:    'Create Account',
-    registerSubtitle: 'Take a step toward a healthier life',
+    loginTitle:       'Welcome to Dytopia',
+    loginSubtitle:    'Your plan, pantry, and dietitian notes in one place.',
+    registerTitle:    'Create your Dytopia account',
+    registerSubtitle: 'Start your healthy rhythm with a personal plan.',
     email:            'Email',
     password:         'Password',
     fullName:         'Full Name',

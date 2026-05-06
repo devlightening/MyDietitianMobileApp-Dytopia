@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getClientActivePlan,
@@ -9,7 +9,15 @@ import {
   assignFromTemplate,
   assignNewPlan,
   updateClientPlan,
+  deleteClientPlan,
+  deactivateClientPlan,
+  reactivateClientPlan,
+  getClientAnnouncements,
+  createClientAnnouncement,
+  updateClientAnnouncement,
+  deleteClientAnnouncement,
   type ActivePlan,
+  type ClientAnnouncement,
 } from '@/lib/api/clients';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -24,8 +32,11 @@ import {
   PlusCircle,
   ChevronDown,
   ChevronUp,
-  Utensils,
   Pencil,
+  Megaphone,
+  Trash2,
+  PowerOff,
+  Power,
 } from 'lucide-react';
 
 interface PlanTabProps {
@@ -40,6 +51,7 @@ const MEAL_TYPE_LABELS: Record<string, string> = {
 };
 
 type ModalMode = 'template' | 'new' | 'edit' | null;
+type AnnouncementModalMode = 'create' | 'edit' | null;
 
 export function PlanTab({ clientId }: PlanTabProps) {
   const queryClient = useQueryClient();
@@ -121,9 +133,11 @@ export function PlanTab({ clientId }: PlanTabProps) {
     },
   });
 
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+
   const editPlanMutation = useMutation({
     mutationFn: () =>
-      updateClientPlan(activePlanData?.plan?.id ?? '', {
+      updateClientPlan(editingPlanId ?? activePlanData?.plan?.id ?? '', {
         name: editName || undefined,
         description: editDesc || null,
         startDate: editStartDate || undefined,
@@ -135,8 +149,91 @@ export function PlanTab({ clientId }: PlanTabProps) {
       queryClient.invalidateQueries({ queryKey: ['client-detail', clientId] });
       queryClient.invalidateQueries({ queryKey: ['client-activities', clientId] });
       setModalMode(null);
+      setEditingPlanId(null);
     },
   });
+
+  const deletePlanMutation = useMutation({
+    mutationFn: (planId: string) => deleteClientPlan(planId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-active-plan', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-plans', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-detail', clientId] });
+    },
+  });
+
+  const deactivatePlanMutation = useMutation({
+    mutationFn: (planId: string) => deactivateClientPlan(planId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-active-plan', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-plans', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-detail', clientId] });
+    },
+  });
+
+  const reactivatePlanMutation = useMutation({
+    mutationFn: (planId: string) => reactivateClientPlan(planId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-active-plan', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-plans', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-detail', clientId] });
+    },
+  });
+
+  // Announcements
+  const [announcementModal, setAnnouncementModal] = useState<AnnouncementModalMode>(null);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<ClientAnnouncement | null>(null);
+  const [annTitle, setAnnTitle] = useState('');
+  const [annBody, setAnnBody] = useState('');
+  const [annStartsAt, setAnnStartsAt] = useState('');
+  const [annEndsAt, setAnnEndsAt] = useState('');
+
+  const { data: announcementsData, isLoading: announcementsLoading } = useQuery({
+    queryKey: ['client-announcements', clientId],
+    queryFn: () => getClientAnnouncements(clientId),
+    retry: 0,
+  });
+
+  const createAnnouncementMutation = useMutation({
+    mutationFn: () => createClientAnnouncement(clientId, { title: annTitle, body: annBody, startsAt: annStartsAt, endsAt: annEndsAt }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-announcements', clientId] });
+      setAnnouncementModal(null);
+      setAnnTitle(''); setAnnBody(''); setAnnStartsAt(''); setAnnEndsAt('');
+    },
+  });
+
+  const updateAnnouncementMutation = useMutation({
+    mutationFn: () => updateClientAnnouncement(clientId, editingAnnouncement!.id, { title: annTitle, body: annBody, startsAt: annStartsAt, endsAt: annEndsAt }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-announcements', clientId] });
+      setAnnouncementModal(null);
+      setEditingAnnouncement(null);
+      setAnnTitle(''); setAnnBody(''); setAnnStartsAt(''); setAnnEndsAt('');
+    },
+  });
+
+  const deleteAnnouncementMutation = useMutation({
+    mutationFn: (id: string) => deleteClientAnnouncement(clientId, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-announcements', clientId] });
+    },
+  });
+
+  function openCreateAnnouncement() {
+    setEditingAnnouncement(null);
+    setAnnTitle(''); setAnnBody(''); setAnnStartsAt(''); setAnnEndsAt('');
+    setAnnouncementModal('create');
+  }
+
+  function openEditAnnouncement(ann: ClientAnnouncement) {
+    setEditingAnnouncement(ann);
+    setAnnTitle(ann.title);
+    setAnnBody(ann.body);
+    setAnnStartsAt(ann.startsAt);
+    setAnnEndsAt(ann.endsAt);
+    setAnnouncementModal('edit');
+  }
 
   const toggleDay = (dow: number) => {
     setExpandedDays((prev) => {
@@ -157,7 +254,8 @@ export function PlanTab({ clientId }: PlanTabProps) {
 
   const activePlan = activePlanData?.plan ?? null;
 
-  function openEdit(plan: ActivePlan) {
+  function openEdit(plan: { id: string; name: string; description?: string | null; startDate: string; endDate?: string | null }) {
+    setEditingPlanId(plan.id);
     setEditName(plan.name);
     setEditDesc(plan.description ?? '');
     setEditStartDate(plan.startDate ? plan.startDate.substring(0, 10) : '');
@@ -174,37 +272,166 @@ export function PlanTab({ clientId }: PlanTabProps) {
         <EmptyPlanCard onOpen={setModalMode} />
       )}
 
-      {/* Plan history */}
-      {(historyData?.items?.length ?? 0) > 1 && (
+      {/* Plan history — grouped Aktif / Pasif with edit, delete, toggle */}
+      {(historyData?.items?.length ?? 0) > 0 && (
         <Card className="p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Plan geçmişi</h3>
-          <div className="space-y-2">
-            {historyData!.items.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between py-2 px-3 rounded-xl border border-border/50 hover:bg-muted/20 transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(p.startDate).toLocaleDateString('tr-TR')}
-                    {p.endDate ? ` → ${new Date(p.endDate).toLocaleDateString('tr-TR')}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {p.completedMeals}/{p.mealCount} öğün
-                  </span>
-                  {p.isActive && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
-                      Aktif
-                    </span>
-                  )}
-                </div>
+          <h3 className="text-sm font-semibold text-foreground mb-4">Tüm planlar</h3>
+          {(() => {
+            const active = historyData!.items.filter(p => p.isActive);
+            const inactive = historyData!.items.filter(p => !p.isActive);
+            const busyId = deletePlanMutation.variables ?? deactivatePlanMutation.variables ?? reactivatePlanMutation.variables;
+            return (
+              <div className="space-y-4">
+                {active.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-primary uppercase tracking-wider mb-2">Aktif</p>
+                    <div className="space-y-2">
+                      {active.map(p => (
+                        <PlanHistoryRow
+                          key={p.id}
+                          plan={p}
+                          busy={busyId === p.id}
+                          onEdit={() => openEdit({ id: p.id, name: p.name, description: undefined, startDate: p.startDate, endDate: p.endDate })}
+                          onDelete={() => { if (confirm(`"${p.name}" planını silmek istediğinizden emin misiniz?`)) deletePlanMutation.mutate(p.id); }}
+                          onToggle={() => deactivatePlanMutation.mutate(p.id)}
+                          toggleLabel="Pasife al"
+                          toggleIcon={<PowerOff className="w-3 h-3" />}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {inactive.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pasif</p>
+                    <div className="space-y-2">
+                      {inactive.map(p => (
+                        <PlanHistoryRow
+                          key={p.id}
+                          plan={p}
+                          busy={busyId === p.id}
+                          onEdit={() => openEdit({ id: p.id, name: p.name, description: undefined, startDate: p.startDate, endDate: p.endDate })}
+                          onDelete={() => { if (confirm(`"${p.name}" planını silmek istediğinizden emin misiniz?`)) deletePlanMutation.mutate(p.id); }}
+                          onToggle={() => reactivatePlanMutation.mutate(p.id)}
+                          toggleLabel="Aktife al"
+                          toggleIcon={<Power className="w-3 h-3" />}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </Card>
+      )}
+
+      {/* Announcements section */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Megaphone className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Duyurular</h3>
+            <span className="text-xs text-muted-foreground">(mobil ana sayfada gösterilir)</span>
+          </div>
+          <button
+            onClick={openCreateAnnouncement}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all"
+          >
+            <PlusCircle className="w-3 h-3" />
+            Yeni duyuru
+          </button>
+        </div>
+
+        {announcementsLoading ? (
+          <Skeleton className="h-16" />
+        ) : (announcementsData?.items?.length ?? 0) === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">Henüz duyuru yok. Danışana gösterilecek bir duyuru ekleyin.</p>
+        ) : (
+          <div className="space-y-2">
+            {(() => {
+              const active = announcementsData!.items.filter(a => a.isActive);
+              const inactive = announcementsData!.items.filter(a => !a.isActive);
+              return (
+                <>
+                  {active.length > 0 && (
+                    <>
+                      <p className="text-[11px] font-semibold text-primary uppercase tracking-wider mb-1">Aktif</p>
+                      {active.map(ann => (
+                        <AnnouncementRow key={ann.id} ann={ann} onEdit={openEditAnnouncement} onDelete={(id) => deleteAnnouncementMutation.mutate(id)} deleting={deleteAnnouncementMutation.isPending} />
+                      ))}
+                    </>
+                  )}
+                  {inactive.length > 0 && (
+                    <>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mt-3 mb-1">Pasif</p>
+                      {inactive.map(ann => (
+                        <AnnouncementRow key={ann.id} ann={ann} onEdit={openEditAnnouncement} onDelete={(id) => deleteAnnouncementMutation.mutate(id)} deleting={deleteAnnouncementMutation.isPending} />
+                      ))}
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
+      </Card>
+
+      {/* Announcement create/edit modal */}
+      {announcementModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground">
+                {announcementModal === 'create' ? 'Yeni duyuru oluştur' : 'Duyuruyu düzenle'}
+              </h3>
+              <button onClick={() => setAnnouncementModal(null)} className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">Bu duyuru, aktif olduğu sürede danışanın mobil uygulamasının ana sayfasında belirgin şekilde gösterilir.</p>
+            <Input
+              label="Başlık"
+              placeholder="Örn: Bu haftaki hedefin"
+              value={annTitle}
+              onChange={(e) => setAnnTitle(e.target.value)}
+            />
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">İçerik</label>
+              <textarea
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring min-h-[96px] resize-none"
+                placeholder="Danışana iletmek istediğin mesaj..."
+                value={annBody}
+                onChange={(e) => setAnnBody(e.target.value)}
+                maxLength={2000}
+              />
+              <p className="text-[11px] text-muted-foreground text-right">{annBody.length}/2000</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Başlangıç tarihi"
+                type="date"
+                value={annStartsAt}
+                onChange={(e) => setAnnStartsAt(e.target.value)}
+              />
+              <Input
+                label="Bitiş tarihi"
+                type="date"
+                value={annEndsAt}
+                onChange={(e) => setAnnEndsAt(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="action"
+              className="w-full"
+              disabled={!annTitle.trim() || !annBody.trim() || !annStartsAt || !annEndsAt || createAnnouncementMutation.isPending || updateAnnouncementMutation.isPending}
+              onClick={() => announcementModal === 'create' ? createAnnouncementMutation.mutate() : updateAnnouncementMutation.mutate()}
+            >
+              {(createAnnouncementMutation.isPending || updateAnnouncementMutation.isPending) ? 'Kaydediliyor...' : announcementModal === 'create' ? 'Duyuruyu oluştur' : 'Değişiklikleri kaydet'}
+            </Button>
+            {(createAnnouncementMutation.isError || updateAnnouncementMutation.isError) && (
+              <p className="text-xs text-destructive">İşlem başarısız. Lütfen tekrar deneyin.</p>
+            )}
+          </Card>
+        </div>
       )}
 
       {/* Assign / edit modal */}
@@ -250,7 +477,7 @@ export function PlanTab({ clientId }: PlanTabProps) {
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Plan şablonu</label>
                   <select
-                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                    className="select-sfcos h-11"
                     value={tplSelectedId}
                     onChange={(e) => setTplSelectedId(e.target.value)}
                   >
@@ -494,6 +721,111 @@ function ActivePlanCard({
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+function PlanHistoryRow({
+  plan,
+  busy,
+  onEdit,
+  onDelete,
+  onToggle,
+  toggleLabel,
+  toggleIcon,
+}: {
+  plan: { id: string; name: string; startDate: string; endDate?: string | null; isActive: boolean; mealCount: number; completedMeals: number };
+  busy: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggle: () => void;
+  toggleLabel: string;
+  toggleIcon: React.ReactNode;
+}) {
+  return (
+    <div className={cn(
+      'flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl border transition-colors',
+      plan.isActive ? 'border-primary/30 bg-primary/5' : 'border-border/50'
+    )}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-foreground truncate">{plan.name}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {new Date(plan.startDate).toLocaleDateString('tr-TR')}
+          {plan.endDate ? ` → ${new Date(plan.endDate).toLocaleDateString('tr-TR')}` : ' (açık uçlu)'}
+          {' · '}{plan.completedMeals}/{plan.mealCount} öğün
+        </p>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={onToggle}
+          disabled={busy}
+          title={toggleLabel}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all"
+        >
+          {toggleIcon}
+          <span className="hidden sm:inline">{toggleLabel}</span>
+        </button>
+        <button
+          onClick={onEdit}
+          disabled={busy}
+          title="Düzenle"
+          className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          disabled={busy}
+          title="Sil"
+          className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AnnouncementRow({
+  ann,
+  onEdit,
+  onDelete,
+  deleting,
+}: {
+  ann: ClientAnnouncement;
+  onEdit: (ann: ClientAnnouncement) => void;
+  onDelete: (id: string) => void;
+  deleting: boolean;
+}) {
+  return (
+    <div className={cn(
+      'flex items-start justify-between gap-3 py-2.5 px-3 rounded-xl border transition-colors',
+      ann.isActive ? 'border-primary/30 bg-primary/5' : 'border-border/50 opacity-70'
+    )}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-foreground truncate">{ann.title}</p>
+        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{ann.body}</p>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {new Date(ann.startsAt).toLocaleDateString('tr-TR')} → {new Date(ann.endsAt).toLocaleDateString('tr-TR')}
+        </p>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => onEdit(ann)}
+          className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-primary transition-colors"
+          title="Düzenle"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => onDelete(ann.id)}
+          disabled={deleting}
+          className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+          title="Sil"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

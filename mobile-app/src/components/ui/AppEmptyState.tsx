@@ -1,19 +1,24 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { radii, spacing } from '../../theme/tokens';
 import { typography } from '../../theme/typography';
+
+const BRAND_LOGO = require('../../../assets/dytopia-logo.png');
 
 interface AppEmptyStateProps {
   icon: string;
   title: string;
   description: string;
+  variant?: 'empty' | 'error' | 'offline' | 'search';
   buttonLabel?: string;
   onButtonPress?: () => void;
+  secondaryButtonLabel?: string;
+  onSecondaryButtonPress?: () => void;
 }
 
 export default function AppEmptyState({
-  icon, title, description, buttonLabel, onButtonPress,
+  icon, title, description, variant = 'empty', buttonLabel, onButtonPress, secondaryButtonLabel, onSecondaryButtonPress,
 }: AppEmptyStateProps) {
   const { theme } = useTheme();
   const pulse = useRef(new Animated.Value(1)).current;
@@ -35,16 +40,24 @@ export default function AppEmptyState({
     ).start();
   }, []);
 
+  const accent = variant === 'error'
+    ? theme.error
+    : variant === 'offline'
+      ? theme.warning
+      : variant === 'search'
+        ? theme.accentCyan
+        : theme.primary;
+
   return (
     <Animated.View
       style={[
         s.container,
-        { backgroundColor: theme.surface, borderColor: theme.border },
+        { backgroundColor: theme.surface, borderColor: `${accent}26` },
       ]}
     >
       {/* Decorative glow ring */}
-      <View style={[s.glowRing, { borderColor: `${theme.primary}22`, backgroundColor: `${theme.primary}08` }]}>
-        <Animated.View style={[s.iconWrap, { backgroundColor: theme.primaryLight, transform: [{ translateY: floatY }, { scale: pulse }] }]}>
+      <View style={[s.glowRing, { borderColor: `${accent}24`, backgroundColor: `${accent}08` }]}>
+        <Animated.View style={[s.iconWrap, { backgroundColor: `${accent}16`, transform: [{ translateY: floatY }, { scale: pulse }] }]}>
           <Text style={s.icon}>{icon}</Text>
         </Animated.View>
       </View>
@@ -54,13 +67,28 @@ export default function AppEmptyState({
 
       {buttonLabel && onButtonPress && (
         <TouchableOpacity
-          style={[s.btn, { backgroundColor: theme.primary }]}
+          style={[s.btn, { backgroundColor: accent }]}
           onPress={onButtonPress}
           activeOpacity={0.85}
         >
           <Text style={s.btnTxt}>{buttonLabel}</Text>
         </TouchableOpacity>
       )}
+
+      {secondaryButtonLabel && onSecondaryButtonPress && (
+        <TouchableOpacity
+          style={[s.secondaryBtn, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+          onPress={onSecondaryButtonPress}
+          activeOpacity={0.85}
+        >
+          <Text style={[s.secondaryBtnTxt, { color: theme.text }]}>{secondaryButtonLabel}</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={[s.brandPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
+        <Image source={BRAND_LOGO} style={s.brandLogo} resizeMode="contain" />
+        <Text style={[s.brandText, { color: theme.textMuted }]}>Dytopia</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -116,4 +144,25 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   btnTxt: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  secondaryBtn: {
+    alignSelf: 'stretch',
+    marginTop: spacing.sm,
+    paddingVertical: 13,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  secondaryBtnTxt: { fontSize: 13, fontWeight: '900' },
+  brandPill: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  brandLogo: { width: 18, height: 18, borderRadius: 6 },
+  brandText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0.2 },
 });

@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, Animated, Linking, Platform } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, Animated, Linking, Platform, Image } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import {
   NavigationContainer,
@@ -13,6 +13,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Routes } from "./routes";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { InAppNotificationProvider } from "../context/InAppNotificationContext";
+import { FeedbackProvider } from "../context/FeedbackContext";
 
 import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
@@ -25,8 +26,12 @@ import CheckIngredientsScreen from "../screens/CheckIngredientsScreen";
 import AlternativeResultScreen from "../screens/AlternativeResultScreen";
 import KitchenResultScreen from "../screens/KitchenResultScreen";
 import RecipeDetailScreen from "../screens/RecipeDetailScreen";
+import CookingModeScreen from "../screens/CookingModeScreen";
+import GameCenterScreen from "../screens/GameCenterScreen";
+import FavoritesScreen from "../screens/FavoritesScreen";
 import ProfileMeasurementsScreen from "../screens/ProfileMeasurementsScreen";
 import ProfileNotificationsScreen from "../screens/ProfileNotificationsScreen";
+import ProfileFeedbackScreen from "../screens/ProfileFeedbackScreen";
 import ShoppingListScreen from "../screens/ShoppingListScreen";
 import GoalPreferencesScreen from "../screens/GoalPreferencesScreen";
 import PrivacyScreen from "../screens/PrivacyScreen";
@@ -49,6 +54,7 @@ import {
 
 const Root = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef<any>();
+const BRAND_LOGO = require("../../assets/dytopia-logo.png");
 
 function Splash() {
   const { theme } = useTheme();
@@ -65,11 +71,11 @@ function Splash() {
   return (
     <View style={[s.splash, { backgroundColor: theme.bg }]}>
       <Animated.View style={[s.splashContent, { opacity, transform: [{ scale }] }]}>
-        <View style={[s.splashLogo, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '40' }]}>
-          <View style={[s.splashLogoBg, { backgroundColor: theme.primary }]} />
-          <Text style={s.splashEmoji}>ğŸ¥—</Text>
+        <View style={[s.splashLogo, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+          <View style={[s.splashLogoBg, { backgroundColor: theme.primaryLight }]} />
+          <Image source={BRAND_LOGO} style={s.splashLogoImage} resizeMode="contain" />
         </View>
-        <Text style={[s.splashTitle, { color: theme.text }]}>MyDietitian</Text>
+        <Text style={[s.splashTitle, { color: theme.text }]}>Dytopia</Text>
         <Text style={[s.splashSub, { color: theme.textMuted }]}>Sağlıklı yaşam rehberin</Text>
       </Animated.View>
       <ActivityIndicator
@@ -233,8 +239,16 @@ function AppNavigator() {
                     options={{ animation: 'fade', animationDuration: 320 }}
                   />
                   <Root.Screen name={Routes.App.RecipeDetail} component={RecipeDetailScreen} />
+                  <Root.Screen
+                    name={Routes.App.CookingMode}
+                    component={CookingModeScreen}
+                    options={{ presentation: 'modal', animation: 'slide_from_bottom', animationDuration: modalDuration }}
+                  />
+                  <Root.Screen name={Routes.App.GameCenter} component={GameCenterScreen} options={{ animation: 'fade_from_bottom', animationDuration: modalDuration }} />
+                  <Root.Screen name={Routes.App.Favorites} component={FavoritesScreen} />
                   <Root.Screen name={Routes.App.ProfileMeasurements} component={ProfileMeasurementsScreen} />
                   <Root.Screen name={Routes.App.ProfileNotifications} component={ProfileNotificationsScreen} />
+                  <Root.Screen name={Routes.App.ProfileFeedback} component={ProfileFeedbackScreen} />
                   <Root.Screen name={Routes.App.ShoppingList} component={ShoppingListScreen} />
                   <Root.Screen name={Routes.App.GoalPreferences} component={GoalPreferencesScreen} />
                   <Root.Screen name={Routes.App.Privacy} component={PrivacyScreen} />
@@ -282,9 +296,11 @@ function AppNavigator() {
 export default function RootNavigator() {
   return (
     <ThemeProvider>
-      <InAppNotificationProvider>
-        <AppNavigator />
-      </InAppNotificationProvider>
+      <FeedbackProvider>
+        <InAppNotificationProvider>
+          <AppNavigator />
+        </InAppNotificationProvider>
+      </FeedbackProvider>
     </ThemeProvider>
   );
 }
@@ -293,7 +309,7 @@ const s = StyleSheet.create({
   splash: { flex: 1, justifyContent: "center", alignItems: "center" },
   splashContent: { alignItems: "center", marginBottom: 48 },
   splashLogo: {
-    width: 88, height: 88, borderRadius: 44,
+    width: 106, height: 106, borderRadius: 32,
     alignItems: "center", justifyContent: "center",
     borderWidth: 2, overflow: "hidden",
     marginBottom: 20,
@@ -303,7 +319,8 @@ const s = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  splashLogoBg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.12 },
+  splashLogoBg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.28 },
+  splashLogoImage: { width: 96, height: 96, borderRadius: 28 },
   splashEmoji: { fontSize: 42 },
   splashTitle: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 6 },
   splashSub: { fontSize: 14, fontWeight: "600" },

@@ -10,6 +10,9 @@ import type {
 export interface RecipeIngredientItem {
   id: string;
   name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  displayAmount?: string | null;
 }
 
 export interface RecipeCoverageGroup {
@@ -25,6 +28,7 @@ export interface RecipePlanContext {
   recipeName: string;
   description: string;
   steps: string[];
+  isFavorited?: boolean;
   caloriesKcal?: number | null;
   proteinGrams?: number | null;
   carbsGrams?: number | null;

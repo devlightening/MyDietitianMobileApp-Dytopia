@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,13 +17,14 @@ import AnimatedCard from "../components/ui/AnimatedCard";
 import PulseBadge from "../components/ui/PulseBadge";
 import ShimmerLine from "../components/ui/ShimmerLine";
 import SuccessSettleWrapper from "../components/ui/SuccessSettleWrapper";
-import { getPantry, replacePantry, type PantryItem } from "../api/pantry";
+import { getPantry, replacePantry, type PantryItem, type PantryUpdateSource } from "../api/pantry";
 import { buildPantryActivitySummary } from "../features/smartInsights";
 import { buildPantryUpdatedNotification } from "../notifications/notificationEvents";
 import { Routes } from "../navigation/routes";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
 import { useInAppNotifications } from "../context/InAppNotificationContext";
+import { useFeedback } from "../context/FeedbackContext";
 import { radii, spacing } from "../theme/tokens";
 import type { Ingredient } from "../types/alternative";
 
@@ -104,6 +104,7 @@ export default function PantryScreen() {
   const { theme } = useTheme();
   const { language } = useTranslation();
   const { notify } = useInAppNotifications();
+  const { showDialog, showToast } = useFeedback();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<PantryParams, "Pantry">>();
   const initialSelected = useMemo(
@@ -163,6 +164,13 @@ export default function PantryScreen() {
     () => formatPantryUpdateLabel(pantrySnapshot, language),
     [language, pantrySnapshot],
   );
+  const staleCount = useMemo(
+    () => pantrySnapshot.filter((item) => {
+      const days = getDaysSince(item.updatedAtUtc);
+      return days != null && days >= 10;
+    }).length,
+    [pantrySnapshot],
+  );
 
   const syncSnapshotWithIngredients = useCallback((ingredients: Ingredient[]) => {
     setPantrySnapshot(mapIngredientsToPantrySnapshot(ingredients));
@@ -172,13 +180,14 @@ export default function PantryScreen() {
     next: Ingredient[],
     fallback: Ingredient[],
     errorMessage: string,
-  ) => {
+    sourceType: PantryUpdateSource = "manual",
+  ): Promise<boolean> => {
     setSyncing(true);
     setSelected(next);
     syncSnapshotWithIngredients(next);
 
     try {
-      const updated = await replacePantry(next);
+      const updated = await replacePantry(next, { sourceType });
       const normalized = mapPantryToIngredients(updated);
       setPantrySnapshot(updated);
       setSelected(normalized);
@@ -193,19 +202,25 @@ export default function PantryScreen() {
             : (language === "tr" ? "Dolap seçimi yenilendi." : "Your pantry selection was refreshed.");
 
       notify(buildPantryUpdatedNotification(language, normalized.length, changeLabel));
+      return true;
     } catch {
       setSelected(fallback);
       syncSnapshotWithIngredients(fallback);
-      Alert.alert(
-        language === "tr" ? "Hata" : "Error",
-        errorMessage,
-      );
+      showToast({
+        variant: "error",
+        title: language === "tr" ? "Dolap güncellenemedi" : "Pantry update failed",
+        message: errorMessage,
+      });
+      return false;
     } finally {
       setSyncing(false);
     }
-  }, [language, notify, route.params, syncSnapshotWithIngredients]);
+  }, [language, notify, route.params, showToast, syncSnapshotWithIngredients]);
 
-  const appendIngredients = useCallback(async (ingredients: Ingredient[]) => {
+  const appendIngredients = useCallback(async (
+    ingredients: Ingredient[],
+    sourceType: PantryUpdateSource = "manual",
+  ) => {
     const current = selected;
     const existing = new Set(current.map((item) => item.id));
     const toAdd = ingredients.filter((item) => !existing.has(item.id));
@@ -218,6 +233,7 @@ export default function PantryScreen() {
       language === "tr"
         ? "Ürün dolaba eklenemedi. Lütfen tekrar deneyin."
         : "The pantry item could not be added. Please try again.",
+      sourceType,
     );
   }, [language, persistSelection, selected]);
 
@@ -227,17 +243,39 @@ export default function PantryScreen() {
 
   const removeIngredient = useCallback((id: string) => {
     const current = selected;
+    const removed = current.find((item) => item.id === id);
     const next = current.filter((item) => item.id !== id);
     if (next.length === current.length) return;
 
-    void persistSelection(
-      next,
-      current,
-      language === "tr"
-        ? "Ürün dolaptan çıkarılamadı. Lütfen tekrar deneyin."
-        : "The pantry item could not be removed. Please try again.",
-    );
-  }, [language, persistSelection, selected]);
+    void (async () => {
+      const ok = await persistSelection(
+        next,
+        current,
+        language === "tr"
+          ? "Ürün dolaptan çıkarılamadı. Lütfen tekrar deneyin."
+          : "The pantry item could not be removed. Please try again.",
+      );
+      if (!ok || !removed) return;
+      showToast({
+        variant: "warning",
+        title: language === "tr" ? "Dolaptan çıkarıldı" : "Removed from pantry",
+        message: removed.canonicalName,
+        durationMs: 5600,
+        action: {
+          label: language === "tr" ? "Geri al" : "Undo",
+          icon: "return-up-back-outline",
+          tone: "warning",
+          onPress: () => {
+            void persistSelection(
+              current,
+              next,
+              language === "tr" ? "Ürün geri alınamadı. Lütfen tekrar deneyin." : "The item could not be restored. Please try again.",
+            );
+          },
+        },
+      });
+    })();
+  }, [language, persistSelection, selected, showToast]);
 
   const handleSearchFallback = useCallback((term: string) => {
     setSearchPrefill(term);
@@ -247,7 +285,7 @@ export default function PantryScreen() {
   const handleReceiptScan = useCallback(() => {
     (navigation as any).navigate(Routes.App.ReceiptScan, {
       onConfirm: (ingredients: Ingredient[]) => {
-        void appendIngredients(ingredients);
+        void appendIngredients(ingredients, "receipt");
       },
       onUseSearchTerm: handleSearchFallback,
     });
@@ -256,7 +294,17 @@ export default function PantryScreen() {
   const handleIngredientScan = useCallback(() => {
     (navigation as any).navigate(Routes.App.IngredientScan, {
       onConfirm: (ingredients: Ingredient[]) => {
-        void appendIngredients(ingredients);
+        void appendIngredients(ingredients, "photo");
+      },
+      onUseSearchTerm: handleSearchFallback,
+    });
+  }, [appendIngredients, handleSearchFallback, navigation]);
+
+  const handleBarcodeScan = useCallback(() => {
+    (navigation as any).navigate(Routes.App.BarcodeScan, {
+      usageContext: "pantry",
+      onConfirm: (ingredients: Ingredient[]) => {
+        void appendIngredients(ingredients, "barcode");
       },
       onUseSearchTerm: handleSearchFallback,
     });
@@ -265,27 +313,38 @@ export default function PantryScreen() {
   const handleClear = useCallback(() => {
     if (selected.length === 0) return;
 
-    Alert.alert(
-      language === "tr" ? "Dolabımı temizle" : "Clear my pantry",
-      language === "tr"
+    showDialog({
+      variant: "warning",
+      icon: "trash-outline",
+      eyebrow: language === "tr" ? "Dolap düzeni" : "Pantry cleanup",
+      title: language === "tr" ? "Dolabımı temizle" : "Clear my pantry",
+      message: language === "tr"
         ? "Tüm seçili dolap ürünleri kaldırılsın mı?"
         : "Remove every selected pantry item?",
-      [
-        { text: language === "tr" ? "İptal" : "Cancel", style: "cancel" },
-        {
-          text: language === "tr" ? "Temizle" : "Clear",
-          style: "destructive",
-          onPress: () => {
-            void persistSelection(
-              [],
-              selected,
-              language === "tr"
-                ? "Dolap temizlenemedi. Lütfen tekrar deneyin."
-                : "The pantry could not be cleared. Please try again.",
-            );
-          },
+      secondaryAction: { label: language === "tr" ? "İptal" : "Cancel", tone: "muted" },
+      primaryAction: {
+        label: language === "tr" ? "Temizle" : "Clear",
+        tone: "warning",
+        onPress: () => {
+          void persistSelection(
+            [],
+            selected,
+            language === "tr"
+              ? "Dolap temizlenemedi. Lütfen tekrar deneyin."
+              : "The pantry could not be cleared. Please try again.",
+          );
         },
-      ],
+      },
+    });
+  }, [language, persistSelection, selected, showDialog]);
+
+  const handleRefreshFreshness = useCallback(() => {
+    if (selected.length === 0) return;
+    void persistSelection(
+      selected,
+      selected,
+      language === "tr" ? "Dolap tazeliği yenilenemedi." : "Pantry freshness could not be refreshed.",
+      "manual",
     );
   }, [language, persistSelection, selected]);
 
@@ -365,6 +424,22 @@ export default function PantryScreen() {
             </View>
           </View>
 
+          {staleCount > 0 && (
+            <TouchableOpacity
+              style={[s.freshnessBand, { backgroundColor: `${theme.warning}12`, borderColor: `${theme.warning}32` }]}
+              onPress={handleRefreshFreshness}
+              activeOpacity={0.84}
+              disabled={syncing}
+            >
+              <Ionicons name="refresh-circle-outline" size={18} color={theme.warning} />
+              <Text style={[s.freshnessTxt, { color: theme.text }]}>
+                {language === "tr"
+                  ? `${staleCount} ürün uzun süredir güncellenmedi · tazeliği yenile`
+                  : `${staleCount} items look stale · refresh freshness`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <View style={[s.insightBand, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
             <View style={[s.insightIcon, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
               <Ionicons name="sparkles-outline" size={16} color={theme.primary} />
@@ -407,6 +482,24 @@ export default function PantryScreen() {
               <Ionicons name="camera-outline" size={16} color={theme.text} />
               <Text style={[s.secondaryActionTxt, { color: theme.text }]}>
                 {language === "tr" ? "Fotoğrafla Tara" : "Scan from photo"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBarcodeScan}
+              activeOpacity={0.85}
+              disabled={syncing}
+              style={[
+                s.secondaryAction,
+                {
+                  backgroundColor: theme.surfaceElevated,
+                  borderColor: theme.border,
+                  opacity: syncing ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Ionicons name="barcode-outline" size={16} color={theme.text} />
+              <Text style={[s.secondaryActionTxt, { color: theme.text }]}>
+                {language === "tr" ? "Barkod Tara" : "Scan barcode"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -588,6 +681,17 @@ function styles(theme: any) {
     },
     metricValue: { fontSize: 15, fontWeight: "900", marginBottom: 3 },
     metricLabel: { fontSize: 10.5, fontWeight: "700", lineHeight: 14 },
+    freshnessBand: {
+      marginTop: 12,
+      borderRadius: radii.xl,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    freshnessTxt: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "800" },
     insightBand: {
       borderRadius: radii.xl,
       borderWidth: 1,
@@ -614,9 +718,10 @@ function styles(theme: any) {
       paddingVertical: 8,
     },
     countChipTxt: { fontSize: 12, fontWeight: "800" },
-    actionRow: { flexDirection: "row", gap: 10 },
+    actionRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     primaryAction: {
       flex: 1,
+      minWidth: 132,
       borderRadius: radii.xl,
       paddingVertical: 14,
       paddingHorizontal: spacing.md,
@@ -627,6 +732,7 @@ function styles(theme: any) {
     },
     secondaryAction: {
       flex: 1,
+      minWidth: 132,
       borderRadius: radii.xl,
       paddingVertical: 14,
       paddingHorizontal: spacing.md,

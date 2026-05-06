@@ -121,8 +121,7 @@ export default function RecipeMatchPage() {
             <select
               value={selectedClientId}
               onChange={e => setSelectedClientId(e.target.value)}
-              className="input-sfcos"
-              style={{ color: !selectedClientId ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))' }}
+              className="select-sfcos h-11"
             >
               <option value="">— Genel eşleştirme (opsiyonel) —</option>
               {clients.map((c) => (

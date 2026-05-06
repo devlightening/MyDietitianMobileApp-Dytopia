@@ -61,7 +61,23 @@ export default function AlternativeCompareSheet({ meal, onClose, onUndo, onChoos
 
   const meta     = MEAL_TYPE_META[meal.mealType] ?? MEAL_TYPE_META.Snack;
   const hasMacros = meal.calories || meal.macros?.proteinGrams || meal.macros?.carbsGrams || meal.macros?.fatGrams;
-  const hasAlternativeMacros = meal.alternativeCalories || meal.alternativeMacros?.proteinGrams || meal.alternativeMacros?.carbsGrams || meal.alternativeMacros?.fatGrams;
+  const alternativeRecipeId =
+    meal.selectedRecipeSource === "Alternative" && meal.selectedRecipeId && meal.selectedRecipeId !== meal.recipeId
+      ? meal.selectedRecipeId
+      : (meal.alternativeRecipeId ?? meal.selectedRecipeId);
+  const alternativeRecipeName =
+    meal.selectedRecipeSource === "Alternative" && meal.selectedRecipeName
+      ? meal.selectedRecipeName
+      : (meal.alternativeRecipeName ?? meal.selectedRecipeName ?? "Alternatif Tarif");
+  const alternativeCalories =
+    meal.selectedRecipeSource === "Alternative"
+      ? (meal.selectedCalories ?? meal.alternativeCalories)
+      : (meal.alternativeCalories ?? meal.selectedCalories);
+  const alternativeMacros =
+    meal.selectedRecipeSource === "Alternative"
+      ? (meal.selectedMacros ?? meal.alternativeMacros)
+      : (meal.alternativeMacros ?? meal.selectedMacros);
+  const hasAlternativeMacros = alternativeCalories || alternativeMacros?.proteinGrams || alternativeMacros?.carbsGrams || alternativeMacros?.fatGrams;
 
   const backdropColor = backdropOpacity.interpolate({
     inputRange: [0, 1],
@@ -135,7 +151,7 @@ export default function AlternativeCompareSheet({ meal, onClose, onUndo, onChoos
                 style={{ marginVertical: 8 }}
               />
               <Text style={[s.compareCardName, { color: theme.text }]} numberOfLines={3}>
-                  {meal.alternativeRecipeId ? "Alternatif Tarif" : "Farklı Bir Şey"}
+                {alternativeRecipeName}
               </Text>
               <Text style={[s.compareCardMacro, { color: theme.emerald }]}>✓ Kaydedildi</Text>
             </View>
@@ -182,24 +198,24 @@ export default function AlternativeCompareSheet({ meal, onClose, onUndo, onChoos
             <View style={[s.macroBar, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
               <Text style={[s.macroBarLabel, { color: theme.emerald }]}>Seçilen alternatif</Text>
               <View style={s.macroChipsRow}>
-                {!!meal.alternativeCalories && (
+                {!!alternativeCalories && (
                   <View style={[s.chip, { backgroundColor: `${theme.macroCalorie}18`, borderColor: `${theme.macroCalorie}30` }]}>
-                    <Text style={[s.chipTxt, { color: theme.macroCalorie }]}>{meal.alternativeCalories} kcal</Text>
+                    <Text style={[s.chipTxt, { color: theme.macroCalorie }]}>{alternativeCalories} kcal</Text>
                   </View>
                 )}
-                {!!meal.alternativeMacros?.proteinGrams && (
+                {!!alternativeMacros?.proteinGrams && (
                   <View style={[s.chip, { backgroundColor: `${theme.macroProtein}18`, borderColor: `${theme.macroProtein}30` }]}>
-                    <Text style={[s.chipTxt, { color: theme.macroProtein }]}>P {meal.alternativeMacros.proteinGrams}g</Text>
+                    <Text style={[s.chipTxt, { color: theme.macroProtein }]}>P {alternativeMacros.proteinGrams}g</Text>
                   </View>
                 )}
-                {!!meal.alternativeMacros?.carbsGrams && (
+                {!!alternativeMacros?.carbsGrams && (
                   <View style={[s.chip, { backgroundColor: `${theme.macroCarb}18`, borderColor: `${theme.macroCarb}30` }]}>
-                    <Text style={[s.chipTxt, { color: theme.macroCarb }]}>K {meal.alternativeMacros.carbsGrams}g</Text>
+                    <Text style={[s.chipTxt, { color: theme.macroCarb }]}>K {alternativeMacros.carbsGrams}g</Text>
                   </View>
                 )}
-                {!!meal.alternativeMacros?.fatGrams && (
+                {!!alternativeMacros?.fatGrams && (
                   <View style={[s.chip, { backgroundColor: `${theme.macroFat}18`, borderColor: `${theme.macroFat}30` }]}>
-                    <Text style={[s.chipTxt, { color: theme.macroFat }]}>Y {meal.alternativeMacros.fatGrams}g</Text>
+                    <Text style={[s.chipTxt, { color: theme.macroFat }]}>Y {alternativeMacros.fatGrams}g</Text>
                   </View>
                 )}
               </View>
@@ -207,7 +223,7 @@ export default function AlternativeCompareSheet({ meal, onClose, onUndo, onChoos
           )}
 
           <View style={s.actions}>
-            {!!meal.alternativeRecipeId && !!onViewAlternativeRecipe && (
+            {!!alternativeRecipeId && !!onViewAlternativeRecipe && (
               <TouchableOpacity
                 style={[s.primaryBtn, { backgroundColor: theme.primary }]}
                 onPress={() => { dismiss(); onViewAlternativeRecipe(); }}

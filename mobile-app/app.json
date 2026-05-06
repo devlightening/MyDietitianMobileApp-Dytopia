@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "MyDietitian",
-    "slug": "mydietitian-mobile",
-    "scheme": "mydietitian",
+    "name": "Dytopia",
+    "slug": "dytopia-mobile",
+    "scheme": "dytopia",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/dytopia-logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/dytopia-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F7FBF8"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,8 +25,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/dytopia-logo.png",
+        "backgroundColor": "#F7FBF8"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -39,7 +39,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/dytopia-logo.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",

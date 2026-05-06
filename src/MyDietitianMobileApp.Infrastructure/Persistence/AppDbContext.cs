@@ -10,6 +10,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<Client> Clients { get; set; }
         public DbSet<Recipe> Recipes { get; set; }
         public DbSet<DietitianRecipeFavorite> DietitianRecipeFavorites { get; set; }
+        public DbSet<ClientRecipeFavorite> ClientRecipeFavorites { get; set; }
         public DbSet<Ingredient> Ingredients { get; set; }
         public DbSet<RecipeIngredient> RecipeIngredients { get; set; } = null!;
         public DbSet<RecipeSubstitute> RecipeSubstitutes { get; set; } = null!;
@@ -40,6 +41,8 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<ClientEngagementEvent> ClientEngagementEvents { get; set; }
         public DbSet<ClientAchievementUnlock> ClientAchievementUnlocks { get; set; }
         public DbSet<ClientGamificationSnapshot> ClientGamificationSnapshots { get; set; }
+        public DbSet<DailyGameChallenge> DailyGameChallenges { get; set; }
+        public DbSet<ClientGameSession> ClientGameSessions { get; set; }
         public DbSet<MealCompletion> MealCompletions { get; set; }
         public DbSet<DailyComplianceSnapshot> DailyComplianceSnapshots { get; set; }
         public DbSet<DietitianBrandingConfig> DietitianBrandingConfigs { get; set; }
@@ -93,6 +96,9 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
         public DbSet<RecipeImportSessionIngredient> RecipeImportSessionIngredients { get; set; } = null!;
         public DbSet<RecipeImportSessionIssue> RecipeImportSessionIssues { get; set; } = null!;
         public DbSet<ImportTemplate> ImportTemplates { get; set; } = null!;
+
+        // Dietitian announcements (time-bounded banners shown on client home screen)
+        public DbSet<ClientAnnouncement> ClientAnnouncements { get; set; } = null!;
 
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -198,6 +204,39 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasOne(e => e.Dietitian)
                     .WithMany()
                     .HasForeignKey(e => e.DietitianId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Recipe)
+                    .WithMany()
+                    .HasForeignKey(e => e.RecipeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ClientRecipeFavorite>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasIndex(e => new { e.ClientId, e.RecipeId })
+                    .IsUnique();
+
+                entity.HasIndex(e => e.IsActive);
+                entity.HasIndex(e => e.LastFavoritedAtUtc);
+
+                entity.Property(e => e.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.FirstFavoritedAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.LastFavoritedAtUtc)
+                    .IsRequired();
+
+                entity.Property(e => e.LastUnfavoritedAtUtc)
+                    .IsRequired(false);
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne(e => e.Recipe)
@@ -1402,6 +1441,87 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<DailyGameChallenge>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Date)
+                    .HasColumnType("date");
+
+                entity.Property(e => e.Language)
+                    .IsRequired()
+                    .HasMaxLength(10);
+
+                entity.Property(e => e.GameType)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(160);
+
+                entity.Property(e => e.Subtitle)
+                    .HasMaxLength(240);
+
+                entity.Property(e => e.Difficulty)
+                    .IsRequired()
+                    .HasMaxLength(24)
+                    .HasDefaultValue("easy");
+
+                entity.Property(e => e.PayloadJson)
+                    .IsRequired()
+                    .HasColumnType("jsonb");
+
+                entity.Property(e => e.AnswerKeyJson)
+                    .IsRequired()
+                    .HasColumnType("jsonb");
+
+                entity.Property(e => e.SourceProvider)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.GeneratedAtUtc)
+                    .IsRequired();
+
+                entity.HasIndex(e => new { e.Date, e.Language, e.GameType })
+                    .IsUnique();
+            });
+
+            modelBuilder.Entity<ClientGameSession>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.GameDate)
+                    .HasColumnType("date");
+
+                entity.Property(e => e.GameType)
+                    .IsRequired()
+                    .HasMaxLength(32);
+
+                entity.Property(e => e.ResultJson)
+                    .IsRequired()
+                    .HasColumnType("jsonb");
+
+                entity.Property(e => e.CompletedAtUtc)
+                    .IsRequired();
+
+                entity.HasIndex(e => new { e.ClientId, e.ChallengeId })
+                    .IsUnique();
+
+                entity.HasIndex(e => new { e.ClientId, e.GameDate, e.GameType });
+                entity.HasIndex(e => e.CompletedAtUtc);
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Challenge)
+                    .WithMany(e => e.Sessions)
+                    .HasForeignKey(e => e.ChallengeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
             // DailyComplianceSnapshot configuration
             modelBuilder.Entity<DailyComplianceSnapshot>(entity =>
             {
@@ -1916,6 +2036,46 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.HasOne(e => e.Client)
                     .WithMany()
                     .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ClientAnnouncement — dietitian time-bounded banners shown on client home screen
+            modelBuilder.Entity<ClientAnnouncement>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Body)
+                    .IsRequired()
+                    .HasMaxLength(2000);
+
+                entity.Property(e => e.StartsAt)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
+
+                entity.Property(e => e.EndsAt)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
+
+                entity.Property(e => e.CreatedAtUtc).IsRequired();
+                entity.Property(e => e.UpdatedAtUtc).IsRequired();
+
+                entity.Ignore(e => e.IsActive);
+
+                entity.HasIndex(e => new { e.ClientId, e.StartsAt, e.EndsAt })
+                    .HasDatabaseName("IX_ClientAnnouncements_ClientId_DateRange");
+
+                entity.HasOne(e => e.Client)
+                    .WithMany()
+                    .HasForeignKey(e => e.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Dietitian)
+                    .WithMany()
+                    .HasForeignKey(e => e.DietitianId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }

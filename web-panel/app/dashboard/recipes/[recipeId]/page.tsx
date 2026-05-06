@@ -65,10 +65,10 @@ function toInitialValue(recipe: RecipeDetail) {
     carbsGrams: recipe.carbsGrams,
     fatGrams: recipe.fatGrams,
     ingredients: [
-      ...recipe.mandatoryIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'mandatory' as const })),
-      ...recipe.optionalIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'optional' as const })),
-      ...recipe.flavoringIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'flavoring' as const })),
-      ...recipe.prohibitedIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'prohibited' as const })),
+      ...recipe.mandatoryIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'mandatory' as const, quantity: item.quantity != null ? String(item.quantity).replace('.', ',') : '', unit: item.unit ?? 'g' })),
+      ...recipe.optionalIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'optional' as const, quantity: item.quantity != null ? String(item.quantity).replace('.', ',') : '', unit: item.unit ?? 'g' })),
+      ...recipe.flavoringIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'flavoring' as const, quantity: item.quantity != null ? String(item.quantity).replace('.', ',') : '', unit: item.unit ?? 'g' })),
+      ...recipe.prohibitedIngredients.map((item) => ({ ingredientId: item.id, ingredientName: item.name, role: 'prohibited' as const, quantity: '', unit: '' })),
     ],
   };
 }
@@ -78,6 +78,12 @@ function toClonePayload(recipe: RecipeDetail): SaveRecipeRequest {
     name: `${recipe.name} Kopya`,
     description: recipe.description,
     isPublic: false,
+    ingredients: [
+      ...recipe.mandatoryIngredients.map((item) => ({ ingredientId: item.id, role: 'Mandatory' as const, quantity: item.quantity ?? null, unit: item.unit ?? null })),
+      ...recipe.optionalIngredients.map((item) => ({ ingredientId: item.id, role: 'Optional' as const, quantity: item.quantity ?? null, unit: item.unit ?? null })),
+      ...recipe.flavoringIngredients.map((item) => ({ ingredientId: item.id, role: 'Flavoring' as const, quantity: item.quantity ?? null, unit: item.unit ?? null })),
+      ...recipe.prohibitedIngredients.map((item) => ({ ingredientId: item.id, role: 'Prohibited' as const, quantity: null, unit: null })),
+    ],
     mandatoryIngredients: recipe.mandatoryIngredients.map((item) => item.id),
     optionalIngredients: recipe.optionalIngredients.map((item) => item.id),
     flavoringIngredients: recipe.flavoringIngredients.map((item) => item.id),
@@ -92,6 +98,12 @@ function toClonePayload(recipe: RecipeDetail): SaveRecipeRequest {
     carbsGrams: recipe.carbsGrams ?? undefined,
     fatGrams: recipe.fatGrams ?? undefined,
   };
+}
+
+function formatIngredientLine(item: { name: string; displayAmount?: string | null; quantity?: number | null; unit?: string | null }) {
+  if (item.displayAmount) return `${item.displayAmount} ${item.name}`;
+  if (item.quantity != null && item.unit) return `${String(item.quantity).replace('.', ',')} ${item.unit} ${item.name}`;
+  return `${item.name} · miktar girilmemiş`;
 }
 
 export default function RecipeDetailPage({ params }: { params: { recipeId: string } }) {
@@ -361,20 +373,20 @@ export default function RecipeDetailPage({ params }: { params: { recipeId: strin
               <p className="mb-3 text-sm font-semibold text-foreground">Zorunlu</p>
               <div className="space-y-2 text-sm text-muted-foreground">
                 {recipe.mandatoryIngredients.map((item) => (
-                  <p key={item.id}>{item.name}</p>
+                  <p key={item.id}>{formatIngredientLine(item)}</p>
                 ))}
               </div>
             </div>
             <div className="rounded-[24px] bg-background p-4">
               <p className="mb-3 text-sm font-semibold text-foreground">Opsiyonel</p>
               <div className="space-y-2 text-sm text-muted-foreground">
-                {recipe.optionalIngredients.length > 0 ? recipe.optionalIngredients.map((item) => <p key={item.id}>{item.name}</p>) : <p>Opsiyonel malzeme yok.</p>}
+                {recipe.optionalIngredients.length > 0 ? recipe.optionalIngredients.map((item) => <p key={item.id}>{formatIngredientLine(item)}</p>) : <p>Opsiyonel malzeme yok.</p>}
               </div>
             </div>
             <div className="rounded-[24px] bg-background p-4">
               <p className="mb-3 text-sm font-semibold text-foreground">Lezzetlendirici</p>
               <div className="space-y-2 text-sm text-muted-foreground">
-                {recipe.flavoringIngredients.length > 0 ? recipe.flavoringIngredients.map((item) => <p key={item.id}>{item.name}</p>) : <p>Lezzetlendirici malzeme yok.</p>}
+                {recipe.flavoringIngredients.length > 0 ? recipe.flavoringIngredients.map((item) => <p key={item.id}>{formatIngredientLine(item)}</p>) : <p>Lezzetlendirici malzeme yok.</p>}
               </div>
             </div>
             <div className="rounded-[24px] bg-background p-4">

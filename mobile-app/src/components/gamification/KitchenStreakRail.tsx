@@ -17,14 +17,22 @@ export default function KitchenStreakRail({
   theme,
   language,
   summary,
+  onTabSwipeEnabledChange,
 }: {
   theme: Theme;
   language: "tr" | "en";
   summary?: GamificationSummaryDTO;
+  onTabSwipeEnabledChange?: (enabled: boolean) => void;
 }) {
   const motivation = mapGamificationToMotivation(summary);
   const summaryCopy = buildMotivationSummary(motivation, language);
   const badges = getHighlightAchievements(motivation, language, 4);
+  const lockTabSwipe = React.useCallback(() => {
+    onTabSwipeEnabledChange?.(false);
+  }, [onTabSwipeEnabledChange]);
+  const releaseTabSwipe = React.useCallback(() => {
+    onTabSwipeEnabledChange?.(true);
+  }, [onTabSwipeEnabledChange]);
 
   return (
     <View style={s.wrap}>
@@ -32,6 +40,12 @@ export default function KitchenStreakRail({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.row}
+        onTouchStart={lockTabSwipe}
+        onTouchEnd={releaseTabSwipe}
+        onTouchCancel={releaseTabSwipe}
+        onScrollBeginDrag={lockTabSwipe}
+        onScrollEndDrag={releaseTabSwipe}
+        onMomentumScrollEnd={releaseTabSwipe}
       >
         <View
           style={[

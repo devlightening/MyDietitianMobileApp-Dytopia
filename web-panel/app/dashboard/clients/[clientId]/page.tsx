@@ -8,6 +8,7 @@ import {
   getClientActivities,
   getClientMeasurements,
   getClientCareHub,
+  getClientFavoriteRecipes,
   addClientCareNote,
   sendClientCareReply,
   createClientAppointment,
@@ -25,9 +26,17 @@ import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Input } from '@/components/ui/Input';
 import {
+  getActivityCategory,
+  getActivityDescription as formatActivityDescription,
+  getActivityDetails,
+  getActivityTitle as formatActivityTitle,
+  parseActivityMetadata,
+} from '@/lib/activity-format';
+import {
   ArrowLeft,
   User,
   Activity,
+  Bell,
   Scale,
   Calendar,
   FileText,
@@ -43,8 +52,11 @@ import {
   ChefHat,
   Droplets,
   MinusCircle,
+  PackageCheck,
   Ruler,
+  ShoppingCart,
   Shuffle,
+  Heart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -64,7 +76,7 @@ export default function ClientDetailPage() {
   const [appointmentLocation, setAppointmentLocation] = useState('');
 
   // Clinical measurement form state
-  const [activityFilter, setActivityFilter] = useState<'all' | 'plan' | 'meals' | 'kitchen' | 'water' | 'measurements' | 'badges'>('all');
+  const [activityFilter, setActivityFilter] = useState<'all' | 'plan' | 'meals' | 'kitchen' | 'shopping' | 'pantry' | 'notifications' | 'water' | 'measurements' | 'badges'>('all');
 
   const [mWeightKg, setMWeightKg] = useState('');
   const [mHeightCm, setMHeightCm] = useState('');
@@ -114,6 +126,13 @@ export default function ClientDetailPage() {
     queryKey: ['client-motivation', clientId],
     queryFn: () => getClientGamificationSummary(clientId),
     enabled: activeTab === 'overview' || activeTab === 'notes',
+    retry: 0,
+    refetchOnWindowFocus: false,
+  });
+  const { data: favoriteRecipesData } = useQuery({
+    queryKey: ['client-favorite-recipes', clientId],
+    queryFn: () => getClientFavoriteRecipes(clientId),
+    enabled: activeTab === 'overview',
     retry: 0,
     refetchOnWindowFocus: false,
   });
@@ -227,9 +246,14 @@ export default function ClientDetailPage() {
   function getActivityIcon(type: string) {
     switch (type) {
       case 'meal_logged':        return <Utensils className="w-4 h-4" />;
+      case 'meal_selection':     return <Shuffle className="w-4 h-4" />;
+      case 'meal_feedback':      return <CheckCircle2 className="w-4 h-4" />;
       case 'meal_alternative':   return <Shuffle className="w-4 h-4" />;
       case 'meal_skipped':       return <MinusCircle className="w-4 h-4" />;
       case 'kitchen_used':       return <ChefHat className="w-4 h-4" />;
+      case 'shopping_list':      return <ShoppingCart className="w-4 h-4" />;
+      case 'pantry':             return <PackageCheck className="w-4 h-4" />;
+      case 'notification_preferences': return <Bell className="w-4 h-4" />;
       case 'water_goal_hit':     return <Droplets className="w-4 h-4" />;
       case 'measurement_logged': return <Ruler className="w-4 h-4" />;
       case 'weight_update':      return <Weight className="w-4 h-4" />;
@@ -246,9 +270,14 @@ export default function ClientDetailPage() {
   function getActivityColorClass(type: string): string {
     switch (type) {
       case 'meal_logged':        return 'bg-emerald-500/10 text-emerald-600';
+      case 'meal_selection':     return 'bg-amber-500/10 text-amber-600';
+      case 'meal_feedback':      return 'bg-emerald-500/10 text-emerald-600';
       case 'meal_alternative':   return 'bg-amber-500/10 text-amber-600';
       case 'meal_skipped':       return 'bg-destructive/10 text-destructive';
       case 'kitchen_used':       return 'bg-cyan-500/10 text-cyan-600';
+      case 'shopping_list':      return 'bg-indigo-500/10 text-indigo-600';
+      case 'pantry':             return 'bg-emerald-500/10 text-emerald-600';
+      case 'notification_preferences': return 'bg-indigo-500/10 text-indigo-600';
       case 'water_goal_hit':     return 'bg-cyan-500/10 text-cyan-600';
       case 'measurement_logged': return 'bg-amber-500/10 text-amber-600';
       case 'weight_update':      return 'bg-primary/10 text-primary';
@@ -262,6 +291,7 @@ export default function ClientDetailPage() {
   }
 
   function getActivityTitle(type: string): string {
+    return formatActivityTitle(type);
     switch (type) {
       case 'meal_logged':        return 'Öğün tamamlandı';
       case 'meal_alternative':   return 'Alternatif öğün seçildi';
@@ -281,6 +311,7 @@ export default function ClientDetailPage() {
   }
 
   function getActivityDescription(activity: any): string {
+    return formatActivityDescription(activity.type, activity.metadata);
     const meta = typeof activity.metadata === 'string'
       ? tryParseJson(activity.metadata)
       : activity.metadata;
@@ -440,6 +471,93 @@ export default function ClientDetailPage() {
 
             {/* Row 2: Motivation & Badges - full width */}
             <MotivationCard motivationData={motivationData ?? null} />
+
+            <Card className="p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary/80">Favori tarifler</p>
+                  <h3 className="mt-2 text-lg font-semibold text-foreground">Danışanın sevdiği tarifler</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Premium aktifken saklanan tarifleri ve dolap uyumlarını buradan takip edebilirsiniz.
+                  </p>
+                </div>
+                <div className={cn(
+                  'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold',
+                  client.isPremium ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                )}>
+                  <Heart className="h-3.5 w-3.5" />
+                  {client.isPremium ? 'Premium açık' : 'Premium pasif'}
+                </div>
+              </div>
+
+              {favoriteRecipesData?.items?.length ? (
+                <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                  {favoriteRecipesData.items.slice(0, 6).map((item) => (
+                    <div
+                      key={item.recipeId}
+                      className="rounded-2xl border border-border/80 bg-[var(--surface-glass)] px-4 py-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{item.recipeName}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {item.sourceType === 'clinic' ? 'Klinik tarifi' : 'Genel tarif'}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                          %{item.pantryCoveragePercent}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-surface-overlay px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                          {item.caloriesKcal != null ? `${item.caloriesKcal} kcal` : 'Kalori yok'}
+                        </span>
+                        <span className="rounded-full bg-surface-overlay px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                          {item.proteinGrams != null ? `${item.proteinGrams} g protein` : 'Protein yok'}
+                        </span>
+                      </div>
+
+                      <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Eksik zorunlular
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {item.missingMandatoryNames.length > 0 ? (
+                          item.missingMandatoryNames.slice(0, 3).map((name) => (
+                            <span key={name} className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-600">
+                              {name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600">
+                            Zorunlu eksik yok
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>
+                          {new Date(item.favoritedAtUtc).toLocaleDateString('tr-TR', {
+                            day: 'numeric',
+                            month: 'long',
+                          })}
+                        </span>
+                        <button
+                          onClick={() => router.push(`/dashboard/recipes/${item.recipeSlug}`)}
+                          className="font-semibold text-primary transition hover:text-primary/80"
+                        >
+                          Tarife git
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-dashed border-border bg-surface-overlay px-5 py-8 text-sm text-muted-foreground">
+                  Bu danışan henüz premium favori tarif kullanmamış.
+                </div>
+              )}
+            </Card>
           </div>
         )}
 
@@ -463,6 +581,9 @@ export default function ClientDetailPage() {
                     { id: 'plan',         label: 'Plan' },
                     { id: 'meals',        label: 'Öğünler' },
                     { id: 'kitchen',      label: 'Mutfak' },
+                    { id: 'shopping',     label: 'Alışveriş' },
+                    { id: 'pantry',       label: 'Dolabım' },
+                    { id: 'notifications', label: 'Bildirim' },
                     { id: 'water',        label: 'Su' },
                     { id: 'measurements', label: 'Ölçümler' },
                     { id: 'badges',       label: 'Rozetler' },
@@ -487,9 +608,10 @@ export default function ClientDetailPage() {
             {(() => {
               const filtered = activities.filter(a => {
                 if (activityFilter === 'all') return true;
-                if (activityFilter === 'plan') return ['plan_assigned', 'plan_updated'].includes(a.type);
-                if (activityFilter === 'meals') return ['meal_logged', 'meal_alternative', 'meal_skipped'].includes(a.type);
+                if (activityFilter === 'plan') return ['plan_assigned', 'plan_updated', 'meal_selection'].includes(a.type);
+                if (activityFilter === 'meals') return ['meal_logged', 'meal_feedback', 'meal_alternative', 'meal_skipped'].includes(a.type);
                 if (activityFilter === 'kitchen') return a.type === 'kitchen_used';
+                if (['shopping', 'pantry', 'notifications'].includes(activityFilter)) return getActivityCategory(a.type) === activityFilter;
                 if (activityFilter === 'water') return a.type === 'water_goal_hit';
                 if (activityFilter === 'measurements') return ['weight_update', 'measurement_logged'].includes(a.type);
                 if (activityFilter === 'badges') return ['badge_unlocked', 'streak_milestone', 'streak_at_risk'].includes(a.type);
@@ -509,28 +631,45 @@ export default function ClientDetailPage() {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {filtered.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="flex items-start gap-3 p-3 rounded-xl hover:bg-muted/20 transition-colors"
-                    >
-                      <div className={cn(
-                        'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
-                        getActivityColorClass(activity.type)
-                      )}>
-                        {getActivityIcon(activity.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground font-medium">{getActivityTitle(activity.type)}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                          {getActivityDescription(activity)}
+                  {filtered.map((activity) => {
+                    const meta = parseActivityMetadata(activity.metadata);
+                    const details = getActivityDetails(activity.type, meta);
+
+                    return (
+                      <div
+                        key={activity.id}
+                        className="flex items-start gap-3 p-3 rounded-xl hover:bg-muted/20 transition-colors"
+                      >
+                        <div className={cn(
+                          'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
+                          getActivityColorClass(activity.type)
+                        )}>
+                          {getActivityIcon(activity.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground font-medium">{getActivityTitle(activity.type)}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {getActivityDescription({ ...activity, metadata: meta })}
+                          </p>
+                          {details.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {details.map((detail) => (
+                                <span
+                                  key={detail}
+                                  className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                                >
+                                  {detail}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                          {new Date(activity.timestamp).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
-                        {new Date(activity.timestamp).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               );
             })()}

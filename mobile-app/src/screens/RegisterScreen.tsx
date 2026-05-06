@@ -12,6 +12,7 @@ import {
   Animated,
   StatusBar,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,8 @@ import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from '../context/I18nContext';
 import { radii, spacing } from '../theme/tokens';
 import ProduceBubble from '../components/decor/ProduceBubble';
+
+const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
@@ -108,7 +111,7 @@ export default function RegisterScreen() {
           <View style={[s.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={s.heroTop}>
               <View style={[s.logoWrap, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '35' }]}>
-                <Ionicons name="leaf" size={28} color={theme.primaryDark} />
+                <Image source={BRAND_LOGO} style={s.logoImage} resizeMode="contain" />
               </View>
               <View style={[s.heroBadge, { backgroundColor: theme.surfaceElevated }]}>
                 <Text style={[s.heroBadgeText, { color: theme.emerald }]}>Taze bir başlangıç</Text>
@@ -304,7 +307,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
+    overflow: 'hidden',
   },
+  logoImage: { width: 66, height: 66, borderRadius: 20 },
 
   title: { fontSize: 34, fontWeight: '900', letterSpacing: -0.5, marginBottom: spacing.xs },
   subTxt: { fontSize: 14, fontWeight: '500', marginBottom: 0, lineHeight: 20 },

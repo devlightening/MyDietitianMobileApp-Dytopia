@@ -11,6 +11,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { radii, spacing, type Theme } from "../../theme/tokens";
 
+const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+
 type Props = {
   theme: Theme;
   language: "tr" | "en";
@@ -81,13 +83,19 @@ export default function ProfileEditCard({
 
       <View style={[s.photoCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
         <View style={[s.previewOuter, { borderColor: theme.borderEmerald }]}>
-          <View style={[s.previewInner, { backgroundColor: photoUri ? theme.surface : theme.primary }]}>
+          <View style={[s.previewInner, { backgroundColor: photoUri ? theme.surface : theme.surface }]}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={s.photo} />
-            ) : hasInitials ? (
-              <Text style={s.initials}>{initials}</Text>
             ) : (
-              <Ionicons name="person" size={28} color="#FFFFFF" />
+              <>
+                <View style={[s.previewAura, { backgroundColor: theme.primaryGlow, borderColor: theme.borderEmerald }]} />
+                <Image source={BRAND_LOGO} resizeMode="contain" style={s.defaultLogo} />
+                {hasInitials ? (
+                  <View style={[s.previewInitialBadge, { backgroundColor: theme.primary, borderColor: theme.surface }]}>
+                    <Text style={s.previewInitialText}>{initials.slice(0, 1)}</Text>
+                  </View>
+                ) : null}
+              </>
             )}
           </View>
         </View>
@@ -236,6 +244,35 @@ const s = StyleSheet.create({
   initials: {
     color: "#FFFFFF",
     fontSize: 24,
+    fontWeight: "900",
+  },
+  previewAura: {
+    position: "absolute",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    opacity: 0.28,
+  },
+  defaultLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+  },
+  previewInitialBadge: {
+    position: "absolute",
+    right: 1,
+    bottom: 1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewInitialText: {
+    color: "#FFFFFF",
+    fontSize: 9,
     fontWeight: "900",
   },
   photoBody: {
