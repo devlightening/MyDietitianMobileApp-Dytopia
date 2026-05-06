@@ -22,6 +22,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { getDailyGames, submitDailyGame, type DailyGameChallenge, type SubmitGameResponse } from "../api/games";
+import { BRAND_LOGO, preloadBrandAssets } from "../assets/brandAssets";
 import PressableScale from "../components/ui/PressableScale";
 import DytopiaLogoBubble from "../components/decor/DytopiaLogoBubble";
 import { useFeedback } from "../context/FeedbackContext";
@@ -71,12 +72,63 @@ function nowSeconds(startedAt: number) {
   return Math.max(1, Math.round((Date.now() - startedAt) / 1000));
 }
 
+function difficultyLabel(difficulty: string | undefined, language: "tr" | "en") {
+  const normalized = difficulty === "hard" || difficulty === "medium" ? difficulty : "easy";
+  if (language === "en") {
+    return normalized === "hard" ? "hard" : normalized === "medium" ? "medium" : "easy";
+  }
+  return normalized === "hard" ? "zor" : normalized === "medium" ? "orta" : "kolay";
+}
+
+function difficultyHeroCopy(difficulty: string | undefined, language: "tr" | "en") {
+  const normalized = difficulty === "hard" || difficulty === "medium" ? difficulty : "easy";
+  if (language === "en") {
+    if (normalized === "hard") {
+      return {
+        title: "Master arena",
+        body: "Today's questions are sharper because your recent rhythm is strong. A fresh pack opens tomorrow.",
+      };
+    }
+    if (normalized === "medium") {
+      return {
+        title: "The rhythm is rising",
+        body: "Your daily games are getting a little smarter. Finish 3 games and keep the streak warm.",
+      };
+    }
+    return {
+      title: "Today's warm-up arena",
+      body: "Short, friendly games prepare today's badge run. New questions arrive tomorrow.",
+    };
+  }
+
+  if (normalized === "hard") {
+    return {
+      title: "Usta meydanı",
+      body: "Son ritmin güçlü olduğu için bugünün soruları daha keskin. Yeni paket yarın açılacak.",
+    };
+  }
+  if (normalized === "medium") {
+    return {
+      title: "Ritim yükseliyor",
+      body: "Günlük oyunlar biraz daha akıllandı. 3 oyunu bitir, seriyi sıcak tut.",
+    };
+  }
+  return {
+    title: "Bugünün ısınma meydanı",
+    body: "Kısa ve dost canlısı oyunlar bugünkü rozet koşusunu hazırlar. Yeni sorular yarın gelir.",
+  };
+}
+
 export default function GameCenterScreen({ navigation }: any) {
   const { theme } = useTheme();
   const { language } = useTranslation();
   const { showToast, showDialog, playFeedback } = useFeedback();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<SubmitGameResponse | null>(null);
+
+  useEffect(() => {
+    void preloadBrandAssets();
+  }, []);
 
   const dailyQuery = useQuery({
     queryKey: ["daily-games", language],
@@ -146,6 +198,8 @@ export default function GameCenterScreen({ navigation }: any) {
   const progress = dailyQuery.data
     ? Math.min(1, dailyQuery.data.completedCount / Math.max(1, dailyQuery.data.totalCount))
     : 0;
+  const dailyDifficulty = dailyQuery.data?.difficulty ?? "easy";
+  const heroCopy = difficultyHeroCopy(dailyDifficulty, language);
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: theme.bg }]}>
@@ -197,14 +251,17 @@ export default function GameCenterScreen({ navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.heroTitle, { color: theme.text }]}>
-                    {language === "tr" ? "Kolay, kısa, rozetli." : "Easy, short, badge-ready."}
+                    {heroCopy.title}
                   </Text>
                   <Text style={[s.heroBody, { color: theme.textSub }]}>
-                    {language === "tr"
-                      ? "3 oyunu bitir; Oyun Canavarı rozetine bugün bir adım değil, direkt koş."
-                      : "Finish 3 games and run straight toward the Game Monster badge."}
+                    {heroCopy.body}
                   </Text>
                 </View>
+              </View>
+              <View style={[s.difficultyPill, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+                <Text style={[s.difficultyPillText, { color: theme.primaryDark }]}>
+                  {difficultyLabel(dailyDifficulty, language)}
+                </Text>
               </View>
               <View style={[s.progressTrack, { backgroundColor: theme.borderLight }]}>
                 <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: theme.primary }]} />
@@ -335,7 +392,7 @@ function GameBoard({
         </View>
         <View style={[s.easyPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
           <Text style={[s.easyPillText, { color: theme.primaryDark }]}>
-            {language === "tr" ? "kolay" : "easy"}
+            {difficultyLabel(challenge.difficulty, language)}
           </Text>
         </View>
       </View>
@@ -347,7 +404,9 @@ function GameBoard({
             {language === "tr" ? "Bu oyun bugün tamamlandı" : "This game is complete today"}
           </Text>
           <Text style={[s.completedBody, { color: theme.textMuted }]}>
-            {language === "tr" ? "Skorun saklandı; yarın yeni paket açılacak." : "Your score is saved; a fresh pack opens tomorrow."}
+            {language === "tr"
+              ? "Bugünün turu tamamlandı. Yeni sorular yarın zorluk seviyene göre gelecek."
+              : "Today's run is complete. New questions arrive tomorrow based on your difficulty level."}
           </Text>
         </View>
       ) : challenge.type === "memory" ? (
@@ -483,6 +542,8 @@ function MemoryFlipCard({
 }) {
   const progress = useSharedValue(revealed ? 1 : 0);
   const accent = card.color ?? theme.primary;
+  const brandMarkSize = Math.max(36, Math.min(52, size * 0.58));
+  const brandLogoSize = Math.round(brandMarkSize * 0.82);
 
   useEffect(() => {
     progress.value = withTiming(revealed ? 1 : 0, { duration: 360 });
@@ -519,9 +580,40 @@ function MemoryFlipCard({
             frontStyle,
           ]}
         >
-          <DytopiaLogoBubble size={28} opacity={0.14} logoOpacity={0.55} style={s.memoryCardLogo} />
-          <Ionicons name="leaf-outline" size={18} color={theme.primaryDark} />
-          <Text style={[s.memoryFrontMark, { color: theme.primaryDark }]}>D</Text>
+          <View
+            style={[
+              s.memoryBrandGlow,
+              {
+                width: brandMarkSize * 1.26,
+                height: brandMarkSize * 1.26,
+                borderRadius: brandMarkSize * 0.4,
+                backgroundColor: `${theme.primary}10`,
+              },
+            ]}
+          />
+          <View
+            style={[
+              s.memoryBrandMark,
+              {
+                width: brandMarkSize,
+                height: brandMarkSize,
+                borderRadius: brandMarkSize * 0.3,
+                borderColor: `${theme.primary}24`,
+                backgroundColor: theme.primaryLight,
+              },
+            ]}
+          >
+            <Image
+              source={BRAND_LOGO}
+              resizeMode="contain"
+              fadeDuration={0}
+              style={{
+                width: brandLogoSize,
+                height: brandLogoSize,
+                borderRadius: brandMarkSize * 0.18,
+              }}
+            />
+          </View>
         </Animated.View>
 
         <Animated.View
@@ -715,6 +807,8 @@ const s = StyleSheet.create({
   heroIcon: { width: 48, height: 48, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   heroTitle: { fontSize: 18, fontWeight: "900", lineHeight: 23 },
   heroBody: { fontSize: 12.5, lineHeight: 18, marginTop: 3, fontWeight: "600" },
+  difficultyPill: { alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  difficultyPillText: { fontSize: 10.5, fontWeight: "900" },
   progressTrack: { height: 8, borderRadius: 999, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 999 },
   challengeRow: { gap: 10 },
@@ -777,10 +871,23 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
-  memoryFrontFace: { gap: 3 },
+  memoryFrontFace: {},
   memoryBackFace: { padding: 5 },
-  memoryCardLogo: { position: "absolute", width: 28, height: 28, borderRadius: 14 },
-  memoryFrontMark: { fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
+  memoryBrandGlow: {
+    position: "absolute",
+    opacity: 0.95,
+  },
+  memoryBrandMark: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#0F3D2E",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 9,
+    elevation: 2,
+  },
   memoryImagePlate: {
     width: "82%",
     aspectRatio: 1,

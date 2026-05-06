@@ -5,6 +5,8 @@ namespace MyDietitianMobileApp.Application.DTOs;
 public class DailyGamePackDTO
 {
     public DateOnly Date { get; set; }
+    public string Difficulty { get; set; } = "easy";
+    public DateTime NextRefreshAt { get; set; }
     public int CompletedCount { get; set; }
     public int TotalCount { get; set; } = 3;
     public int BadgeProgress { get; set; }

@@ -1176,8 +1176,10 @@ using (var scope = app.Services.CreateScope())
                 "GeneratedAtUtc" timestamp with time zone NOT NULL DEFAULT NOW()
             );
 
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_DailyGameChallenges_Date_Language_GameType"
-                ON "DailyGameChallenges" ("Date", "Language", "GameType");
+            DROP INDEX IF EXISTS "IX_DailyGameChallenges_Date_Language_GameType";
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_DailyGameChallenges_Date_Language_GameType_Difficulty"
+                ON "DailyGameChallenges" ("Date", "Language", "GameType", "Difficulty");
 
             CREATE TABLE IF NOT EXISTS "ClientGameSessions" (
                 "Id" uuid NOT NULL PRIMARY KEY,

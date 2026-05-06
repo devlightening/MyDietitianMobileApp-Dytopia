@@ -1483,7 +1483,7 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.Property(e => e.GeneratedAtUtc)
                     .IsRequired();
 
-                entity.HasIndex(e => new { e.Date, e.Language, e.GameType })
+                entity.HasIndex(e => new { e.Date, e.Language, e.GameType, e.Difficulty })
                     .IsUnique();
             });
 

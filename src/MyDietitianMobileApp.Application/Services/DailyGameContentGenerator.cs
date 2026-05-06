@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Services;
 
 namespace MyDietitianMobileApp.Application.Services;
@@ -42,24 +43,27 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
     public async Task<DailyGameContentPack> GenerateAsync(
         DateOnly date,
         string language,
+        string difficulty,
         CancellationToken ct = default)
     {
+        var normalizedDifficulty = DailyGameChallenge.NormalizeDifficulty(difficulty);
         var apiKey = _options.ApiKey ?? Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar);
         if (!string.IsNullOrWhiteSpace(apiKey))
         {
             using var aiTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             aiTimeout.CancelAfter(AiGenerationBudget);
-            var aiPack = await TryGenerateWithOpenAiAsync(date, language, apiKey, aiTimeout.Token);
+            var aiPack = await TryGenerateWithOpenAiAsync(date, language, normalizedDifficulty, apiKey, aiTimeout.Token);
             if (aiPack is not null)
                 return aiPack;
         }
 
-        return BuildFallbackPack(date, language);
+        return BuildFallbackPack(date, language, normalizedDifficulty);
     }
 
     private async Task<DailyGameContentPack?> TryGenerateWithOpenAiAsync(
         DateOnly date,
         string language,
+        string difficulty,
         string apiKey,
         CancellationToken ct)
     {
@@ -73,7 +77,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
                 max_tokens = 2600,
                 messages = new[]
                 {
-                    new { role = "system", content = BuildSystemPrompt(language) },
+                    new { role = "system", content = BuildSystemPrompt(language, difficulty) },
                     new { role = "user", content = $"Tarih: {date:yyyy-MM-dd}. Dil: {language}. Bugün için tek JSON paketini üret." }
                 }
             };
@@ -135,12 +139,20 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         }
     }
 
-    private static string BuildSystemPrompt(string language)
+    private static string BuildSystemPrompt(string language, string difficulty)
     {
         var locale = language == "en" ? "English" : "Turkish";
+        var difficultyRules = difficulty switch
+        {
+            "hard" => "Hard: use closer distractors, more thoughtful clues, 6-8 letter words when possible, and slightly tighter estimated times. Keep it safe and fair.",
+            "medium" => "Medium: use moderately close distractors, 5-6 letter words, and explanations that teach one compact nutrition habit.",
+            _ => "Easy: use simple everyday foods, obvious distractors, short words, and friendly beginner clues."
+        };
         return $$"""
         You create safe, easy nutrition mini-game content for a dietitian mobile app.
         Language: {{locale}}.
+        Difficulty: {{difficulty}}.
+        Difficulty rules: {{difficultyRules}}
 
         Return only JSON object with this shape:
         {
@@ -158,13 +170,14 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
 
         Mandatory game rules:
         - Exactly 3 challenges: one "memory", one "quiz", one "word".
-        - Difficulty must be easy enough for a normal app user.
+        - Respect the requested difficulty while keeping the games short and approachable.
         - No medical claims, no disease/treatment advice, no guaranteed weight-loss statements.
         - memory payload: { "schemaVersion": 2, "gridSize": 4, "cards": 16 cards, "hint": "..." }.
-          Cards must be 8 healthy food pairs. Each card has pairId, label, emoji, color, imagePrompt, isJoker=false.
+          Cards must be 8 healthy food pairs. Use food labels that fit the difficulty. Each card has pairId, label, emoji, color, imagePrompt, isJoker=false.
           imagePrompt should describe a cute pastel fruit/vegetable card illustration, but do not include medical claims.
           answerKey: { "pairs": 8 objects with pairId and label }.
         - quiz payload: { "questions": 5 questions }. Each question has id, question, options[3] with id/text.
+          The correct option must not always be the first option.
           answerKey: { "answers": 5 objects with questionId, correctOptionId, explanation }.
         - word payload: { "words": 5 items }. Each item has id, clue, scrambled, length.
           answerKey: { "answers": 5 objects with wordId, answer, explanation }.
@@ -248,7 +261,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
                answers.GetArrayLength() == 5;
     }
 
-    private static DailyGameContentPack BuildFallbackPack(DateOnly date, string language)
+    private static DailyGameContentPack BuildFallbackPack(DateOnly date, string language, string difficulty)
     {
         return new DailyGameContentPack
         {
@@ -256,14 +269,14 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
             IsFallback = true,
             Challenges =
             [
-                BuildMemoryFallback(date, language),
-                BuildQuizFallback(language),
-                BuildWordFallback(language)
+                BuildMemoryFallback(date, language, difficulty),
+                BuildQuizFallback(date, language, difficulty),
+                BuildWordFallback(date, language, difficulty)
             ]
         };
     }
 
-    private static DailyGameContentChallenge BuildMemoryFallback(DateOnly date, string language)
+    private static DailyGameContentChallenge BuildMemoryFallback(DateOnly date, string language, string difficulty)
     {
         if (DateTime.UtcNow.Year > 0)
         {
@@ -290,7 +303,13 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
                     new MemoryFood("Limon", "🍋", "#FDE047", "sevimli pastel limon hafıza kartı illüstrasyonu, temiz beyaz arka plan, yumuşak gölge")
                 ];
 
-            var memoryCards = foods.SelectMany((food, index) =>
+            var selectedFoods = foods
+                .Concat(BuildMemoryFoodExtras(language, difficulty))
+                .OrderBy(food => StableRandomKey(date, language, $"{difficulty}:{food.Label}"))
+                .Take(8)
+                .ToArray();
+
+            var memoryCards = selectedFoods.SelectMany((food, index) =>
             {
                 var pairId = $"p{index + 1:00}";
                 return new[]
@@ -313,7 +332,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
             };
             var memoryAnswerKey = new
             {
-                pairs = foods.Select((food, index) => new { pairId = $"p{index + 1:00}", label = food.Label })
+                pairs = selectedFoods.Select((food, index) => new { pairId = $"p{index + 1:00}", label = food.Label })
             };
 
             return new DailyGameContentChallenge
@@ -321,7 +340,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
                 Type = "memory",
                 Title = language == "en" ? "Pantry Pairs" : "Dolap Eşleri",
                 Subtitle = language == "en" ? "8 pairs · 4x4 memory" : "8 çift · 4x4 hafıza",
-                EstimatedSeconds = 90,
+                EstimatedSeconds = difficulty == "hard" ? 75 : difficulty == "medium" ? 85 : 95,
                 PayloadJson = JsonSerializer.Serialize(memoryPayload, JsonOptions),
                 AnswerKeyJson = JsonSerializer.Serialize(memoryAnswerKey, JsonOptions)
             };
@@ -367,6 +386,77 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
             EstimatedSeconds = 90,
             PayloadJson = JsonSerializer.Serialize(payload, JsonOptions),
             AnswerKeyJson = JsonSerializer.Serialize(answerKey, JsonOptions)
+        };
+    }
+
+    private static DailyGameContentChallenge BuildQuizFallback(DateOnly date, string language, string difficulty)
+    {
+        var seeds = BuildQuizBank(language, difficulty)
+            .OrderBy(item => StableRandomKey(date, language, $"{difficulty}:quiz:{item.Id}"))
+            .Take(5)
+            .ToList();
+
+        var questions = seeds.Select((seed, index) =>
+        {
+            var options = new[]
+                {
+                    new FallbackOption("a", seed.Correct),
+                    new FallbackOption("b", seed.WrongA),
+                    new FallbackOption("c", seed.WrongB)
+                }
+                .OrderBy(option => StableRandomKey(date, language, $"{difficulty}:{seed.Id}:{option.Text}"))
+                .Select((option, optionIndex) => new FallbackOption(((char)('a' + optionIndex)).ToString(), option.Text))
+                .ToList();
+
+            var correctOptionId = options.Single(option => option.Text == seed.Correct).Id;
+            return new
+            {
+                Question = new FallbackQuestion($"q{index + 1}", seed.Question, options),
+                Answer = new { questionId = $"q{index + 1}", correctOptionId, explanation = seed.Explanation }
+            };
+        }).ToList();
+
+        return new DailyGameContentChallenge
+        {
+            Type = "quiz",
+            Title = language == "en" ? "Tiny Nutrition Quiz" : "Mini Beslenme Testi",
+            Subtitle = DifficultySubtitle(language, difficulty, "5 daily questions", "5 günlük soru"),
+            EstimatedSeconds = difficulty == "hard" ? 65 : difficulty == "medium" ? 75 : 85,
+            PayloadJson = JsonSerializer.Serialize(new { questions = questions.Select(item => item.Question) }, JsonOptions),
+            AnswerKeyJson = JsonSerializer.Serialize(new { answers = questions.Select(item => item.Answer) }, JsonOptions)
+        };
+    }
+
+    private static DailyGameContentChallenge BuildWordFallback(DateOnly date, string language, string difficulty)
+    {
+        var seeds = BuildWordBank(language, difficulty)
+            .OrderBy(item => StableRandomKey(date, language, $"{difficulty}:word:{item.Id}"))
+            .Take(5)
+            .ToList();
+
+        var words = seeds.Select((seed, index) => new
+        {
+            id = $"w{index + 1}",
+            clue = seed.Clue,
+            scrambled = ScrambleWord(seed.Answer, date, language, difficulty, seed.Id),
+            length = seed.Answer.Length
+        }).ToList();
+
+        var answers = seeds.Select((seed, index) => new
+        {
+            wordId = $"w{index + 1}",
+            answer = seed.Answer,
+            explanation = seed.Explanation
+        }).ToList();
+
+        return new DailyGameContentChallenge
+        {
+            Type = "word",
+            Title = language == "en" ? "Word Pantry" : "Kelime Dolabı",
+            Subtitle = DifficultySubtitle(language, difficulty, "Unscramble 5 clues", "5 ipucunu çöz"),
+            EstimatedSeconds = difficulty == "hard" ? 80 : difficulty == "medium" ? 90 : 105,
+            PayloadJson = JsonSerializer.Serialize(new { words }, JsonOptions),
+            AnswerKeyJson = JsonSerializer.Serialize(new { answers }, JsonOptions)
         };
     }
 
@@ -480,6 +570,234 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
     private static object BuildWord(string id, string clue, string scrambled, int length)
         => new { id, clue, scrambled, length };
 
+    private static IReadOnlyList<MemoryFood> BuildMemoryFoodExtras(string language, string difficulty)
+    {
+        if (language == "en")
+        {
+            return difficulty switch
+            {
+                "hard" =>
+                [
+                    new("Chickpea", "🫘", "#D6A75C", "cute pastel chickpea bowl memory card, clean white background, soft shadow"),
+                    new("Kefir", "🥛", "#7DD3FC", "cute pastel kefir glass memory card, clean white background, soft shadow"),
+                    new("Buckwheat", "🌾", "#C084FC", "cute pastel buckwheat bowl memory card, clean white background, soft shadow"),
+                    new("Pumpkin seed", "🎃", "#FB923C", "cute pastel pumpkin seed memory card, clean white background, soft shadow"),
+                    new("Arugula", "🥬", "#22C55E", "cute pastel arugula leaves memory card, clean white background, soft shadow")
+                ],
+                "medium" =>
+                [
+                    new("Lentil", "🫘", "#F97316", "cute pastel lentil bowl memory card, clean white background, soft shadow"),
+                    new("Oats", "🌾", "#EAB308", "cute pastel oats bowl memory card, clean white background, soft shadow"),
+                    new("Carrot", "🥕", "#FB923C", "cute pastel carrot memory card, clean white background, soft shadow"),
+                    new("Spinach", "🥬", "#22C55E", "cute pastel spinach memory card, clean white background, soft shadow"),
+                    new("Yogurt", "🥣", "#60A5FA", "cute pastel yogurt bowl memory card, clean white background, soft shadow")
+                ],
+                _ =>
+                [
+                    new("Pear", "🍐", "#A3E635", "cute pastel pear memory card, clean white background, soft shadow"),
+                    new("Grape", "🍇", "#A78BFA", "cute pastel grape memory card, clean white background, soft shadow"),
+                    new("Cucumber", "🥒", "#4ADE80", "cute pastel cucumber memory card, clean white background, soft shadow"),
+                    new("Tomato", "🍅", "#F87171", "cute pastel tomato memory card, clean white background, soft shadow")
+                ]
+            };
+        }
+
+        return difficulty switch
+        {
+            "hard" =>
+            [
+                new("Nohut", "🫘", "#D6A75C", "sevimli pastel nohut kasesi hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Kefir", "🥛", "#7DD3FC", "sevimli pastel kefir bardağı hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Karabuğday", "🌾", "#C084FC", "sevimli pastel karabuğday kasesi hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Kabak çekirdeği", "🎃", "#FB923C", "sevimli pastel kabak çekirdeği hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Roka", "🥬", "#22C55E", "sevimli pastel roka yaprakları hafıza kartı, temiz beyaz arka plan, yumuşak gölge")
+            ],
+            "medium" =>
+            [
+                new("Mercimek", "🫘", "#F97316", "sevimli pastel mercimek kasesi hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Yulaf", "🌾", "#EAB308", "sevimli pastel yulaf kasesi hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Havuç", "🥕", "#FB923C", "sevimli pastel havuç hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Ispanak", "🥬", "#22C55E", "sevimli pastel ıspanak hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Yoğurt", "🥣", "#60A5FA", "sevimli pastel yoğurt kasesi hafıza kartı, temiz beyaz arka plan, yumuşak gölge")
+            ],
+            _ =>
+            [
+                new("Armut", "🍐", "#A3E635", "sevimli pastel armut hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Üzüm", "🍇", "#A78BFA", "sevimli pastel üzüm hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Salatalık", "🥒", "#4ADE80", "sevimli pastel salatalık hafıza kartı, temiz beyaz arka plan, yumuşak gölge"),
+                new("Domates", "🍅", "#F87171", "sevimli pastel domates hafıza kartı, temiz beyaz arka plan, yumuşak gölge")
+            ]
+        };
+    }
+
+    private static string DifficultySubtitle(string language, string difficulty, string enBase, string trBase)
+    {
+        if (language == "en")
+            return difficulty switch
+            {
+                "hard" => $"hard · {enBase}",
+                "medium" => $"medium · {enBase}",
+                _ => $"easy · {enBase}"
+            };
+
+        return difficulty switch
+        {
+            "hard" => $"zor · {trBase}",
+            "medium" => $"orta · {trBase}",
+            _ => $"kolay · {trBase}"
+        };
+    }
+
+    private static IReadOnlyList<FallbackQuizSeed> BuildQuizBank(string language, string difficulty)
+    {
+        if (language == "en")
+        {
+            return difficulty switch
+            {
+                "hard" =>
+                [
+                    new("hq1", "Which plate change usually improves balance without removing a food group?", "Add vegetables beside protein and grains", "Skip every grain", "Drink only smoothies", "Balance improves when food groups support each other."),
+                    new("hq2", "Which label detail helps compare two similar products most fairly?", "Serving size", "Mascot style", "Shelf color", "Serving size makes comparisons meaningful."),
+                    new("hq3", "Which snack pairing is more steady than fruit alone?", "Fruit with yogurt", "Fruit with candy", "Fruit with soda", "Pairing fruit with protein can feel more satisfying."),
+                    new("hq4", "Which pantry habit makes weeknight cooking easier?", "Keep one legume and one grain ready", "Buy only sauces", "Avoid frozen vegetables", "Simple staples make meals faster."),
+                    new("hq5", "Which option adds crunch with useful fats?", "Walnuts", "Sugar cubes", "Plain syrup", "Walnuts can add crunch and useful fats."),
+                    new("hq6", "Which breakfast upgrade adds fiber?", "Oats or whole-grain bread", "Only juice", "Only jam", "Whole grains are an easy fiber source.")
+                ],
+                "medium" =>
+                [
+                    new("mq1", "Which option is usually richer in fiber?", "Lentils", "White sugar", "Butter", "Lentils bring fiber and plant protein."),
+                    new("mq2", "Which drink is the cleanest hydration choice?", "Water", "Cola", "Energy drink", "Water is the simplest hydration choice."),
+                    new("mq3", "What makes a lunch plate more balanced?", "Protein, vegetables and grains", "Only dessert", "Only sauce", "A balanced plate combines food groups."),
+                    new("mq4", "Which breakfast choice brings protein?", "Egg", "Candy", "Soda", "Egg is a simple protein example."),
+                    new("mq5", "Which item is useful to check first on a label?", "Serving size", "Package color", "Ad slogan", "Serving size helps interpret the label."),
+                    new("mq6", "Which side adds freshness?", "Salad", "Cream candy", "Plain syrup", "Salad adds freshness and volume.")
+                ],
+                _ =>
+                [
+                    new("eq1", "Which one is a fruit?", "Apple", "Soda", "Candy", "Apple is a simple fruit choice."),
+                    new("eq2", "Which one is a vegetable?", "Carrot", "Cake", "Cola", "Carrot is an everyday vegetable."),
+                    new("eq3", "Which one is a dairy option?", "Yogurt", "Chips", "Lollipop", "Yogurt is a dairy option."),
+                    new("eq4", "Which one is a grain?", "Oats", "Butter", "Candy", "Oats are a breakfast grain."),
+                    new("eq5", "Which one supports hydration best?", "Water", "Cola", "Syrup", "Water is the clearest hydration choice."),
+                    new("eq6", "Which one is a legume?", "Lentils", "Chocolate", "Cream", "Lentils are legumes.")
+                ]
+            };
+        }
+
+        return difficulty switch
+        {
+            "hard" =>
+            [
+                new("hq1", "Hangi tabak hamlesi bir besin grubunu çıkarmadan dengeyi artırır?", "Protein ve tahılın yanına sebze eklemek", "Tüm tahılları çıkarmak", "Sadece smoothie içmek", "Denge, besin grupları birbirini tamamladığında güçlenir."),
+                new("hq2", "Benzer iki ürünü karşılaştırırken en adil başlangıç hangisi?", "Porsiyon miktarı", "Paket maskotu", "Raf rengi", "Porsiyon miktarı etiketi anlamlı kılar."),
+                new("hq3", "Meyveyi tek başına yemek yerine hangi eşleşme daha tok hissettirebilir?", "Meyve ve yoğurt", "Meyve ve şekerleme", "Meyve ve gazlı içecek", "Proteinli bir eşlik meyveyi daha doyurucu yapabilir."),
+                new("hq4", "Hafta içi yemeklerini kolaylaştıran dolap alışkanlığı hangisi?", "Bir baklagil ve bir tahılı hazır tutmak", "Sadece sos almak", "Dondurulmuş sebzeden kaçmak", "Basit temel ürünler yemek hazırlığını hızlandırır."),
+                new("hq5", "Hangisi çıtırlıkla birlikte faydalı yağlar da ekler?", "Ceviz", "Küp şeker", "Sade şurup", "Ceviz çıtırlık ve faydalı yağlar ekleyebilir."),
+                new("hq6", "Kahvaltıda lif desteği için hangi yükseltme daha uygundur?", "Yulaf veya tam tahıllı ekmek", "Sadece meyve suyu", "Sadece reçel", "Tam tahıllar pratik lif kaynaklarıdır.")
+            ],
+            "medium" =>
+            [
+                new("mq1", "Lif açısından genelde daha güçlü seçenek hangisi?", "Mercimek", "Beyaz şeker", "Tereyağı", "Mercimek lif ve bitkisel protein taşır."),
+                new("mq2", "Hidrasyon için en sade seçim hangisi?", "Su", "Kola", "Enerji içeceği", "Su en sade hidrasyon seçeneğidir."),
+                new("mq3", "Öğle tabağını daha dengeli yapan şey hangisi?", "Protein, sebze ve tahıl", "Sadece tatlı", "Sadece sos", "Dengeli tabak besin gruplarını birleştirir."),
+                new("mq4", "Protein açısından güçlü kahvaltı örneği hangisi?", "Yumurta", "Şekerleme", "Gazlı içecek", "Yumurta pratik bir protein örneğidir."),
+                new("mq5", "Etikette önce bakmak için yararlı bilgi hangisi?", "Porsiyon miktarı", "Paket rengi", "Reklam cümlesi", "Porsiyon miktarı etiketi yorumlamayı kolaylaştırır."),
+                new("mq6", "Tabağa ferahlık katan yan seçenek hangisi?", "Salata", "Krem şeker", "Sade şurup", "Salata ferahlık ve hacim katar.")
+            ],
+            _ =>
+            [
+                new("eq1", "Hangisi meyvedir?", "Elma", "Gazoz", "Şekerleme", "Elma kolay bir meyve seçimidir."),
+                new("eq2", "Hangisi sebzedir?", "Havuç", "Kek", "Kola", "Havuç günlük bir sebze örneğidir."),
+                new("eq3", "Hangisi süt ürünü seçeneğidir?", "Yoğurt", "Cips", "Lolipop", "Yoğurt bir süt ürünü seçeneğidir."),
+                new("eq4", "Hangisi tahıldır?", "Yulaf", "Tereyağı", "Şeker", "Yulaf kahvaltılık bir tahıldır."),
+                new("eq5", "Hidrasyonu en iyi hangisi destekler?", "Su", "Kola", "Şurup", "Su en net hidrasyon seçimidir."),
+                new("eq6", "Hangisi baklagildir?", "Mercimek", "Çikolata", "Krema", "Mercimek bir baklagildir.")
+            ]
+        };
+    }
+
+    private static IReadOnlyList<FallbackWordSeed> BuildWordBank(string language, string difficulty)
+    {
+        if (language == "en")
+        {
+            return difficulty switch
+            {
+                "hard" =>
+                [
+                    new("hw1", "A fermented dairy drink", "kefir", "Kefir is a fermented dairy drink."),
+                    new("hw2", "A legume often used in hummus", "chickpea", "Chickpeas are useful pantry legumes."),
+                    new("hw3", "A green leaf with a peppery taste", "arugula", "Arugula adds a peppery green note."),
+                    new("hw4", "A seed often sprinkled on bowls", "pumpkin", "Pumpkin seeds can add crunch."),
+                    new("hw5", "A grain-like pantry staple", "buckwheat", "Buckwheat is a useful grain-like staple."),
+                    new("hw6", "A fresh herb that brightens meals", "parsley", "Parsley adds freshness.")
+                ],
+                "medium" =>
+                [
+                    new("mw1", "Breakfast grain", "oats", "Oats are a breakfast grain."),
+                    new("mw2", "Green side plate", "salad", "Salad adds freshness."),
+                    new("mw3", "Tiny healthy crunch", "walnut", "Walnuts bring crunch."),
+                    new("mw4", "Cool dairy bowl", "yogurt", "Yogurt is a dairy option."),
+                    new("mw5", "Orange vegetable", "carrot", "Carrot is an everyday vegetable."),
+                    new("mw6", "Plant protein in soup", "lentil", "Lentils bring plant protein.")
+                ],
+                _ =>
+                [
+                    new("ew1", "A crunchy fruit", "apple", "Apple is a simple fruit choice."),
+                    new("ew2", "Yellow fruit", "banana", "Banana is a familiar fruit."),
+                    new("ew3", "A red fruit", "cherry", "Cherry is a fruit."),
+                    new("ew4", "Clear drink", "water", "Water supports hydration."),
+                    new("ew5", "A citrus fruit", "lemon", "Lemon is a citrus fruit."),
+                    new("ew6", "Green fruit", "pear", "Pear is a simple fruit.")
+                ]
+            };
+        }
+
+        return difficulty switch
+        {
+            "hard" =>
+            [
+                new("hw1", "Fermente süt içeceği", "kefir", "Kefir fermente bir süt içeceğidir."),
+                new("hw2", "Humusta sık kullanılan baklagil", "nohut", "Nohut kullanışlı bir dolap baklagilidir."),
+                new("hw3", "Keskin aromalı yeşil yaprak", "roka", "Roka tabağa canlı bir aroma katar."),
+                new("hw4", "Kaselere çıtırlık ekleyen çekirdek", "kabak", "Kabak çekirdeği çıtırlık katabilir."),
+                new("hw5", "Dolapta işe yarayan tahıl benzeri ürün", "karabugday", "Karabuğday kullanışlı bir temel üründür."),
+                new("hw6", "Yemeği tazeleyen ot", "maydanoz", "Maydanoz ferahlık katar.")
+            ],
+            "medium" =>
+            [
+                new("mw1", "Kahvaltılık tahıl", "yulaf", "Yulaf kahvaltıda sık kullanılır."),
+                new("mw2", "Yeşil yan tabak", "salata", "Salata tabağa ferahlık katar."),
+                new("mw3", "Minik çıtır yağlı tohum", "ceviz", "Ceviz küçük ama doyurucu bir dokunuştur."),
+                new("mw4", "Serin süt ürünü", "yogurt", "Yoğurt serin bir süt ürünü seçeneğidir."),
+                new("mw5", "Turuncu sebze", "havuc", "Havuç günlük bir sebzedir."),
+                new("mw6", "Çorbada bitkisel protein", "mercimek", "Mercimek bitkisel protein taşır.")
+            ],
+            _ =>
+            [
+                new("ew1", "Kırmızı/yeşil çıtır meyve", "elma", "Elma kolay bir meyve seçimidir."),
+                new("ew2", "Sarı meyve", "muz", "Muz tanıdık bir meyvedir."),
+                new("ew3", "Kırmızı küçük meyve", "kiraz", "Kiraz bir meyvedir."),
+                new("ew4", "Sade içecek", "su", "Su hidrasyonu destekler."),
+                new("ew5", "Ekşi narenciye", "limon", "Limon bir narenciye örneğidir."),
+                new("ew6", "Yeşil meyve", "armut", "Armut kolay bir meyve seçimidir.")
+            ]
+        };
+    }
+
+    private static string ScrambleWord(string answer, DateOnly date, string language, string difficulty, string id)
+    {
+        var chars = answer.ToCharArray()
+            .Select((ch, index) => new { ch, index })
+            .OrderBy(item => StableRandomKey(date, language, $"{difficulty}:{id}:{item.ch}:{item.index}"))
+            .Select(item => item.ch)
+            .ToArray();
+
+        var scrambled = new string(chars);
+        return string.Equals(scrambled, answer, StringComparison.OrdinalIgnoreCase)
+            ? new string(chars.Reverse().ToArray())
+            : scrambled;
+    }
+
     private static int StableRandomKey(DateOnly date, string language, string value)
     {
         unchecked
@@ -526,6 +844,20 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         IReadOnlyList<FallbackOption> Options);
 
     private sealed record FallbackOption(string Id, string Text);
+
+    private sealed record FallbackQuizSeed(
+        string Id,
+        string Question,
+        string Correct,
+        string WrongA,
+        string WrongB,
+        string Explanation);
+
+    private sealed record FallbackWordSeed(
+        string Id,
+        string Clue,
+        string Answer,
+        string Explanation);
 
     private sealed record MemoryFood(string Label, string Emoji, string Color, string ImagePrompt);
 }

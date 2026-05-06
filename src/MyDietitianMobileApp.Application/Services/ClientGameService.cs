@@ -21,15 +21,18 @@ public sealed class ClientGameService : IClientGameService
     private readonly AppDbContext _appDb;
     private readonly IDailyGameContentGenerator _contentGenerator;
     private readonly IClientGamificationService _gamificationService;
+    private readonly Func<DateTime> _nowLocal;
 
     public ClientGameService(
         AppDbContext appDb,
         IDailyGameContentGenerator contentGenerator,
-        IClientGamificationService gamificationService)
+        IClientGamificationService gamificationService,
+        Func<DateTime>? nowLocal = null)
     {
         _appDb = appDb;
         _contentGenerator = contentGenerator;
         _gamificationService = gamificationService;
+        _nowLocal = nowLocal ?? (() => DateTime.Now);
     }
 
     public async Task<DailyGamePackDTO> GetDailyPackAsync(
@@ -38,8 +41,10 @@ public sealed class ClientGameService : IClientGameService
         CancellationToken ct = default)
     {
         var normalizedLanguage = DailyGameChallenge.NormalizeLanguage(language);
-        var date = DateOnly.FromDateTime(DateTime.Now);
-        var challenges = await EnsureDailyChallengesAsync(date, normalizedLanguage, ct);
+        var now = _nowLocal();
+        var date = DateOnly.FromDateTime(now);
+        var difficulty = await ResolveDailyDifficultyAsync(clientId, date, ct);
+        var challenges = await EnsureDailyChallengesAsync(date, normalizedLanguage, difficulty, ct);
         var challengeIds = challenges.Select(x => x.Id).ToList();
         var sessions = await _appDb.ClientGameSessions
             .AsNoTracking()
@@ -54,6 +59,8 @@ public sealed class ClientGameService : IClientGameService
         return new DailyGamePackDTO
         {
             Date = date,
+            Difficulty = difficulty,
+            NextRefreshAt = now.Date.AddDays(1),
             CompletedCount = completedCount,
             TotalCount = DailyGameTarget,
             BadgeProgress = Math.Min(completedCount, DailyGameTarget),
@@ -164,10 +171,12 @@ public sealed class ClientGameService : IClientGameService
     private async Task<List<DailyGameChallenge>> EnsureDailyChallengesAsync(
         DateOnly date,
         string language,
+        string difficulty,
         CancellationToken ct)
     {
+        var normalizedDifficulty = DailyGameChallenge.NormalizeDifficulty(difficulty);
         var existing = await _appDb.DailyGameChallenges
-            .Where(x => x.Date == date && x.Language == language)
+            .Where(x => x.Date == date && x.Language == language && x.Difficulty == normalizedDifficulty)
             .ToListAsync(ct);
 
         var staleChallenges = existing
@@ -187,7 +196,7 @@ public sealed class ClientGameService : IClientGameService
             return existing;
         }
 
-        var generated = await _contentGenerator.GenerateAsync(date, language, ct);
+        var generated = await _contentGenerator.GenerateAsync(date, language, normalizedDifficulty, ct);
         foreach (var item in generated.Challenges)
         {
             var type = DailyGameChallenge.NormalizeGameType(item.Type);
@@ -200,6 +209,7 @@ public sealed class ClientGameService : IClientGameService
                 type,
                 item.Title,
                 item.Subtitle,
+                normalizedDifficulty,
                 item.EstimatedSeconds,
                 item.PayloadJson,
                 item.AnswerKeyJson,
@@ -218,9 +228,67 @@ public sealed class ClientGameService : IClientGameService
         }
 
         return await _appDb.DailyGameChallenges
-            .Where(x => x.Date == date && x.Language == language)
+            .Where(x => x.Date == date && x.Language == language && x.Difficulty == normalizedDifficulty)
             .ToListAsync(persistenceToken);
     }
+
+    private async Task<string> ResolveDailyDifficultyAsync(Guid clientId, DateOnly date, CancellationToken ct)
+    {
+        var since = date.AddDays(-5);
+        var recentSessions = await _appDb.ClientGameSessions
+            .AsNoTracking()
+            .Where(x => x.ClientId == clientId && x.GameDate >= since && x.GameDate < date)
+            .OrderByDescending(x => x.CompletedAtUtc)
+            .Select(x => new
+            {
+                x.GameDate,
+                x.Score,
+                x.MaxScore,
+                x.Perfect,
+                x.CompletedAtUtc
+            })
+            .ToListAsync(ct);
+
+        if (recentSessions.Count == 0)
+            return "easy";
+
+        var lastFiveDayGroups = recentSessions
+            .GroupBy(x => x.GameDate)
+            .ToList();
+
+        var lastThreeStart = date.AddDays(-3);
+        var lastThreeCompletedDays = lastFiveDayGroups
+            .Count(group => group.Key >= lastThreeStart && group.Count() >= DailyGameTarget);
+
+        var averagePercent = recentSessions.Average(x => ScorePercent(x.Score, x.MaxScore));
+        var perfectRate = recentSessions.Count(x => x.Perfect) / (double)Math.Max(1, recentSessions.Count);
+
+        var difficulty =
+            lastFiveDayGroups.Count >= 3 && averagePercent >= 85 && perfectRate >= 0.40
+                ? "hard"
+                : lastThreeCompletedDays >= 2 || (recentSessions.Count >= DailyGameTarget && averagePercent >= 70)
+                    ? "medium"
+                    : "easy";
+
+        var lastTwo = recentSessions
+            .OrderByDescending(x => x.CompletedAtUtc)
+            .Take(2)
+            .ToList();
+        if (lastTwo.Count == 2 && lastTwo.Average(x => ScorePercent(x.Score, x.MaxScore)) < 55)
+            difficulty = DowngradeDifficulty(difficulty);
+
+        return difficulty;
+    }
+
+    private static double ScorePercent(int score, int maxScore)
+        => Math.Clamp(score / (double)Math.Max(1, maxScore) * 100, 0, 100);
+
+    private static string DowngradeDifficulty(string difficulty) => difficulty switch
+    {
+        "hard" => "medium",
+        "medium" => "easy",
+        _ => "easy"
+    };
 
     private async Task<int> GetCompletedDailyCountAsync(Guid clientId, DateOnly date, CancellationToken ct)
     {
@@ -492,7 +560,8 @@ public sealed class ClientGameService : IClientGameService
     private static bool IsDailyChallengeUniqueConflict(DbUpdateException ex)
     {
         var message = ex.InnerException?.Message ?? ex.Message;
-        return message.Contains("IX_DailyGameChallenges_Date_Language_GameType", StringComparison.OrdinalIgnoreCase) ||
+        return message.Contains("IX_DailyGameChallenges_Date_Language_GameType_Difficulty", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("IX_DailyGameChallenges_Date_Language_GameType", StringComparison.OrdinalIgnoreCase) ||
                message.Contains("DailyGameChallenges", StringComparison.OrdinalIgnoreCase) &&
                message.Contains("duplicate", StringComparison.OrdinalIgnoreCase);
     }

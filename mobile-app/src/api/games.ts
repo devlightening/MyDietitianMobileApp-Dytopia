@@ -5,6 +5,8 @@ export type DailyGameStatus = "available" | "completed";
 
 export interface DailyGamePack {
   date: string;
+  difficulty?: "easy" | "medium" | "hard" | string;
+  nextRefreshAt?: string;
   completedCount: number;
   totalCount: number;
   badgeProgress: number;

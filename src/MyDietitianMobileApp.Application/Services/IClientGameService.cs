@@ -23,6 +23,7 @@ public interface IDailyGameContentGenerator
     Task<DailyGameContentPack> GenerateAsync(
         DateOnly date,
         string language,
+        string difficulty,
         CancellationToken ct = default);
 }
 

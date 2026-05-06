@@ -29,7 +29,7 @@ public class ClientGameServiceTests
             options,
             NullLogger<DailyGameContentGenerator>.Instance);
 
-        var pack = await generator.GenerateAsync(new DateOnly(2026, 5, 6), "tr");
+        var pack = await generator.GenerateAsync(new DateOnly(2026, 5, 6), "tr", "easy");
 
         pack.IsFallback.Should().BeTrue();
         pack.SourceProvider.Should().Be("fallback");
@@ -42,6 +42,25 @@ public class ClientGameServiceTests
     }
 
     [Fact]
+    public async Task DailyGenerator_FallbackChangesAcrossDaysAndDifficulty()
+    {
+        var generator = new DailyGameContentGenerator(
+            new StaticHttpClientFactory("not-used"),
+            new LlmNormalizationOptions(),
+            NullLogger<DailyGameContentGenerator>.Instance);
+
+        var easyDayOne = await generator.GenerateAsync(new DateOnly(2026, 5, 6), "tr", "easy");
+        var easyDayTwo = await generator.GenerateAsync(new DateOnly(2026, 5, 7), "tr", "easy");
+        var hardDayOne = await generator.GenerateAsync(new DateOnly(2026, 5, 6), "tr", "hard");
+
+        easyDayOne.IsFallback.Should().BeTrue();
+        easyDayOne.Challenges.Single(x => x.Type == "quiz").PayloadJson
+            .Should().NotBe(easyDayTwo.Challenges.Single(x => x.Type == "quiz").PayloadJson);
+        easyDayOne.Challenges.Single(x => x.Type == "word").PayloadJson
+            .Should().NotBe(hardDayOne.Challenges.Single(x => x.Type == "word").PayloadJson);
+    }
+
+    [Fact]
     public async Task SubmitAsync_ScoresMemoryOnServer_AndDoesNotInflateDuplicateAttempts()
     {
         await using var db = CreateDbContext();
@@ -49,7 +68,12 @@ public class ClientGameServiceTests
         var clientId = Guid.NewGuid();
 
         var pack = await service.GetDailyPackAsync(clientId, "tr");
+        var secondPack = await service.GetDailyPackAsync(clientId, "tr");
         var memory = pack.Challenges.Single(challenge => challenge.Type == "memory");
+
+        secondPack.Challenges.Single(challenge => challenge.Type == "memory").Id.Should().Be(memory.Id);
+        pack.Difficulty.Should().Be("easy");
+        pack.NextRefreshAt.Should().BeAfter(DateTime.Now.AddHours(-1));
 
         var firstSubmit = await service.SubmitAsync(
             clientId,
@@ -134,13 +158,118 @@ public class ClientGameServiceTests
         db.ClientAchievementUnlocks.Count(unlock => unlock.ClientId == clientId && unlock.BadgeId == "game_monster").Should().Be(1);
     }
 
-    private static ClientGameService CreateService(AppDbContext db)
+    [Fact]
+    public async Task GetDailyPackAsync_ProgressesDifficultyFromUserHistory()
+    {
+        await using var db = CreateDbContext();
+        var clientId = Guid.NewGuid();
+        var dietitianId = Guid.NewGuid();
+
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 1, 9, 0, 0));
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 2, 9, 0, 0));
+
+        var mediumPack = await CreateService(db, new DateTime(2026, 5, 3, 9, 0, 0)).GetDailyPackAsync(clientId, "tr");
+        mediumPack.Difficulty.Should().Be("medium");
+
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 3, 9, 0, 0));
+
+        var hardPack = await CreateService(db, new DateTime(2026, 5, 4, 9, 0, 0)).GetDailyPackAsync(clientId, "tr");
+        hardPack.Difficulty.Should().Be("hard");
+    }
+
+    [Fact]
+    public async Task GetDailyPackAsync_DowngradesDifficultyAfterTwoLowScores()
+    {
+        await using var db = CreateDbContext();
+        var clientId = Guid.NewGuid();
+        var dietitianId = Guid.NewGuid();
+
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 1, 9, 0, 0));
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 2, 9, 0, 0));
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 3, 9, 0, 0));
+        await SubmitPerfectDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 4, 9, 0, 0));
+        await SubmitLowPartialDailyAsync(db, clientId, dietitianId, new DateTime(2026, 5, 5, 9, 0, 0));
+
+        var pack = await CreateService(db, new DateTime(2026, 5, 6, 9, 0, 0)).GetDailyPackAsync(clientId, "tr");
+        pack.Difficulty.Should().Be("medium");
+    }
+
+    [Fact]
+    public async Task GetDailyPackAsync_AllowsDifferentDifficultyPacksOnSameDate()
+    {
+        await using var db = CreateDbContext();
+        var strongClientId = Guid.NewGuid();
+        var newClientId = Guid.NewGuid();
+        var dietitianId = Guid.NewGuid();
+
+        await SubmitPerfectDailyAsync(db, strongClientId, dietitianId, new DateTime(2026, 5, 1, 9, 0, 0));
+        await SubmitPerfectDailyAsync(db, strongClientId, dietitianId, new DateTime(2026, 5, 2, 9, 0, 0));
+        await SubmitPerfectDailyAsync(db, strongClientId, dietitianId, new DateTime(2026, 5, 3, 9, 0, 0));
+
+        var date = new DateTime(2026, 5, 4, 9, 0, 0);
+        var hardPack = await CreateService(db, date).GetDailyPackAsync(strongClientId, "tr");
+        var easyPack = await CreateService(db, date).GetDailyPackAsync(newClientId, "tr");
+
+        hardPack.Difficulty.Should().Be("hard");
+        easyPack.Difficulty.Should().Be("easy");
+        db.DailyGameChallenges.Count(challenge => challenge.Date == DateOnly.FromDateTime(date)).Should().Be(6);
+    }
+
+    private static ClientGameService CreateService(AppDbContext db, DateTime? now = null)
     {
         return new ClientGameService(
             db,
             new FixedDailyGameContentGenerator(),
-            new ClientGamificationService(db));
+            new ClientGamificationService(db),
+            () => now ?? DateTime.Now);
     }
+
+    private static async Task SubmitPerfectDailyAsync(AppDbContext db, Guid clientId, Guid dietitianId, DateTime now)
+    {
+        var service = CreateService(db, now);
+        var pack = await service.GetDailyPackAsync(clientId, "tr");
+        foreach (var challenge in pack.Challenges)
+        {
+            await service.SubmitAsync(clientId, true, dietitianId, challenge.Id, PerfectRequestFor(challenge.Type));
+        }
+    }
+
+    private static async Task SubmitLowPartialDailyAsync(AppDbContext db, Guid clientId, Guid dietitianId, DateTime now)
+    {
+        var service = CreateService(db, now);
+        var pack = await service.GetDailyPackAsync(clientId, "tr");
+        foreach (var challenge in pack.Challenges.Take(2))
+        {
+            await service.SubmitAsync(clientId, true, dietitianId, challenge.Id, EmptyRequestFor(challenge.Type));
+        }
+    }
+
+    private static SubmitGameRequestDTO PerfectRequestFor(string gameType) => gameType switch
+    {
+        "memory" => new SubmitGameRequestDTO
+        {
+            Answers = Json("""{"matchedPairIds":["p01","p02","p03","p04","p05","p06","p07","p08"]}"""),
+            Moves = 8,
+            DurationSeconds = 60
+        },
+        "quiz" => new SubmitGameRequestDTO
+        {
+            Answers = Json("""{"responses":[{"questionId":"q1","optionId":"a"},{"questionId":"q2","optionId":"a"},{"questionId":"q3","optionId":"a"},{"questionId":"q4","optionId":"a"},{"questionId":"q5","optionId":"a"}]}"""),
+            DurationSeconds = 45
+        },
+        _ => new SubmitGameRequestDTO
+        {
+            Answers = Json("""{"words":[{"wordId":"w1","answer":"elma"},{"wordId":"w2","answer":"yulaf"},{"wordId":"w3","answer":"salata"},{"wordId":"w4","answer":"ceviz"},{"wordId":"w5","answer":"yogurt"}]}"""),
+            DurationSeconds = 70
+        }
+    };
+
+    private static SubmitGameRequestDTO EmptyRequestFor(string gameType) => gameType switch
+    {
+        "memory" => new SubmitGameRequestDTO { Answers = Json("""{"matchedPairIds":[]}"""), Moves = 20, DurationSeconds = 180 },
+        "quiz" => new SubmitGameRequestDTO { Answers = Json("""{"responses":[]}"""), DurationSeconds = 120 },
+        _ => new SubmitGameRequestDTO { Answers = Json("""{"words":[]}"""), DurationSeconds = 140 }
+    };
 
     private static AppDbContext CreateDbContext()
     {
@@ -159,7 +288,7 @@ public class ClientGameServiceTests
 
     private sealed class FixedDailyGameContentGenerator : IDailyGameContentGenerator
     {
-        public Task<DailyGameContentPack> GenerateAsync(DateOnly date, string language, CancellationToken ct = default)
+        public Task<DailyGameContentPack> GenerateAsync(DateOnly date, string language, string difficulty, CancellationToken ct = default)
         {
             var pack = new DailyGameContentPack
             {

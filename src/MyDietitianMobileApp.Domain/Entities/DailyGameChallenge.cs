@@ -26,6 +26,7 @@ public class DailyGameChallenge
         string gameType,
         string title,
         string subtitle,
+        string difficulty,
         int estimatedSeconds,
         string payloadJson,
         string answerKeyJson,
@@ -38,7 +39,7 @@ public class DailyGameChallenge
         GameType = NormalizeGameType(gameType);
         Title = string.IsNullOrWhiteSpace(title) ? GameType : title.Trim();
         Subtitle = string.IsNullOrWhiteSpace(subtitle) ? string.Empty : subtitle.Trim();
-        Difficulty = "easy";
+        Difficulty = NormalizeDifficulty(difficulty);
         EstimatedSeconds = Math.Clamp(estimatedSeconds, 20, 360);
         PayloadJson = string.IsNullOrWhiteSpace(payloadJson) ? "{}" : payloadJson;
         AnswerKeyJson = string.IsNullOrWhiteSpace(answerKeyJson) ? "{}" : answerKeyJson;
@@ -62,6 +63,17 @@ public class DailyGameChallenge
             "quiz" => "quiz",
             "word" => "word",
             _ => normalized
+        };
+    }
+
+    public static string NormalizeDifficulty(string? difficulty)
+    {
+        var normalized = string.IsNullOrWhiteSpace(difficulty) ? "easy" : difficulty.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "medium" => "medium",
+            "hard" => "hard",
+            _ => "easy"
         };
     }
 }
