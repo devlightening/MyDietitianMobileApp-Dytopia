@@ -10,7 +10,8 @@ namespace MyDietitianMobileApp.Application.Services;
 
 public sealed class ClientGameService : IClientGameService
 {
-    private const int DailyGameTarget = 3;
+    private const int DailyGameTarget = 5;
+    private static readonly string[] RequiredDailyGameTypes = ["memory", "quiz", "word", "guess", "market"];
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -191,7 +192,7 @@ public sealed class ClientGameService : IClientGameService
 
         var existingTypes = existing.Select(x => x.GameType).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (existingTypes.Count >= DailyGameTarget &&
-            new[] { "memory", "quiz", "word" }.All(existingTypes.Contains))
+            RequiredDailyGameTypes.All(existingTypes.Contains))
         {
             return existing;
         }
@@ -324,6 +325,8 @@ public sealed class ClientGameService : IClientGameService
             "memory" => ScoreMemory(challenge, request),
             "quiz" => ScoreQuiz(challenge, request),
             "word" => ScoreWord(challenge, request),
+            "guess" => ScoreGuess(challenge, request),
+            "market" => ScoreMarket(challenge, request),
             _ => new ScoreResult(0, 100, 0, false, "Bu oyun tipi henüz desteklenmiyor.", ToJsonElement(new { reason = "unsupported" }))
         };
     }
@@ -453,6 +456,122 @@ public sealed class ClientGameService : IClientGameService
         return new ScoreResult(score, maxScore, correct, perfect, explanation, ToJsonElement(new { words = reviewItems }));
     }
 
+    private static ScoreResult ScoreGuess(DailyGameChallenge challenge, SubmitGameRequestDTO request)
+    {
+        using var answerDoc = JsonDocument.Parse(challenge.AnswerKeyJson);
+        var expected = answerDoc.RootElement
+            .GetProperty("answers")
+            .EnumerateArray()
+            .Select(x => new GuessAnswer(
+                x.GetProperty("itemId").GetString() ?? string.Empty,
+                x.GetProperty("correctOptionId").GetString() ?? string.Empty,
+                x.TryGetProperty("explanation", out var explanation) ? explanation.GetString() ?? string.Empty : string.Empty))
+            .Where(x => !string.IsNullOrWhiteSpace(x.ItemId))
+            .ToDictionary(x => x.ItemId, StringComparer.OrdinalIgnoreCase);
+
+        var responses = ReadGuessResponses(request.Answers);
+        var correct = responses.Count(response =>
+            expected.TryGetValue(response.ItemId, out var answer) &&
+            string.Equals(response.OptionId, answer.CorrectOptionId, StringComparison.OrdinalIgnoreCase));
+
+        var usedHints = responses.Sum(response => Math.Clamp(response.RevealedHints, 1, 3));
+        var reviewItems = expected.Values.Select(answer =>
+        {
+            var selected = responses.LastOrDefault(response =>
+                string.Equals(response.ItemId, answer.ItemId, StringComparison.OrdinalIgnoreCase));
+            var selectedOptionId = selected?.OptionId;
+            var revealedHints = selected?.RevealedHints ?? 0;
+            var isCorrect = string.Equals(selectedOptionId, answer.CorrectOptionId, StringComparison.OrdinalIgnoreCase);
+            return new
+            {
+                itemId = answer.ItemId,
+                selectedOptionId = string.IsNullOrWhiteSpace(selectedOptionId) ? null : selectedOptionId,
+                correctOptionId = answer.CorrectOptionId,
+                revealedHints,
+                isCorrect,
+                answer.Explanation
+            };
+        }).ToList();
+
+        var maxScore = 100;
+        var baseScore = correct * 20;
+        var hintBonus = correct > 0
+            ? Math.Max(0, 20 - Math.Max(0, usedHints - correct) * 4)
+            : 0;
+        var score = Math.Clamp(baseScore + hintBonus, 0, maxScore);
+        var perfect = correct == expected.Count && responses.All(response => response.RevealedHints <= 2);
+        var explanation = perfect
+            ? "Besin dedektifi harika çalıştı! İpuçlarını erken yakaladın."
+            : $"{correct}/{expected.Count} besini doğru tahmin ettin. İpuçları arttıkça seçenekler daha netleşir.";
+
+        return new ScoreResult(score, maxScore, correct, perfect, explanation, ToJsonElement(new { guesses = reviewItems }));
+    }
+
+    private static ScoreResult ScoreMarket(DailyGameChallenge challenge, SubmitGameRequestDTO request)
+    {
+        using var answerDoc = JsonDocument.Parse(challenge.AnswerKeyJson);
+        var targetIds = answerDoc.RootElement
+            .GetProperty("targets")
+            .EnumerateArray()
+            .Select(x => x.GetString() ?? string.Empty)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var hazardIds = answerDoc.RootElement.TryGetProperty("hazards", out var hazardsElement) &&
+                        hazardsElement.ValueKind == JsonValueKind.Array
+            ? hazardsElement
+                .EnumerateArray()
+                .Select(x => x.GetString() ?? string.Empty)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var collected = ReadStringArray(request.Answers, "collectedItemIds")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var hitHazards = ReadStringArray(request.Answers, "hitHazardIds")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var correctCollected = collected
+            .Where(targetIds.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var wrongCollected = collected
+            .Where(id => hazardIds.Contains(id) || !targetIds.Contains(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var missedTargets = targetIds
+            .Where(id => !correctCollected.Contains(id, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        var maxScore = 100;
+        var baseScore = (int)Math.Round(correctCollected.Count / (double)Math.Max(1, targetIds.Count) * 82);
+        var cleanBonus = hitHazards.Count == 0 && wrongCollected.Count == 0 ? 12 : 0;
+        var timeBonus = correctCollected.Count == targetIds.Count
+            ? Math.Max(0, 6 - Math.Max(0, request.DurationSeconds - challenge.EstimatedSeconds) / 8)
+            : 0;
+        var penalty = Math.Min(32, hitHazards.Count * 10 + wrongCollected.Count * 7 + missedTargets.Count * 3);
+        var score = Math.Clamp(baseScore + cleanBonus + timeBonus - penalty, 0, maxScore);
+        var perfect = correctCollected.Count == targetIds.Count && hitHazards.Count == 0 && wrongCollected.Count == 0;
+
+        var review = ToJsonElement(new
+        {
+            collectedTargets = correctCollected.Count,
+            totalTargets = targetIds.Count,
+            hitHazards = hitHazards.Count,
+            wrongCollected = wrongCollected.Count,
+            missedTargets = missedTargets.Count,
+            durationSeconds = Math.Max(0, request.DurationSeconds)
+        });
+
+        var explanation = perfect
+            ? "Market kosusu kusursuz! Listedeki tum urunleri topladin, tuzaklardan kactin."
+            : $"{correctCollected.Count}/{targetIds.Count} liste urunu toplandi. Tuzak urunlerden kacininca puan daha hizli yukselir.";
+
+        return new ScoreResult(score, maxScore, correctCollected.Count, perfect, explanation, review);
+    }
+
     private static List<string> ReadStringArray(JsonElement root, string propertyName)
     {
         if (root.ValueKind != JsonValueKind.Object ||
@@ -493,6 +612,27 @@ public sealed class ClientGameService : IClientGameService
             .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.OrdinalIgnoreCase);
     }
 
+    private static List<GuessResponse> ReadGuessResponses(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("guesses", out var value) ||
+            value.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return value.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.Object)
+            .Select(item => new GuessResponse(
+                item.TryGetProperty("itemId", out var itemId) ? itemId.GetString() ?? string.Empty : string.Empty,
+                item.TryGetProperty("optionId", out var optionId) ? optionId.GetString() ?? string.Empty : string.Empty,
+                item.TryGetProperty("revealedHints", out var hints) && hints.TryGetInt32(out var hintCount) ? hintCount : 3))
+            .Where(item => !string.IsNullOrWhiteSpace(item.ItemId))
+            .GroupBy(item => item.ItemId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToList();
+    }
+
     private static JsonElement ToJsonElement(object value)
     {
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(value, JsonOptions));
@@ -530,6 +670,8 @@ public sealed class ClientGameService : IClientGameService
         "memory" => 0,
         "quiz" => 1,
         "word" => 2,
+        "guess" => 3,
+        "market" => 4,
         _ => 99
     };
 
@@ -569,4 +711,6 @@ public sealed class ClientGameService : IClientGameService
     private sealed record ScoreResult(int Score, int MaxScore, int CorrectCount, bool Perfect, string Explanation, JsonElement Review);
     private sealed record QuizAnswer(string QuestionId, string CorrectOptionId, string Explanation);
     private sealed record WordAnswer(string WordId, string Answer, string Explanation);
+    private sealed record GuessAnswer(string ItemId, string CorrectOptionId, string Explanation);
+    private sealed record GuessResponse(string ItemId, string OptionId, int RevealedHints);
 }

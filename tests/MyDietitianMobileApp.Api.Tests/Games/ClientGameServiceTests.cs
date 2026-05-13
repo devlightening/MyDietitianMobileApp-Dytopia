@@ -33,7 +33,7 @@ public class ClientGameServiceTests
 
         pack.IsFallback.Should().BeTrue();
         pack.SourceProvider.Should().Be("fallback");
-        pack.Challenges.Select(challenge => challenge.Type).Should().BeEquivalentTo(["memory", "quiz", "word"]);
+        pack.Challenges.Select(challenge => challenge.Type).Should().BeEquivalentTo(["memory", "quiz", "word", "guess", "market"]);
 
         var memory = pack.Challenges.Single(challenge => challenge.Type == "memory");
         using var payload = JsonDocument.Parse(memory.PayloadJson);
@@ -107,7 +107,7 @@ public class ClientGameServiceTests
     }
 
     [Fact]
-    public async Task SubmitAsync_UnlocksGameMonster_WhenThreeDifferentDailyGamesFinish()
+    public async Task SubmitAsync_UnlocksGameMonster_WhenFiveDifferentDailyGamesFinish()
     {
         await using var db = CreateDbContext();
         var service = CreateService(db);
@@ -118,6 +118,8 @@ public class ClientGameServiceTests
         var memory = pack.Challenges.Single(challenge => challenge.Type == "memory");
         var quiz = pack.Challenges.Single(challenge => challenge.Type == "quiz");
         var word = pack.Challenges.Single(challenge => challenge.Type == "word");
+        var guess = pack.Challenges.Single(challenge => challenge.Type == "guess");
+        var market = pack.Challenges.Single(challenge => challenge.Type == "market");
 
         await service.SubmitAsync(
             clientId,
@@ -142,7 +144,7 @@ public class ClientGameServiceTests
                 DurationSeconds = 45
             });
 
-        var finalSubmit = await service.SubmitAsync(
+        await service.SubmitAsync(
             clientId,
             isPremium: true,
             dietitianId,
@@ -153,7 +155,25 @@ public class ClientGameServiceTests
                 DurationSeconds = 70
             });
 
-        finalSubmit.CompletedDailyCount.Should().Be(3);
+        await service.SubmitAsync(
+            clientId,
+            isPremium: true,
+            dietitianId,
+            guess.Id,
+            new SubmitGameRequestDTO
+            {
+                Answers = Json("""{"guesses":[{"itemId":"g1","optionId":"a","revealedHints":1},{"itemId":"g2","optionId":"a","revealedHints":1},{"itemId":"g3","optionId":"a","revealedHints":1},{"itemId":"g4","optionId":"a","revealedHints":1}]}"""),
+                DurationSeconds = 55
+            });
+
+        var finalSubmit = await service.SubmitAsync(
+            clientId,
+            isPremium: true,
+            dietitianId,
+            market.Id,
+            PerfectRequestFor("market"));
+
+        finalSubmit.CompletedDailyCount.Should().Be(5);
         finalSubmit.EarnedBadgeIds.Should().Contain("game_monster");
         db.ClientAchievementUnlocks.Count(unlock => unlock.ClientId == clientId && unlock.BadgeId == "game_monster").Should().Be(1);
     }
@@ -212,7 +232,7 @@ public class ClientGameServiceTests
 
         hardPack.Difficulty.Should().Be("hard");
         easyPack.Difficulty.Should().Be("easy");
-        db.DailyGameChallenges.Count(challenge => challenge.Date == DateOnly.FromDateTime(date)).Should().Be(6);
+        db.DailyGameChallenges.Count(challenge => challenge.Date == DateOnly.FromDateTime(date)).Should().Be(10);
     }
 
     private static ClientGameService CreateService(AppDbContext db, DateTime? now = null)
@@ -257,9 +277,17 @@ public class ClientGameServiceTests
             Answers = Json("""{"responses":[{"questionId":"q1","optionId":"a"},{"questionId":"q2","optionId":"a"},{"questionId":"q3","optionId":"a"},{"questionId":"q4","optionId":"a"},{"questionId":"q5","optionId":"a"}]}"""),
             DurationSeconds = 45
         },
+        "market" => new SubmitGameRequestDTO
+        {
+            Answers = Json("""{"collectedItemIds":["target-1","target-2","target-3","target-4","target-5","target-6"],"hitHazardIds":[],"missedTargetIds":[]}"""),
+            Moves = 6,
+            DurationSeconds = 42
+        },
         _ => new SubmitGameRequestDTO
         {
-            Answers = Json("""{"words":[{"wordId":"w1","answer":"elma"},{"wordId":"w2","answer":"yulaf"},{"wordId":"w3","answer":"salata"},{"wordId":"w4","answer":"ceviz"},{"wordId":"w5","answer":"yogurt"}]}"""),
+            Answers = gameType == "guess"
+                ? Json("""{"guesses":[{"itemId":"g1","optionId":"a","revealedHints":1},{"itemId":"g2","optionId":"a","revealedHints":1},{"itemId":"g3","optionId":"a","revealedHints":1},{"itemId":"g4","optionId":"a","revealedHints":1}]}""")
+                : Json("""{"words":[{"wordId":"w1","answer":"elma"},{"wordId":"w2","answer":"yulaf"},{"wordId":"w3","answer":"salata"},{"wordId":"w4","answer":"ceviz"},{"wordId":"w5","answer":"yogurt"}]}"""),
             DurationSeconds = 70
         }
     };
@@ -268,6 +296,8 @@ public class ClientGameServiceTests
     {
         "memory" => new SubmitGameRequestDTO { Answers = Json("""{"matchedPairIds":[]}"""), Moves = 20, DurationSeconds = 180 },
         "quiz" => new SubmitGameRequestDTO { Answers = Json("""{"responses":[]}"""), DurationSeconds = 120 },
+        "guess" => new SubmitGameRequestDTO { Answers = Json("""{"guesses":[]}"""), DurationSeconds = 140 },
+        "market" => new SubmitGameRequestDTO { Answers = Json("""{"collectedItemIds":[],"hitHazardIds":["hazard-1"],"missedTargetIds":["target-1"]}"""), DurationSeconds = 140 },
         _ => new SubmitGameRequestDTO { Answers = Json("""{"words":[]}"""), DurationSeconds = 140 }
     };
 
@@ -359,6 +389,75 @@ public class ClientGameServiceTests
                                 new { wordId = "w4", answer = "ceviz", explanation = "Ceviz çıtır bir dokunuştur." },
                                 new { wordId = "w5", answer = "yoğurt", explanation = "Yoğurt serin bir seçenektir." }
                             }
+                        })
+                    },
+                    new DailyGameContentChallenge
+                    {
+                        Type = "guess",
+                        Title = "Besin Dedektifi",
+                        Subtitle = "4 tahmin",
+                        EstimatedSeconds = 95,
+                        PayloadJson = JsonSerializer.Serialize(new
+                        {
+                            items = Enumerable.Range(1, 4).Select(index => new
+                            {
+                                id = $"g{index}",
+                                maskedName = "E___",
+                                category = "Meyve",
+                                color = "#F87171",
+                                emoji = "?",
+                                clues = new[] { "Bir besinim.", "Çıtır olabilirim.", "Kırmızı ya da yeşil olurum." },
+                                options = new[] { new { id = "a", text = "Elma", emoji = "🍎" }, new { id = "b", text = "Gazoz", emoji = "🥤" }, new { id = "c", text = "Şeker", emoji = "🍬" } }
+                            })
+                        }),
+                        AnswerKeyJson = JsonSerializer.Serialize(new
+                        {
+                            answers = Enumerable.Range(1, 4).Select(index => new { itemId = $"g{index}", correctOptionId = "a", explanation = "Elma kolay bir meyvedir." })
+                        })
+                    },
+                    new DailyGameContentChallenge
+                    {
+                        Type = "market",
+                        Title = "Market Kosusu",
+                        Subtitle = "3 seritli kosu",
+                        EstimatedSeconds = 45,
+                        PayloadJson = JsonSerializer.Serialize(new
+                        {
+                            missionTitle = "Temiz listeyi topla",
+                            missionSubtitle = "Listedekileri topla, tuzaklardan kac.",
+                            timeLimitSeconds = 45,
+                            targetCount = 6,
+                            items = Enumerable.Range(1, 6)
+                                .Select(index => new
+                                {
+                                    id = $"target-{index}",
+                                    label = $"Liste {index}",
+                                    emoji = "🥬",
+                                    lane = 0,
+                                    spawnTick = index * 4,
+                                    speed = 0.07,
+                                    isTarget = true,
+                                    category = "liste",
+                                    color = "#47B972"
+                                })
+                                .Concat(Enumerable.Range(1, 8).Select(index => new
+                                {
+                                    id = $"hazard-{index}",
+                                    label = $"Tuzak {index}",
+                                    emoji = "🥤",
+                                    lane = 1,
+                                    spawnTick = 2 + index * 4,
+                                    speed = 0.07,
+                                    isTarget = false,
+                                    category = "tuzak",
+                                    color = "#E57E6B"
+                                }))
+                        }),
+                        AnswerKeyJson = JsonSerializer.Serialize(new
+                        {
+                            targets = Enumerable.Range(1, 6).Select(index => $"target-{index}"),
+                            hazards = Enumerable.Range(1, 8).Select(index => $"hazard-{index}"),
+                            explanation = "Hedefler liste urunleridir."
                         })
                     }
                 ]

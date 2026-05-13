@@ -62,6 +62,8 @@ public class DailyGameChallenge
             "memory" => "memory",
             "quiz" => "quiz",
             "word" => "word",
+            "guess" => "guess",
+            "market" => "market",
             _ => normalized
         };
     }

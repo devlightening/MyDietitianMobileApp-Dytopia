@@ -289,6 +289,11 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   }), [clearTimerBanner, feedbackMode, hideDialog, pauseTimerBanner, playFeedback, resumeTimerBanner, setFeedbackMode, setTimerBannerEnabled, setToastDurationMs, showDialog, showToast, showUndoToast, startTimerBanner, timerBannerEnabled, toastDurationMs]);
 
   const activeDialog = dialog;
+  const runAfterDialogDismiss = useCallback((action?: () => void) => {
+    hideDialog();
+    if (!action) return;
+    setTimeout(action, 0);
+  }, [hideDialog]);
 
   return (
     <FeedbackContext.Provider value={value}>
@@ -374,15 +379,13 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
         suggestions={activeDialog?.suggestions?.map((action) => ({
           ...action,
           onPress: () => {
-            hideDialog();
-            action.onPress?.();
+            runAfterDialogDismiss(action.onPress);
           },
         }))}
         secondaryAction={activeDialog?.secondaryAction ? {
           ...activeDialog.secondaryAction,
           onPress: () => {
-            hideDialog();
-            activeDialog.secondaryAction?.onPress?.();
+            runAfterDialogDismiss(activeDialog.secondaryAction?.onPress);
           },
         } : undefined}
         primaryAction={{
@@ -390,8 +393,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
           tone: activeDialog?.primaryAction?.tone,
           icon: activeDialog?.primaryAction?.icon,
           onPress: () => {
-            hideDialog();
-            activeDialog?.primaryAction?.onPress?.();
+            runAfterDialogDismiss(activeDialog?.primaryAction?.onPress);
           },
         }}
       />

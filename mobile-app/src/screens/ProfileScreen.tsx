@@ -26,9 +26,11 @@ import { useGamification } from "../queries/useGamification";
 import apiClient from "../api/client";
 import { getMyProfile, updateMyProfile } from "../api/profile";
 import { getFavoriteRecipesSummary, type FavoriteRecipesSummaryDto } from "../api/favorites";
+import { BRAND_LOGO } from "../assets/brandAssets";
 import { useHeroEntrance, useFadeRise, dur, spring } from "../hooks/useAuraMotion";
 import ProduceBubble from "../components/decor/ProduceBubble";
 import ProfileEditCard from "../components/profile/ProfileEditCard";
+import AppDialog from "../components/ui/AppDialog";
 import { mapGamificationToMotivation } from "../motivation/streaks";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,7 +49,6 @@ interface ProfileData {
 }
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
-const BRAND_LOGO = require("../../assets/dytopia-logo.png");
 
 function getProfilePhotoStorageKey(publicUserId?: string) {
   return `profile_photo_uri_${publicUserId ?? "anonymous"}`;
@@ -153,7 +154,7 @@ function ProfileAvatar({
           ) : (
             <>
               <Animated.View style={[av.logoAura, { backgroundColor: theme.primaryGlow, borderColor: theme.borderEmerald }, logoAuraStyle]} />
-              <Animated.Image source={BRAND_LOGO} resizeMode="contain" style={[av.brandLogo, logoStyle]} />
+              <Animated.Image source={BRAND_LOGO} resizeMode="contain" fadeDuration={0} style={[av.brandLogo, logoStyle]} />
               {hasInitials ? (
                 <View style={[av.initialBadge, { backgroundColor: theme.primary, borderColor: theme.surface }]}>
                   <Text style={av.initialBadgeText}>{initials.slice(0, 1)}</Text>
@@ -1081,6 +1082,7 @@ export default function ProfileScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [fullNameDraft, setFullNameDraft] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
 
   const headerStyle = useHeroEntrance(0, 18);
   const section0    = useFadeRise(180, 10);
@@ -1555,16 +1557,7 @@ export default function ProfileScreen() {
               backgroundColor: `${theme.accentCoral}0C`,
               borderColor:     `${theme.accentCoral}30`,
             }]}
-            onPress={() =>
-              Alert.alert(
-                t.profile.logout,
-                t.profile.logoutConfirm,
-                [
-                  { text: t.common.cancel, style: "cancel"      },
-                  { text: t.profile.logout, style: "destructive", onPress: logout },
-                ],
-              )
-            }
+            onPress={() => setLogoutDialogVisible(true)}
             activeOpacity={0.75}
           >
             <Ionicons name="log-out-outline" size={17} color={theme.accentCoral} />
@@ -1574,6 +1567,28 @@ export default function ProfileScreen() {
 
         <View style={ps.bottomPad} />
       </ScrollView>
+      <AppDialog
+        visible={logoutDialogVisible}
+        title={t.profile.logout}
+        message={t.profile.logoutConfirm}
+        eyebrow={language === "tr" ? "Hesap oturumu" : "Account session"}
+        icon="log-out-outline"
+        variant="error"
+        onDismiss={() => setLogoutDialogVisible(false)}
+        secondaryAction={{
+          label: t.common.cancel,
+          tone: "muted",
+          onPress: () => setLogoutDialogVisible(false),
+        }}
+        primaryAction={{
+          label: t.profile.logout,
+          tone: "danger",
+          onPress: () => {
+            setLogoutDialogVisible(false);
+            void logout();
+          },
+        }}
+      />
     </View>
   );
 }

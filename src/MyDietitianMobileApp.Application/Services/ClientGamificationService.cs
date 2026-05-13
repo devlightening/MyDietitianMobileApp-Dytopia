@@ -10,9 +10,11 @@ public class ClientGamificationService : IClientGamificationService
 {
     public const int HydrationGoalGlasses = 10;
     private const int HydrationStreakBadgeDays = 3;
+    private const int MealLogDailyBadgeTarget = 3;
     private static readonly HashSet<string> EphemeralAchievements =
     [
-        "likir_likir"
+        "likir_likir",
+        "tabak_jurnali"
     ];
 
     public static class EventTypes
@@ -226,6 +228,11 @@ public class ClientGamificationService : IClientGamificationService
             .Where(x => x.ClientId == clientId && x.AtUtc >= startUtc)
             .ToListAsync(ct);
 
+        var mealLogs = await _appDb.ClientMealLogs
+            .AsNoTracking()
+            .Where(x => x.ClientId == clientId && x.Date >= startDate && x.Date <= today)
+            .ToListAsync(ct);
+
         var careMessages = await _appDb.ClientCareMessages
             .AsNoTracking()
             .Where(x => x.ClientId == clientId && x.SenderRole == "Client" && x.CreatedAtUtc >= startUtc)
@@ -253,6 +260,9 @@ public class ClientGamificationService : IClientGamificationService
 
         var trackingByDate = tracking.ToDictionary(x => x.Date, x => x);
         var eventsByDate = events.GroupBy(x => x.EventDate).ToDictionary(x => x.Key, x => x.ToList());
+        var mealLogsByDate = mealLogs
+            .GroupBy(x => x.Date)
+            .ToDictionary(x => x.Key, x => x.Count());
         var measurementDates = measurements.Select(x => DateOnly.FromDateTime(x.AtUtc)).ToHashSet();
         var careMessageDates = careMessages.Select(x => DateOnly.FromDateTime(x.CreatedAtUtc)).ToHashSet();
 
@@ -305,6 +315,7 @@ public class ClientGamificationService : IClientGamificationService
             trackingByDate.TryGetValue(cursor, out var dailyTracking);
             eventsByDate.TryGetValue(cursor, out var dayEvents);
             dayEvents ??= [];
+            var mealLogCount = mealLogsByDate.GetValueOrDefault(cursor, 0);
 
             var kitchenEvents = dayEvents.Count(x => x.EventType == EventTypes.KitchenRecipeGenerated);
             var appOpenEvents = dayEvents.Count(x => x.EventType == EventTypes.AppOpen);
@@ -315,7 +326,7 @@ public class ClientGamificationService : IClientGamificationService
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var gameCompletedCount = Math.Max(
                 completedGameTypes.Count,
-                dayEvents.Any(x => x.EventType == EventTypes.DailyGamesCompleted) ? 3 : 0);
+                dayEvents.Any(x => x.EventType == EventTypes.DailyGamesCompleted) ? 5 : 0);
             var waterGoalHit = (dailyTracking?.WaterGlasses ?? 0) >= HydrationGoalGlasses;
             var measurementLogged = measurementDates.Contains(cursor);
             var careMessageSent = careMessageDates.Contains(cursor);
@@ -348,7 +359,8 @@ public class ClientGamificationService : IClientGamificationService
                 careMessageSent,
                 gameCompletedCount,
                 proteinTotal,
-                vegetableSignals));
+                vegetableSignals,
+                mealLogCount));
         }
 
         var todayState = dayStates.Last();
@@ -395,10 +407,11 @@ public class ClientGamificationService : IClientGamificationService
             CreateAchievement("kitchen_spark", Math.Min(daysWithKitchen, 5), 5, unlocks),
             CreateAchievement("pantry_ready", Math.Min(activePantryItems, 8), 8, unlocks),
             CreateDailyAchievement("likir_likir", todayState.WaterGlasses, HydrationGoalGlasses),
+            CreateDailyAchievement("tabak_jurnali", todayState.MealLogCount, MealLogDailyBadgeTarget),
             CreateAchievement("water_keeper", currentHydrationStreak, HydrationStreakBadgeDays, unlocks),
             CreateAchievement("flex_saver", anyFlexSaver ? 1 : 0, 1, unlocks),
             CreateAchievement("plan_keeper", Math.Min(weeklyQualifiedDays, 5), 5, unlocks),
-            CreateAchievement("game_monster", Math.Min(todayState.GameCompletedCount, 3), 3, unlocks)
+            CreateAchievement("game_monster", Math.Min(todayState.GameCompletedCount, 5), 5, unlocks)
         };
 
         var newlyUnlocked = new List<string>();
@@ -642,5 +655,6 @@ public class ClientGamificationService : IClientGamificationService
         bool CareMessageSent,
         int GameCompletedCount,
         decimal ProteinTotal,
-        int VegetableSignals);
+        int VegetableSignals,
+        int MealLogCount);
 }

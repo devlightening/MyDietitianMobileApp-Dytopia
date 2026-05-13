@@ -10,6 +10,7 @@ export type MotivationBadgeId =
   | "kitchen_spark"
   | "pantry_ready"
   | "likir_likir"
+  | "tabak_jurnali"
   | "water_keeper"
   | "flex_saver"
   | "plan_keeper"
@@ -148,6 +149,19 @@ const badgeCatalog: Record<MotivationBadgeId, BadgeCatalogEntry> = {
     flavor: { tr: "Bardaklar sıraya girdi, lavabo saygı duruşunda.", en: "The glasses lined up and the sink stood at attention." },
     resetDetail: { tr: "Bu rozet günlük. Her 24 saatte sıfırlanır ve yeniden avlanır.", en: "This is a daily badge. It resets every 24 hours so you can chase it again." },
   },
+  tabak_jurnali: {
+    icon: "notebook-edit-outline",
+    tone: "gold",
+    family: "nutrition",
+    priority: 93,
+    targetFallback: 3,
+    title: { tr: "Tabak Günlüğü", en: "Plate Journal" },
+    subtitle: { tr: "\"Bugün Ne Yedin\" ile aynı gün 3 öğün kaydettin.", en: "You logged 3 meals in a single day with the meal journal." },
+    hint: { tr: "\"Bugün Ne Yedin\" alanında aynı gün 3 yemek kaydet.", en: "Log 3 meals in one day inside the meal journal." },
+    earnedDetail: { tr: "Bugün Ne Yedin akışında üç ayrı kayıt açarak bu rozeti kazandın.", en: "You earned this badge by adding three meal-journal entries in one day." },
+    flavor: { tr: "Tabaklar sıraya girdi, günün menüsü arşive kaldırıldı.", en: "Your plates lined up and the day's menu made it into the archive." },
+    resetDetail: { tr: "Bu rozet günlük. Her gün yeniden sıfırlanır ve tekrar kazanılabilir.", en: "This is a daily badge. It resets every day and can be earned again." },
+  },
   water_keeper: {
     icon: "water",
     tone: "cyan",
@@ -189,11 +203,11 @@ const badgeCatalog: Record<MotivationBadgeId, BadgeCatalogEntry> = {
     tone: "cyan",
     family: "games",
     priority: 95,
-    targetFallback: 3,
+    targetFallback: 5,
     title: { tr: "Oyun Canavarı", en: "Game Monster" },
-    subtitle: { tr: "Günün 3 mini oyununu bitirdin.", en: "You finished all 3 daily mini games." },
-    hint: { tr: "Aynı gün kart eşleştirme, mini test ve kelime oyununu tamamla.", en: "Complete memory, quiz, and word games on the same day." },
-    earnedDetail: { tr: "Üç farklı mini oyunu aynı gün tamamlayarak oyun rozetini açtın.", en: "You unlocked this by completing three different mini games in one day." },
+    subtitle: { tr: "Günün 5 mini oyununu bitirdin.", en: "You finished all 5 daily mini games." },
+    hint: { tr: "Aynı gün kart eşleştirme, mini test, kelime, besin tahmin ve market koşusunu tamamla.", en: "Complete memory, quiz, word, food guessing, and market run games on the same day." },
+    earnedDetail: { tr: "Beş farklı mini oyunu aynı gün tamamlayarak oyun rozetini açtın.", en: "You unlocked this by completing five different mini games in one day." },
     flavor: { tr: "Mutfak arcade makinesi adını tabloya yazdı.", en: "The kitchen arcade just wrote your name on the board." },
   },
   streak_3: {

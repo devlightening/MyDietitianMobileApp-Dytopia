@@ -8,7 +8,7 @@ public class DailyGamePackDTO
     public string Difficulty { get; set; } = "easy";
     public DateTime NextRefreshAt { get; set; }
     public int CompletedCount { get; set; }
-    public int TotalCount { get; set; } = 3;
+    public int TotalCount { get; set; } = 5;
     public int BadgeProgress { get; set; }
     public List<GameChallengeDTO> Challenges { get; set; } = new();
 }

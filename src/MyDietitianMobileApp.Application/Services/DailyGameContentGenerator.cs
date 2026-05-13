@@ -19,7 +19,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         AllowTrailingCommas = true
     };
 
-    private static readonly string[] RequiredTypes = ["memory", "quiz", "word"];
+    private static readonly string[] RequiredTypes = ["memory", "quiz", "word", "guess", "market"];
     private static readonly string[] BannedSafetyTerms =
     [
         "tedavi", "hastalık", "hastalik", "diyabet", "tansiyon", "kanser", "ilaç", "ilac",
@@ -158,7 +158,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         {
           "challenges": [
             {
-              "type": "memory|quiz|word",
+              "type": "memory|quiz|word|guess|market",
               "title": "short friendly title",
               "subtitle": "short friendly subtitle",
               "estimatedSeconds": 60,
@@ -169,7 +169,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         }
 
         Mandatory game rules:
-        - Exactly 3 challenges: one "memory", one "quiz", one "word".
+        - Exactly 5 challenges: one "memory", one "quiz", one "word", one "guess", one "market".
         - Respect the requested difficulty while keeping the games short and approachable.
         - No medical claims, no disease/treatment advice, no guaranteed weight-loss statements.
         - memory payload: { "schemaVersion": 2, "gridSize": 4, "cards": 16 cards, "hint": "..." }.
@@ -181,6 +181,13 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
           answerKey: { "answers": 5 objects with questionId, correctOptionId, explanation }.
         - word payload: { "words": 5 items }. Each item has id, clue, scrambled, length.
           answerKey: { "answers": 5 objects with wordId, answer, explanation }.
+        - guess payload: { "items": 4 items }. Each item has id, maskedName, category, color, emoji, clues[3], options[3].
+          The first clue should be broad, the second practical, the third highly specific. Options have id/text/emoji.
+          answerKey: { "answers": 4 objects with itemId, correctOptionId, explanation }.
+        - market payload: { "missionTitle": "...", "missionSubtitle": "...", "timeLimitSeconds": 45, "targetCount": 6, "items": 14-18 items }.
+          It is a 3-lane grocery runner game. Each item has id, label, emoji, lane (-1|0|1), spawnTick integer, speed 0.055-0.09, isTarget boolean, category, color.
+          Include exactly 6 target items and 8-12 hazard/distractor items. Keep spawnTick spaced so the game is fair.
+          answerKey: { "targets": 6 item ids, "hazards": all non-target item ids, "explanation": "..." }.
         """;
     }
 
@@ -206,7 +213,7 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
 
     private static bool ValidateChallenges(IReadOnlyList<DailyGameContentChallenge> challenges)
     {
-        if (challenges.Count != 3)
+        if (challenges.Count != RequiredTypes.Length)
             return false;
 
         if (RequiredTypes.Any(type => challenges.Count(x => x.Type == type) != 1))
@@ -221,6 +228,8 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
             "memory" => ValidateMemory(challenge),
             "quiz" => ValidateQuiz(challenge),
             "word" => ValidateWord(challenge),
+            "guess" => ValidateGuess(challenge),
+            "market" => ValidateMarket(challenge),
             _ => false
         });
     }
@@ -261,6 +270,90 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
                answers.GetArrayLength() == 5;
     }
 
+    private static bool ValidateGuess(DailyGameContentChallenge challenge)
+    {
+        using var payload = JsonDocument.Parse(challenge.PayloadJson);
+        using var answerKey = JsonDocument.Parse(challenge.AnswerKeyJson);
+        return payload.RootElement.TryGetProperty("items", out var items) &&
+               items.ValueKind == JsonValueKind.Array &&
+               items.GetArrayLength() == 4 &&
+               items.EnumerateArray().All(item =>
+                   item.TryGetProperty("clues", out var clues) &&
+                   clues.ValueKind == JsonValueKind.Array &&
+                   clues.GetArrayLength() == 3 &&
+                   item.TryGetProperty("options", out var options) &&
+                   options.ValueKind == JsonValueKind.Array &&
+                   options.GetArrayLength() == 3) &&
+               answerKey.RootElement.TryGetProperty("answers", out var answers) &&
+               answers.ValueKind == JsonValueKind.Array &&
+               answers.GetArrayLength() == 4;
+    }
+
+    private static bool ValidateMarket(DailyGameContentChallenge challenge)
+    {
+        using var payload = JsonDocument.Parse(challenge.PayloadJson);
+        using var answerKey = JsonDocument.Parse(challenge.AnswerKeyJson);
+        if (!payload.RootElement.TryGetProperty("items", out var items) ||
+            items.ValueKind != JsonValueKind.Array ||
+            items.GetArrayLength() is < 14 or > 18 ||
+            !answerKey.RootElement.TryGetProperty("targets", out var targets) ||
+            targets.ValueKind != JsonValueKind.Array ||
+            targets.GetArrayLength() != 6 ||
+            !answerKey.RootElement.TryGetProperty("hazards", out var hazards) ||
+            hazards.ValueKind != JsonValueKind.Array ||
+            hazards.GetArrayLength() is < 8 or > 12)
+        {
+            return false;
+        }
+
+        var itemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var payloadTargetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("id", out var id) ||
+                string.IsNullOrWhiteSpace(id.GetString()) ||
+                !itemIds.Add(id.GetString()!) ||
+                !item.TryGetProperty("label", out var label) ||
+                string.IsNullOrWhiteSpace(label.GetString()) ||
+                !item.TryGetProperty("lane", out var lane) ||
+                !lane.TryGetInt32(out var laneValue) ||
+                laneValue is < -1 or > 1 ||
+                !item.TryGetProperty("spawnTick", out var spawnTick) ||
+                !spawnTick.TryGetInt32(out var tick) ||
+                tick < 0 ||
+                !item.TryGetProperty("isTarget", out var isTarget) ||
+                isTarget.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                return false;
+            }
+
+            if (isTarget.ValueKind == JsonValueKind.True)
+            {
+                payloadTargetIds.Add(id.GetString()!);
+            }
+        }
+
+        var answerTargets = targets
+            .EnumerateArray()
+            .Select(target => target.GetString() ?? string.Empty)
+            .Where(target => !string.IsNullOrWhiteSpace(target))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var answerHazards = hazards
+            .EnumerateArray()
+            .Select(hazard => hazard.GetString() ?? string.Empty)
+            .Where(hazard => !string.IsNullOrWhiteSpace(hazard))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedHazards = itemIds
+            .Where(id => !payloadTargetIds.Contains(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return payloadTargetIds.Count == 6 &&
+               answerTargets.SetEquals(payloadTargetIds) &&
+               answerHazards.SetEquals(expectedHazards);
+    }
+
     private static DailyGameContentPack BuildFallbackPack(DateOnly date, string language, string difficulty)
     {
         return new DailyGameContentPack
@@ -271,7 +364,9 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
             [
                 BuildMemoryFallback(date, language, difficulty),
                 BuildQuizFallback(date, language, difficulty),
-                BuildWordFallback(date, language, difficulty)
+                BuildWordFallback(date, language, difficulty),
+                BuildGuessFallback(date, language, difficulty),
+                BuildMarketFallback(date, language, difficulty)
             ]
         };
     }
@@ -457,6 +552,152 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
             EstimatedSeconds = difficulty == "hard" ? 80 : difficulty == "medium" ? 90 : 105,
             PayloadJson = JsonSerializer.Serialize(new { words }, JsonOptions),
             AnswerKeyJson = JsonSerializer.Serialize(new { answers }, JsonOptions)
+        };
+    }
+
+    private static DailyGameContentChallenge BuildGuessFallback(DateOnly date, string language, string difficulty)
+    {
+        var seeds = BuildGuessBank(language, difficulty)
+            .OrderBy(item => StableRandomKey(date, language, $"{difficulty}:guess:{item.Id}"))
+            .Take(4)
+            .ToList();
+
+        var items = seeds.Select((seed, index) =>
+        {
+            var options = new[] { seed.Correct, seed.WrongA, seed.WrongB }
+                .OrderBy(option => StableRandomKey(date, language, $"{difficulty}:{seed.Id}:{option.Text}"))
+                .Select((option, optionIndex) => new
+                {
+                    id = ((char)('a' + optionIndex)).ToString(),
+                    text = option.Text,
+                    emoji = option.Emoji
+                })
+                .ToList();
+            var correctOptionId = options.Single(option => option.text == seed.Correct.Text).id;
+
+            return new
+            {
+                Item = new
+                {
+                    id = $"g{index + 1}",
+                    maskedName = seed.MaskedName,
+                    category = seed.Category,
+                    color = seed.Color,
+                    emoji = "❔",
+                    clues = seed.Clues,
+                    options
+                },
+                Answer = new
+                {
+                    itemId = $"g{index + 1}",
+                    correctOptionId,
+                    explanation = seed.Explanation
+                }
+            };
+        }).ToList();
+
+        return new DailyGameContentChallenge
+        {
+            Type = "guess",
+            Title = language == "en" ? "Food Detective" : "Besin Dedektifi",
+            Subtitle = DifficultySubtitle(language, difficulty, "4 staged clues", "4 aşamalı tahmin"),
+            EstimatedSeconds = difficulty == "hard" ? 85 : difficulty == "medium" ? 95 : 105,
+            PayloadJson = JsonSerializer.Serialize(new { items = items.Select(item => item.Item) }, JsonOptions),
+            AnswerKeyJson = JsonSerializer.Serialize(new { answers = items.Select(item => item.Answer) }, JsonOptions)
+        };
+    }
+
+    private static DailyGameContentChallenge BuildMarketFallback(DateOnly date, string language, string difficulty)
+    {
+        var targets = (language == "en"
+            ? new[]
+            {
+                new FallbackMarketSeed("Apple", "🍎", "fruit", "#F87171", true),
+                new FallbackMarketSeed("Yogurt", "🥣", "dairy", "#60A5FA", true),
+                new FallbackMarketSeed("Oats", "🌾", "grain", "#EAB308", true),
+                new FallbackMarketSeed("Cucumber", "🥒", "vegetable", "#34D399", true),
+                new FallbackMarketSeed("Egg", "🥚", "protein", "#FDE68A", true),
+                new FallbackMarketSeed("Walnut", "🌰", "healthy fat", "#A16207", true)
+            }
+            : [
+                new FallbackMarketSeed("Elma", "🍎", "meyve", "#F87171", true),
+                new FallbackMarketSeed("Yogurt", "🥣", "sut urunu", "#60A5FA", true),
+                new FallbackMarketSeed("Yulaf", "🌾", "tahil", "#EAB308", true),
+                new FallbackMarketSeed("Salatalik", "🥒", "sebze", "#34D399", true),
+                new FallbackMarketSeed("Yumurta", "🥚", "protein", "#FDE68A", true),
+                new FallbackMarketSeed("Ceviz", "🌰", "saglikli yag", "#A16207", true)
+            ]).ToList();
+
+        var hazards = (language == "en"
+            ? new[]
+            {
+                new FallbackMarketSeed("Soda", "🥤", "distractor", "#94A3B8", false),
+                new FallbackMarketSeed("Chips", "🍟", "distractor", "#FB923C", false),
+                new FallbackMarketSeed("Candy", "🍬", "distractor", "#F472B6", false),
+                new FallbackMarketSeed("Cream Sauce", "🧂", "distractor", "#CBD5E1", false),
+                new FallbackMarketSeed("Cookie", "🍪", "distractor", "#D97706", false),
+                new FallbackMarketSeed("Syrup", "🍯", "distractor", "#F59E0B", false),
+                new FallbackMarketSeed("Cake", "🍰", "distractor", "#F9A8D4", false),
+                new FallbackMarketSeed("Energy Drink", "🥫", "distractor", "#A78BFA", false),
+                new FallbackMarketSeed("Fried Snack", "🥨", "distractor", "#C084FC", false),
+                new FallbackMarketSeed("Sugary Cereal", "🥣", "distractor", "#FB7185", false)
+            }
+            : [
+                new FallbackMarketSeed("Gazoz", "🥤", "tuzak", "#94A3B8", false),
+                new FallbackMarketSeed("Cips", "🍟", "tuzak", "#FB923C", false),
+                new FallbackMarketSeed("Seker", "🍬", "tuzak", "#F472B6", false),
+                new FallbackMarketSeed("Krem Sos", "🧂", "tuzak", "#CBD5E1", false),
+                new FallbackMarketSeed("Kurabiye", "🍪", "tuzak", "#D97706", false),
+                new FallbackMarketSeed("Surup", "🍯", "tuzak", "#F59E0B", false),
+                new FallbackMarketSeed("Pasta", "🍰", "tuzak", "#F9A8D4", false),
+                new FallbackMarketSeed("Enerji Icecegi", "🥫", "tuzak", "#A78BFA", false),
+                new FallbackMarketSeed("Kizarmis Atistirmalik", "🥨", "tuzak", "#C084FC", false),
+                new FallbackMarketSeed("Sekerli Gevrek", "🥣", "tuzak", "#FB7185", false)
+            ])
+            .OrderBy(item => StableRandomKey(date, language, $"{difficulty}:market:{item.Label}"))
+            .Take(difficulty == "hard" ? 10 : difficulty == "medium" ? 9 : 8)
+            .ToList();
+
+        var allSeeds = targets.Concat(hazards)
+            .OrderBy(item => StableRandomKey(date, language, $"{difficulty}:market:order:{item.Label}"))
+            .ToList();
+        var lanes = new[] { -1, 0, 1 };
+        var tickStep = difficulty == "hard" ? 4 : difficulty == "medium" ? 5 : 6;
+        var speed = difficulty == "hard" ? 0.082 : difficulty == "medium" ? 0.074 : 0.066;
+
+        var items = allSeeds.Select((seed, index) => new
+        {
+            id = seed.IsTarget ? $"target-{index + 1}" : $"hazard-{index + 1}",
+            label = seed.Label,
+            emoji = seed.Emoji,
+            lane = lanes[Math.Abs(StableRandomKey(date, language, $"lane:{seed.Label}:{index}")) % lanes.Length],
+            spawnTick = 2 + index * tickStep,
+            speed,
+            isTarget = seed.IsTarget,
+            category = seed.Category,
+            color = seed.Color
+        }).ToList();
+
+        return new DailyGameContentChallenge
+        {
+            Type = "market",
+            Title = language == "en" ? "Market Run" : "Market Kosusu",
+            Subtitle = DifficultySubtitle(language, difficulty, "3-lane grocery runner", "3 seritli market kosusu"),
+            EstimatedSeconds = difficulty == "hard" ? 42 : difficulty == "medium" ? 46 : 50,
+            PayloadJson = JsonSerializer.Serialize(new
+            {
+                missionTitle = language == "en" ? "Collect the clean list" : "Temiz listeyi topla",
+                missionSubtitle = language == "en" ? "Slide lanes, grab list items, dodge distractions." : "Serit degistir, listedekileri topla, tuzaklardan kac.",
+                timeLimitSeconds = difficulty == "hard" ? 42 : difficulty == "medium" ? 46 : 50,
+                targetCount = targets.Count,
+                items
+            }, JsonOptions),
+            AnswerKeyJson = JsonSerializer.Serialize(new
+            {
+                targets = items.Where(item => item.isTarget).Select(item => item.id),
+                hazards = items.Where(item => !item.isTarget).Select(item => item.id),
+                explanation = language == "en" ? "Targets are the grocery-list items." : "Hedefler alisveris listesindeki urunlerdir."
+            }, JsonOptions)
         };
     }
 
@@ -784,6 +1025,110 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         };
     }
 
+    private static IReadOnlyList<FallbackGuessSeed> BuildGuessBank(string language, string difficulty)
+    {
+        if (language == "en")
+        {
+            return difficulty switch
+            {
+                "hard" =>
+                [
+                    new("hg1", "K____", "Fermented dairy", "#7DD3FC",
+                        ["I am a drink, but not a juice.", "I am made from milk through fermentation.", "My name starts with K and is often served cold."],
+                        new GuessOption("Kefir", "🥛"), new GuessOption("Ayran", "🥛"), new GuessOption("Lemonade", "🍋"), "Kefir is a fermented dairy drink."),
+                    new("hg2", "N____", "Legume", "#D6A75C",
+                        ["I am small and round.", "I often become hummus.", "I am a beige legume used in salads and stews."],
+                        new GuessOption("Chickpea", "🫘"), new GuessOption("Rice", "🍚"), new GuessOption("Walnut", "🌰"), "Chickpeas are useful legumes."),
+                    new("hg3", "R_____", "Leafy green", "#22C55E",
+                        ["I am green and leafy.", "My taste is a little peppery.", "I often joins salads as a sharp green."],
+                        new GuessOption("Arugula", "🥬"), new GuessOption("Banana", "🍌"), new GuessOption("Oats", "🌾"), "Arugula adds a peppery green note."),
+                    new("hg4", "B________", "Pantry staple", "#C084FC",
+                        ["I sit near grains in the pantry.", "I can be used in bowls and side dishes.", "My name sounds like wheat but I am buckwheat."],
+                        new GuessOption("Buckwheat", "🌾"), new GuessOption("Butter", "🧈"), new GuessOption("Cucumber", "🥒"), "Buckwheat is a useful grain-like pantry staple.")
+                ],
+                "medium" =>
+                [
+                    new("mg1", "Y_____", "Dairy", "#60A5FA",
+                        ["I am cool and creamy.", "I often appears at breakfast or snacks.", "I can be eaten plain or with fruit."],
+                        new GuessOption("Yogurt", "🥣"), new GuessOption("Soda", "🥤"), new GuessOption("Candy", "🍬"), "Yogurt is a familiar dairy option."),
+                    new("mg2", "L_____", "Legume", "#F97316",
+                        ["I am often used in soup.", "I bring plant protein.", "I am a small legume with red or green types."],
+                        new GuessOption("Lentil", "🫘"), new GuessOption("Apple", "🍎"), new GuessOption("Butter", "🧈"), "Lentils bring plant protein and fiber."),
+                    new("mg3", "C_____", "Vegetable", "#FB923C",
+                        ["I am orange and crunchy.", "I can be eaten raw or cooked.", "Rabbits are famously linked with me."],
+                        new GuessOption("Carrot", "🥕"), new GuessOption("Cherry", "🍒"), new GuessOption("Cheese", "🧀"), "Carrot is an everyday vegetable."),
+                    new("mg4", "O___", "Grain", "#EAB308",
+                        ["I often appears at breakfast.", "I can become porridge.", "I am a short grain word with four letters."],
+                        new GuessOption("Oats", "🌾"), new GuessOption("Cola", "🥤"), new GuessOption("Jam", "🍯"), "Oats are a breakfast grain.")
+                ],
+                _ =>
+                [
+                    new("eg1", "A____", "Fruit", "#F87171",
+                        ["I am a fruit.", "I can be red or green.", "I am crunchy and common in lunchboxes."],
+                        new GuessOption("Apple", "🍎"), new GuessOption("Soda", "🥤"), new GuessOption("Candy", "🍬"), "Apple is a simple fruit choice."),
+                    new("eg2", "B_____", "Fruit", "#FACC15",
+                        ["I am a yellow fruit.", "I can be peeled by hand.", "I am often used in smoothies."],
+                        new GuessOption("Banana", "🍌"), new GuessOption("Butter", "🧈"), new GuessOption("Bread", "🍞"), "Banana is a familiar fruit."),
+                    new("eg3", "W____", "Drink", "#38BDF8",
+                        ["I am a drink.", "I have no package slogan here.", "I is the simplest hydration choice."],
+                        new GuessOption("Water", "💧"), new GuessOption("Cola", "🥤"), new GuessOption("Syrup", "🍯"), "Water is the clearest hydration choice."),
+                    new("eg4", "E__", "Protein", "#FDE68A",
+                        ["I am common at breakfast.", "I can be boiled.", "I comes in a shell."],
+                        new GuessOption("Egg", "🥚"), new GuessOption("Cake", "🍰"), new GuessOption("Soda", "🥤"), "Egg is a simple protein example.")
+                ]
+            };
+        }
+
+        return difficulty switch
+        {
+            "hard" =>
+            [
+                new("hg1", "K____", "Fermente süt", "#7DD3FC",
+                    ["İçeceğim ama meyve suyu değilim.", "Sütten fermantasyonla hazırlanırım.", "K harfiyle başlar, çoğu zaman soğuk içilirim."],
+                    new GuessOption("Kefir", "🥛"), new GuessOption("Ayran", "🥛"), new GuessOption("Limonata", "🍋"), "Kefir fermente bir süt içeceğidir."),
+                new("hg2", "N____", "Baklagil", "#D6A75C",
+                    ["Küçük ve yuvarlak bir besinim.", "Humusun ana oyuncularından biriyim.", "Salata ve sulu yemeklerde kullanılan bej baklagilim."],
+                    new GuessOption("Nohut", "🫘"), new GuessOption("Pirinç", "🍚"), new GuessOption("Ceviz", "🌰"), "Nohut kullanışlı bir baklagildir."),
+                new("hg3", "R___", "Yeşil yaprak", "#22C55E",
+                    ["Yeşil ve yapraklıyım.", "Tadım biraz keskindir.", "Salatalara aromalı bir dokunuş katarım."],
+                    new GuessOption("Roka", "🥬"), new GuessOption("Muz", "🍌"), new GuessOption("Yulaf", "🌾"), "Roka tabağa canlı aroma katar."),
+                new("hg4", "K_________", "Dolap ürünü", "#C084FC",
+                    ["Dolapta tahıllara yakın dururum.", "Kase ve yan yemeklerde kullanılabilirim.", "Adım buğdayla biter ama karabuğdayım."],
+                    new GuessOption("Karabuğday", "🌾"), new GuessOption("Tereyağı", "🧈"), new GuessOption("Salatalık", "🥒"), "Karabuğday kullanışlı bir temel üründür.")
+            ],
+            "medium" =>
+            [
+                new("mg1", "Y_____", "Süt ürünü", "#60A5FA",
+                    ["Serin ve kıvamlıyım.", "Kahvaltıda veya ara öğünde sık görülürüm.", "Sade ya da meyveyle yenebilirim."],
+                    new GuessOption("Yoğurt", "🥣"), new GuessOption("Gazoz", "🥤"), new GuessOption("Şekerleme", "🍬"), "Yoğurt tanıdık bir süt ürünü seçeneğidir."),
+                new("mg2", "M_______", "Baklagil", "#F97316",
+                    ["Çorbada sık kullanılırım.", "Bitkisel protein taşırım.", "Kırmızı ve yeşil türlerim olan küçük baklagilim."],
+                    new GuessOption("Mercimek", "🫘"), new GuessOption("Elma", "🍎"), new GuessOption("Tereyağı", "🧈"), "Mercimek lif ve bitkisel protein taşır."),
+                new("mg3", "H____", "Sebze", "#FB923C",
+                    ["Turuncu ve çıtırım.", "Çiğ de pişmiş de yenebilirim.", "Tavşanlarla ünlü bir sebzeyim."],
+                    new GuessOption("Havuç", "🥕"), new GuessOption("Kiraz", "🍒"), new GuessOption("Peynir", "🧀"), "Havuç günlük bir sebze örneğidir."),
+                new("mg4", "Y____", "Tahıl", "#EAB308",
+                    ["Kahvaltıda sık görülürüm.", "Lapa veya kase tariflerinde kullanılabilirim.", "Beş harfli pratik bir tahılım."],
+                    new GuessOption("Yulaf", "🌾"), new GuessOption("Kola", "🥤"), new GuessOption("Reçel", "🍯"), "Yulaf kahvaltıda sık kullanılan bir tahıldır.")
+            ],
+            _ =>
+            [
+                new("eg1", "E___", "Meyve", "#F87171",
+                    ["Bir meyveyim.", "Kırmızı veya yeşil olabilirim.", "Çıtır ve çok tanıdık bir ara öğünüm."],
+                    new GuessOption("Elma", "🍎"), new GuessOption("Gazoz", "🥤"), new GuessOption("Şekerleme", "🍬"), "Elma kolay bir meyve seçimidir."),
+                new("eg2", "M__", "Meyve", "#FACC15",
+                    ["Sarı bir meyveyim.", "Kabuklu ama elle kolay soyulurum.", "Smoothie tariflerinde sık görülürüm."],
+                    new GuessOption("Muz", "🍌"), new GuessOption("Tereyağı", "🧈"), new GuessOption("Ekmek", "🍞"), "Muz tanıdık bir meyvedir."),
+                new("eg3", "S_", "İçecek", "#38BDF8",
+                    ["Bir içeceğim.", "Paket sloganım yok, oldukça sadeyim.", "Hidrasyon için en net seçimim."],
+                    new GuessOption("Su", "💧"), new GuessOption("Kola", "🥤"), new GuessOption("Şurup", "🍯"), "Su en sade hidrasyon seçeneğidir."),
+                new("eg4", "Y______", "Protein", "#FDE68A",
+                    ["Kahvaltıda sık görülürüm.", "Haşlanabilirim.", "Kabuk içinde gelen pratik protein örneğiyim."],
+                    new GuessOption("Yumurta", "🥚"), new GuessOption("Kek", "🍰"), new GuessOption("Gazoz", "🥤"), "Yumurta pratik bir protein örneğidir.")
+            ]
+        };
+    }
+
     private static string ScrambleWord(string answer, DateOnly date, string language, string difficulty, string id)
     {
         var chars = answer.ToCharArray()
@@ -858,6 +1203,21 @@ public sealed class DailyGameContentGenerator : IDailyGameContentGenerator
         string Clue,
         string Answer,
         string Explanation);
+
+    private sealed record GuessOption(string Text, string Emoji);
+
+    private sealed record FallbackGuessSeed(
+        string Id,
+        string MaskedName,
+        string Category,
+        string Color,
+        IReadOnlyList<string> Clues,
+        GuessOption Correct,
+        GuessOption WrongA,
+        GuessOption WrongB,
+        string Explanation);
+
+    private sealed record FallbackMarketSeed(string Label, string Emoji, string Category, string Color, bool IsTarget);
 
     private sealed record MemoryFood(string Label, string Emoji, string Color, string ImagePrompt);
 }

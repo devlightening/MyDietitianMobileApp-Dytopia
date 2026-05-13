@@ -22,9 +22,37 @@ import { Gender } from '../types/auth';
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from '../context/I18nContext';
 import { radii, spacing } from '../theme/tokens';
+import { BRAND_LOGO } from '../assets/brandAssets';
 import ProduceBubble from '../components/decor/ProduceBubble';
 
-const BRAND_LOGO = require('../../assets/dytopia-logo.png');
+const hasUppercase = /[A-ZÇĞİÖŞÜ]/;
+const hasLowercase = /[a-zçğıöşü]/;
+const hasDigit = /\d/;
+
+function getRegisterErrorMessage(error: any) {
+  const data = error?.response?.data;
+  const code = data?.code ?? data?.extensions?.code ?? data?.errors?.code;
+  const detail = data?.detail || data?.message;
+
+  switch (code) {
+    case 'WEAK_PASSWORD':
+      return 'Şifre en az 8 karakter, bir büyük harf, bir küçük harf ve bir rakam içermeli.';
+    case 'EMAIL_DOMAIN_NOT_ALLOWED':
+      return detail || 'Bu email uzantısı desteklenmiyor.';
+    case 'INVALID_EMAIL':
+      return detail || 'Geçerli bir email adresi gir.';
+    case 'REGISTRATION_NOT_ALLOWED':
+      return detail || 'Bu email ile kayıt şu anda desteklenmiyor.';
+    case 'EMAIL_ALREADY_EXISTS':
+    case 'REGISTER_FAILED':
+      return detail || 'Bu email ile kayıt oluşturulamadı.';
+    default:
+      if (error?.code === 'ERR_NETWORK') {
+        return 'Sunucuya ulaşılamadı. İnternet bağlantını ve API adresini kontrol et.';
+      }
+      return detail || error?.message || 'Bir hata oluştu';
+  }
+}
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
@@ -39,6 +67,7 @@ export default function RegisterScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
+  const backLabel = t.common.back.replace(/^[←\s]+/, '');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -50,11 +79,20 @@ export default function RegisterScreen() {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  const isValid = fullName.trim() && email.includes('@') && password.length >= 6;
+  const passwordRules = {
+    minLength: password.length >= 8,
+    uppercase: hasUppercase.test(password),
+    lowercase: hasLowercase.test(password),
+    digit: hasDigit.test(password),
+  };
+  const isPasswordStrong = Object.values(passwordRules).every(Boolean);
+  const isValid = !!fullName.trim() && email.includes('@') && isPasswordStrong;
 
   async function handleRegister() {
     if (!isValid) {
-      Alert.alert('Hata', 'Lütfen tüm alanları doldurun');
+      Alert.alert('Hata', isPasswordStrong
+        ? 'Lütfen tüm alanları doldurun'
+        : 'Şifre en az 8 karakter, bir büyük harf, bir küçük harf ve bir rakam içermeli.');
       return;
     }
     const age = new Date().getFullYear() - birthDate.getFullYear();
@@ -66,7 +104,7 @@ export default function RegisterScreen() {
     try {
       await register(email, password, fullName, gender, birthDate.toISOString().split('T')[0]);
     } catch (e: any) {
-      Alert.alert('Kayıt Başarısız', e.response?.data?.detail || e.response?.data?.message || e.message || 'Bir hata oluştu');
+      Alert.alert('Kayıt Başarısız', getRegisterErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -103,15 +141,21 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={18} color={theme.primaryDark} />
-            <Text style={[s.backTxt, { color: theme.primaryDark }]}>{t.common.back}</Text>
+          <TouchableOpacity
+            style={[s.back, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderEmerald }]}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.78}
+          >
+            <View style={[s.backIconWrap, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Ionicons name="arrow-back" size={17} color={theme.primaryDark} />
+            </View>
+            <Text style={[s.backTxt, { color: theme.primaryDark }]}>{backLabel}</Text>
           </TouchableOpacity>
 
           <View style={[s.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={s.heroTop}>
               <View style={[s.logoWrap, { backgroundColor: theme.primaryLight, borderColor: theme.primary + '35' }]}>
-                <Image source={BRAND_LOGO} style={s.logoImage} resizeMode="contain" />
+                <Image source={BRAND_LOGO} style={s.logoImage} resizeMode="contain" fadeDuration={0} />
               </View>
               <View style={[s.heroBadge, { backgroundColor: theme.surfaceElevated }]}>
                 <Text style={[s.heroBadgeText, { color: theme.emerald }]}>Taze bir başlangıç</Text>
@@ -156,7 +200,7 @@ export default function RegisterScreen() {
               <View style={[s.pwRow, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
                 <TextInput
                   style={[s.pwInp, { color: theme.text }]}
-                  placeholder="En az 6 karakter"
+                  placeholder="En az 8 karakter, Aa ve 1 rakam"
                   placeholderTextColor={theme.textMuted}
                   value={password}
                   onChangeText={setPassword}
@@ -168,6 +212,9 @@ export default function RegisterScreen() {
                   <Ionicons name={showPw ? 'eye-outline' : 'eye-off-outline'} size={18} color={theme.textMuted} />
                 </TouchableOpacity>
               </View>
+              <Text style={[s.passwordHint, { color: isPasswordStrong ? theme.emerald : theme.textMuted }]}>
+                En az 8 karakter, büyük harf, küçük harf ve rakam
+              </Text>
             </View>
 
             <View style={s.field}>
@@ -279,12 +326,24 @@ const s = StyleSheet.create({
   back: {
     alignSelf: 'flex-start',
     marginBottom: spacing.lg,
-    paddingVertical: spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 9,
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingLeft: 6,
+    paddingRight: 14,
+    paddingVertical: 6,
   },
-  backTxt: { fontSize: 15, fontWeight: '700' },
+  backIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backTxt: { fontSize: 14, fontWeight: '900' },
 
   heroCard: {
     borderRadius: radii.xxl,
@@ -331,6 +390,7 @@ const s = StyleSheet.create({
   pwRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: radii.xl, height: 52 },
   pwInp: { flex: 1, height: 52, paddingHorizontal: spacing.md, fontSize: 15 },
   eyeBtn: { paddingHorizontal: spacing.md, height: 52, justifyContent: 'center' },
+  passwordHint: { marginTop: 7, fontSize: 11.5, lineHeight: 16, fontWeight: '700' },
 
   genderRow: { flexDirection: 'row', gap: spacing.sm },
   genderPill: { flex: 1, paddingVertical: 12, borderRadius: radii.lg, borderWidth: 1.5, alignItems: 'center' },

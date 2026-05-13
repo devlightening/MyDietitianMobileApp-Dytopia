@@ -56,15 +56,45 @@ type WordItem = {
   length: number;
 };
 
+type GuessItem = {
+  id: string;
+  maskedName: string;
+  category: string;
+  color?: string;
+  emoji?: string;
+  clues: string[];
+  options: Array<{ id: string; text: string; emoji?: string }>;
+};
+
+type MarketRunnerItem = {
+  id: string;
+  label: string;
+  emoji?: string;
+  lane?: number;
+  spawnTick?: number;
+  speed?: number;
+  isTarget?: boolean;
+  category?: string;
+  color?: string;
+};
+
+type ActiveMarketRunnerItem = MarketRunnerItem & {
+  y: number;
+};
+
 function gameIcon(type: string): keyof typeof Ionicons.glyphMap {
   if (type === "memory") return "grid-outline";
   if (type === "quiz") return "help-circle-outline";
+  if (type === "guess") return "search-outline";
+  if (type === "market") return "storefront-outline";
   return "text-outline";
 }
 
 function gameTone(theme: import("../theme/tokens").Theme, type: string) {
   if (type === "memory") return theme.accentCyan;
   if (type === "quiz") return theme.accentGold;
+  if (type === "guess") return theme.accentCoral;
+  if (type === "market") return theme.emerald;
   return theme.primary;
 }
 
@@ -92,7 +122,7 @@ function difficultyHeroCopy(difficulty: string | undefined, language: "tr" | "en
     if (normalized === "medium") {
       return {
         title: "The rhythm is rising",
-        body: "Your daily games are getting a little smarter. Finish 3 games and keep the streak warm.",
+        body: "Your daily games are getting a little smarter. Finish 4 games and keep the streak warm.",
       };
     }
     return {
@@ -110,7 +140,7 @@ function difficultyHeroCopy(difficulty: string | undefined, language: "tr" | "en
   if (normalized === "medium") {
     return {
       title: "Ritim yükseliyor",
-      body: "Günlük oyunlar biraz daha akıllandı. 3 oyunu bitir, seriyi sıcak tut.",
+      body: "Günlük oyunlar biraz daha akıllandı. 5 oyunu bitir, seriyi sıcak tut.",
     };
   }
   return {
@@ -167,8 +197,8 @@ export default function GameCenterScreen({ navigation }: any) {
           eyebrow: language === "tr" ? "Yeni rozet" : "New badge",
           title: language === "tr" ? "Oyun Canavarı açıldı!" : "Game Monster unlocked!",
           message: language === "tr"
-            ? "Bugünün 3 mini oyununu bitirdin. Rozet kasasına şahane bir parça eklendi."
-            : "You finished today's 3 mini games. A fresh badge joined your vault.",
+            ? "Bugünün 5 mini oyununu bitirdin. Rozet kasasına şahane bir parça eklendi."
+            : "You finished today's 5 mini games. A fresh badge joined your vault.",
           primaryAction: { label: language === "tr" ? "Harika" : "Nice", icon: "sparkles-outline" },
         });
       } else {
@@ -223,7 +253,7 @@ export default function GameCenterScreen({ navigation }: any) {
         </View>
         <View style={[s.badgeBubble, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
           <Text style={[s.badgeBubbleValue, { color: theme.primaryDark }]}>
-            {dailyQuery.data?.completedCount ?? 0}/{dailyQuery.data?.totalCount ?? 3}
+            {dailyQuery.data?.completedCount ?? 0}/{dailyQuery.data?.totalCount ?? 5}
           </Text>
           <Text style={[s.badgeBubbleLabel, { color: theme.textMuted }]}>
             {language === "tr" ? "oyun" : "games"}
@@ -413,8 +443,12 @@ function GameBoard({
         <MemoryGame challenge={challenge} theme={theme} pending={pending} onSubmit={onSubmit} />
       ) : challenge.type === "quiz" ? (
         <QuizGame challenge={challenge} theme={theme} language={language} pending={pending} onSubmit={onSubmit} />
-      ) : (
+      ) : challenge.type === "word" ? (
         <WordGame challenge={challenge} theme={theme} language={language} pending={pending} onSubmit={onSubmit} />
+      ) : challenge.type === "market" ? (
+        <MarketRunGame challenge={challenge} theme={theme} language={language} pending={pending} onSubmit={onSubmit} />
+      ) : (
+        <GuessGame challenge={challenge} theme={theme} language={language} pending={pending} onSubmit={onSubmit} />
       )}
     </View>
   );
@@ -788,6 +822,434 @@ function WordGame({
   );
 }
 
+function GuessGame({
+  challenge,
+  theme,
+  language,
+  pending,
+  onSubmit,
+}: {
+  challenge: DailyGameChallenge;
+  theme: import("../theme/tokens").Theme;
+  language: "tr" | "en";
+  pending: boolean;
+  onSubmit: (answers: any, moves: number, durationSeconds: number) => void;
+}) {
+  const items = (challenge.payload?.items ?? []) as GuessItem[];
+  const [index, setIndex] = useState(0);
+  const [revealedHints, setRevealedHints] = useState(1);
+  const [responses, setResponses] = useState<Array<{ itemId: string; optionId: string; revealedHints: number }>>([]);
+  const startedAtRef = useRef(Date.now());
+  const submittedRef = useRef(false);
+  const current = items[index];
+  const accent = current?.color ?? theme.accentCoral;
+
+  useEffect(() => {
+    setIndex(0);
+    setRevealedHints(1);
+    setResponses([]);
+    startedAtRef.current = Date.now();
+    submittedRef.current = false;
+  }, [challenge.id]);
+
+  function revealNextHint() {
+    if (!current || pending || submittedRef.current) return;
+    setRevealedHints((value) => Math.min(current.clues.length || 3, value + 1));
+  }
+
+  function selectOption(optionId: string) {
+    if (!current || pending || submittedRef.current) return;
+    const nextResponses = [
+      ...responses.filter((item) => item.itemId !== current.id),
+      { itemId: current.id, optionId, revealedHints },
+    ];
+    setResponses(nextResponses);
+
+    if (index >= items.length - 1) {
+      submittedRef.current = true;
+      setTimeout(() => onSubmit({ guesses: nextResponses }, nextResponses.length + nextResponses.reduce((sum, item) => sum + item.revealedHints, 0), nowSeconds(startedAtRef.current)), 220);
+      return;
+    }
+
+    setTimeout(() => {
+      setIndex((value) => Math.min(value + 1, items.length - 1));
+      setRevealedHints(1);
+    }, 220);
+  }
+
+  if (!current) return null;
+
+  const visibleClues = current.clues.slice(0, Math.max(1, revealedHints));
+  const canRevealMore = revealedHints < current.clues.length;
+
+  return (
+    <View>
+      <Text style={[s.gameHint, { color: theme.textSub }]}>
+        {language === "tr"
+          ? "İpuçlarını sırayla aç, besini mümkün olduğunca erken tahmin et."
+          : "Reveal staged clues and guess the food as early as you can."}
+      </Text>
+
+      <View style={[s.guessStage, { backgroundColor: `${accent}12`, borderColor: `${accent}35` }]}>
+        <View style={s.guessTopRow}>
+          <View style={[s.guessOrb, { backgroundColor: `${accent}22`, borderColor: `${accent}55` }]}>
+            <Text style={s.guessOrbText}>{current.emoji ?? "?"}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.guessCategory, { color: accent }]}>{current.category}</Text>
+            <Text style={[s.guessMasked, { color: theme.text }]}>{current.maskedName}</Text>
+          </View>
+          <View style={[s.guessCounter, { backgroundColor: theme.surface, borderColor: `${accent}35` }]}>
+            <Text style={[s.guessCounterText, { color: accent }]}>{index + 1}/{items.length}</Text>
+          </View>
+        </View>
+
+        <View style={s.clueList}>
+          {visibleClues.map((clue, clueIndex) => (
+            <View key={`${current.id}-${clueIndex}`} style={[s.clueCard, { backgroundColor: theme.surface, borderColor: `${accent}30` }]}>
+              <View style={[s.clueBadge, { backgroundColor: `${accent}18` }]}>
+                <Text style={[s.clueBadgeText, { color: accent }]}>{clueIndex + 1}</Text>
+              </View>
+              <Text style={[s.clueText, { color: theme.text }]}>{clue}</Text>
+            </View>
+          ))}
+        </View>
+
+        <PressableScale
+          disabled={!canRevealMore || pending}
+          style={[
+            s.revealButton,
+            { backgroundColor: canRevealMore ? theme.surface : theme.surfaceElevated, borderColor: `${accent}35`, opacity: canRevealMore ? 1 : 0.72 },
+          ]}
+          onPress={revealNextHint}
+        >
+          <Ionicons name={canRevealMore ? "bulb-outline" : "checkmark-circle-outline"} size={16} color={canRevealMore ? accent : theme.textMuted} />
+          <Text style={[s.revealButtonText, { color: canRevealMore ? accent : theme.textMuted }]}>
+            {canRevealMore
+              ? (language === "tr" ? "Bir ipucu daha aç" : "Reveal another clue")
+              : (language === "tr" ? "Tüm ipuçları açık" : "All clues revealed")}
+          </Text>
+        </PressableScale>
+      </View>
+
+      <View style={s.guessOptions}>
+        {current.options.map((option) => (
+          <PressableScale
+            key={option.id}
+            disabled={pending || submittedRef.current}
+            style={[s.guessOptionCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+            onPress={() => selectOption(option.id)}
+          >
+            <Text style={s.guessOptionEmoji}>{option.emoji ?? "🍽️"}</Text>
+            <Text style={[s.guessOptionText, { color: theme.text }]}>{option.text}</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+          </PressableScale>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function MarketRunGame({
+  challenge,
+  theme,
+  language,
+  pending,
+  onSubmit,
+}: {
+  challenge: DailyGameChallenge;
+  theme: import("../theme/tokens").Theme;
+  language: "tr" | "en";
+  pending: boolean;
+  onSubmit: (answers: any, moves: number, durationSeconds: number) => void;
+}) {
+  const { width } = useWindowDimensions();
+  const payload = challenge.payload ?? {};
+  const items = useMemo(() => {
+    const rawItems = Array.isArray(payload.items) ? payload.items as MarketRunnerItem[] : [];
+    return rawItems
+      .map((item, index) => ({
+        ...item,
+        id: item.id || `market-item-${index}`,
+        label: item.label || (language === "tr" ? "Urun" : "Item"),
+        lane: normalizeMarketLane(item.lane),
+        spawnTick: Math.max(0, Number(item.spawnTick ?? index * 5)),
+        speed: Math.max(0.045, Math.min(0.1, Number(item.speed ?? 0.068))),
+      }))
+      .sort((a, b) => (a.spawnTick ?? 0) - (b.spawnTick ?? 0));
+  }, [language, payload.items]);
+  const targetCount = Math.max(1, Number(payload.targetCount ?? items.filter(item => item.isTarget).length ?? 6));
+  const timeLimitSeconds = Math.max(30, Math.min(60, Number(payload.timeLimitSeconds ?? challenge.estimatedSeconds ?? 45)));
+  const stageHeight = Math.min(480, Math.max(390, width * 0.96));
+  const maxSpawnTick = items.reduce((max, item) => Math.max(max, Number(item.spawnTick ?? 0)), 0);
+
+  const [lane, setLane] = useState(0);
+  const [tick, setTick] = useState(0);
+  const [activeItems, setActiveItems] = useState<ActiveMarketRunnerItem[]>([]);
+  const [collectedIds, setCollectedIds] = useState<string[]>([]);
+  const [hitHazardIds, setHitHazardIds] = useState<string[]>([]);
+  const [missedTargetIds, setMissedTargetIds] = useState<string[]>([]);
+  const [moves, setMoves] = useState(0);
+  const [running, setRunning] = useState(true);
+
+  const laneRef = useRef(0);
+  const tickRef = useRef(0);
+  const movesRef = useRef(0);
+  const collectedRef = useRef<string[]>([]);
+  const hazardRef = useRef<string[]>([]);
+  const missedRef = useRef<string[]>([]);
+  const submittedRef = useRef(false);
+  const startedAtRef = useRef(Date.now());
+
+  useEffect(() => {
+    laneRef.current = lane;
+  }, [lane]);
+
+  useEffect(() => {
+    setLane(0);
+    setTick(0);
+    setActiveItems([]);
+    setCollectedIds([]);
+    setHitHazardIds([]);
+    setMissedTargetIds([]);
+    setMoves(0);
+    setRunning(true);
+    laneRef.current = 0;
+    tickRef.current = 0;
+    movesRef.current = 0;
+    collectedRef.current = [];
+    hazardRef.current = [];
+    missedRef.current = [];
+    submittedRef.current = false;
+    startedAtRef.current = Date.now();
+  }, [challenge.id]);
+
+  const addUnique = React.useCallback((ref: React.MutableRefObject<string[]>, setter: React.Dispatch<React.SetStateAction<string[]>>, id: string) => {
+    if (ref.current.includes(id)) return;
+    ref.current = [...ref.current, id];
+    setter(ref.current);
+  }, []);
+
+  const finishRun = React.useCallback(() => {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    setRunning(false);
+    onSubmit(
+      {
+        collectedItemIds: collectedRef.current,
+        hitHazardIds: hazardRef.current,
+        missedTargetIds: missedRef.current,
+      },
+      movesRef.current,
+      nowSeconds(startedAtRef.current),
+    );
+  }, [onSubmit]);
+
+  useEffect(() => {
+    if (!running || pending || items.length === 0 || submittedRef.current) return;
+
+    const timer = setInterval(() => {
+      const nextTick = tickRef.current + 1;
+      tickRef.current = nextTick;
+      setTick(nextTick);
+
+      setActiveItems((current) => {
+        const spawned = items
+          .filter(item => Math.round(Number(item.spawnTick ?? 0)) === nextTick)
+          .map(item => ({ ...item, y: 0 }));
+        const nextActive: ActiveMarketRunnerItem[] = [];
+
+        for (const item of [...current, ...spawned]) {
+          const nextY = item.y + Number(item.speed ?? 0.068);
+          const itemLane = normalizeMarketLane(item.lane);
+          const collides = nextY >= 0.74 && nextY <= 0.98 && itemLane === laneRef.current;
+
+          if (collides) {
+            if (item.isTarget) {
+              addUnique(collectedRef, setCollectedIds, item.id);
+            } else {
+              addUnique(hazardRef, setHitHazardIds, item.id);
+            }
+            continue;
+          }
+
+          if (nextY >= 1.08) {
+            if (item.isTarget) {
+              addUnique(missedRef, setMissedTargetIds, item.id);
+            }
+            continue;
+          }
+
+          nextActive.push({ ...item, y: nextY });
+        }
+
+        return nextActive;
+      });
+
+      const elapsedSeconds = (Date.now() - startedAtRef.current) / 1000;
+      if (nextTick > maxSpawnTick + 22 || elapsedSeconds >= timeLimitSeconds) {
+        setTimeout(finishRun, 60);
+      }
+    }, 110);
+
+    return () => clearInterval(timer);
+  }, [addUnique, finishRun, items, maxSpawnTick, pending, running, timeLimitSeconds]);
+
+  function moveLane(direction: -1 | 1) {
+    if (pending || submittedRef.current) return;
+    setLane((current) => {
+      const next = Math.max(-1, Math.min(1, current + direction));
+      if (next !== current) {
+        movesRef.current += 1;
+        setMoves(movesRef.current);
+      }
+      return next;
+    });
+  }
+
+  if (items.length === 0) {
+    return (
+      <View style={[s.completedBoard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+        <Ionicons name="storefront-outline" size={30} color={theme.primaryDark} />
+        <Text style={[s.completedTitle, { color: theme.text }]}>
+          {language === "tr" ? "Market rotası hazırlanamadı" : "Market route is not ready"}
+        </Text>
+      </View>
+    );
+  }
+
+  const collectedCount = collectedIds.length;
+  const remainingSeconds = Math.max(0, timeLimitSeconds - Math.round((Date.now() - startedAtRef.current) / 1000));
+
+  return (
+    <View>
+      <View style={[s.marketMissionCard, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.marketMissionTitle, { color: theme.text }]}>
+            {payload.missionTitle ?? (language === "tr" ? "Temiz listeyi topla" : "Collect the clean list")}
+          </Text>
+          <Text style={[s.marketMissionBody, { color: theme.textSub }]}>
+            {payload.missionSubtitle ?? (language === "tr" ? "Listedekileri topla, tuzaklardan kaç." : "Grab listed items, avoid distractions.")}
+          </Text>
+        </View>
+        <View style={[s.marketCounter, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+          <Text style={[s.marketCounterValue, { color: theme.primaryDark }]}>{collectedCount}/{targetCount}</Text>
+          <Text style={[s.marketCounterLabel, { color: theme.textMuted }]}>{language === "tr" ? "liste" : "list"}</Text>
+        </View>
+      </View>
+
+      <View style={[s.marketStage, { height: stageHeight, backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+        <View style={[s.marketAisleGlow, { backgroundColor: theme.primaryGlow }]} />
+        <View style={[s.marketHorizon, { backgroundColor: `${theme.primaryDark}22` }]} />
+        {[-1, 0, 1].map((laneValue) => (
+          <View
+            key={laneValue}
+            style={[
+              s.marketLane,
+              {
+                left: `${laneToLeft(laneValue)}%`,
+                borderColor: lane === laneValue ? `${theme.primary}80` : theme.border,
+                backgroundColor: lane === laneValue ? `${theme.primary}12` : `${theme.surface}55`,
+              },
+            ]}
+          />
+        ))}
+
+        <View style={[s.marketHud, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
+          <Text style={[s.marketHudText, { color: theme.textMuted }]}>{language === "tr" ? "Süre" : "Time"} {remainingSeconds}s</Text>
+          <Text style={[s.marketHudText, { color: theme.accentCoral }]}>{language === "tr" ? "Tuzak" : "Hits"} {hitHazardIds.length}</Text>
+          <Text style={[s.marketHudText, { color: theme.warning }]}>{language === "tr" ? "Kaçan" : "Missed"} {missedTargetIds.length}</Text>
+        </View>
+
+        {activeItems.map((item) => {
+          const y = Math.max(0, Math.min(1.08, item.y));
+          const scale = 0.55 + y * 0.65;
+          const top = 42 + y * (stageHeight - 118);
+          const itemColor = item.color ?? (item.isTarget ? theme.primary : theme.accentCoral);
+          return (
+            <View
+              key={item.id}
+              style={[
+                s.marketItem,
+                {
+                  top,
+                  left: `${laneToLeft(normalizeMarketLane(item.lane))}%`,
+                  marginLeft: -39,
+                  transform: [{ scale }],
+                  backgroundColor: theme.surface,
+                  borderColor: item.isTarget ? `${theme.primary}75` : `${theme.accentCoral}55`,
+                  shadowColor: itemColor,
+                  zIndex: Math.round(y * 100),
+                },
+              ]}
+            >
+              <Text style={s.marketItemEmoji}>{item.emoji ?? (item.isTarget ? "🥬" : "🥤")}</Text>
+              <Text style={[s.marketItemLabel, { color: theme.text }]} numberOfLines={1}>{item.label}</Text>
+              <View style={[s.marketItemTag, { backgroundColor: `${itemColor}18` }]}>
+                <Ionicons name={item.isTarget ? "checkmark" : "close"} size={10} color={itemColor} />
+              </View>
+            </View>
+          );
+        })}
+
+        <View
+          style={[
+            s.marketPlayer,
+            {
+              left: `${laneToLeft(lane)}%`,
+              marginLeft: -36,
+              top: stageHeight - 92,
+              backgroundColor: theme.primary,
+              shadowColor: theme.primary,
+            },
+          ]}
+        >
+          <Ionicons name="basket" size={27} color="#fff" />
+          <Text style={s.marketPlayerText}>{language === "tr" ? "SEPET" : "CART"}</Text>
+        </View>
+      </View>
+
+      <View style={s.marketControls}>
+        <PressableScale
+          disabled={pending || lane === -1 || submittedRef.current}
+          style={[s.marketControlBtn, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, opacity: lane === -1 ? 0.45 : 1 }]}
+          onPress={() => moveLane(-1)}
+        >
+          <Ionicons name="chevron-back" size={22} color={theme.primaryDark} />
+        </PressableScale>
+        <View style={[s.marketControlStatus, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+          <Text style={[s.marketControlStatusText, { color: theme.text }]}>
+            {running && !pending ? (language === "tr" ? "Koşu sürüyor" : "Running") : (language === "tr" ? "Kaydediliyor" : "Saving")}
+          </Text>
+          <Text style={[s.marketControlMeta, { color: theme.textMuted }]}>
+            {language === "tr" ? "Hamle" : "Moves"} {moves}
+          </Text>
+        </View>
+        <PressableScale
+          disabled={pending || lane === 1 || submittedRef.current}
+          style={[s.marketControlBtn, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, opacity: lane === 1 ? 0.45 : 1 }]}
+          onPress={() => moveLane(1)}
+        >
+          <Ionicons name="chevron-forward" size={22} color={theme.primaryDark} />
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
+function normalizeMarketLane(value: unknown): -1 | 0 | 1 {
+  const numeric = Number(value);
+  if (numeric <= -1) return -1;
+  if (numeric >= 1) return 1;
+  return 0;
+}
+
+function laneToLeft(lane: number) {
+  if (lane <= -1) return 22;
+  if (lane >= 1) return 78;
+  return 50;
+}
+
 const s = StyleSheet.create({
   root: { flex: 1 },
   bgLogoA: { position: "absolute", top: 72, right: -64, width: 220, height: 220, borderRadius: 110 },
@@ -929,4 +1391,152 @@ const s = StyleSheet.create({
   wordInput: { minHeight: 46, borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, fontSize: 15, fontWeight: "800" },
   submitButton: { marginTop: 12, minHeight: 56, borderRadius: 20, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   submitButtonText: { fontSize: 14, fontWeight: "900" },
+  guessStage: { borderWidth: 1, borderRadius: 28, padding: 14, gap: 12 },
+  guessTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  guessOrb: { width: 64, height: 64, borderRadius: 26, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  guessOrbText: { fontSize: 30, fontWeight: "900" },
+  guessCategory: { fontSize: 11, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 },
+  guessMasked: { fontSize: 24, lineHeight: 28, fontWeight: "900", letterSpacing: 1.1 },
+  guessCounter: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  guessCounterText: { fontSize: 11, fontWeight: "900" },
+  clueList: { gap: 8 },
+  clueCard: { minHeight: 48, borderWidth: 1, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 9 },
+  clueBadge: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  clueBadgeText: { fontSize: 12, fontWeight: "900" },
+  clueText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "800" },
+  revealButton: { minHeight: 44, borderRadius: 999, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  revealButtonText: { fontSize: 12.5, fontWeight: "900" },
+  guessOptions: { gap: 9, marginTop: 12 },
+  guessOptionCard: { minHeight: 58, borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  guessOptionEmoji: { fontSize: 22 },
+  guessOptionText: { flex: 1, fontSize: 14.5, fontWeight: "900" },
+  marketMissionCard: {
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  marketMissionTitle: { fontSize: 16, fontWeight: "900", lineHeight: 20 },
+  marketMissionBody: { fontSize: 12.5, lineHeight: 17, fontWeight: "700", marginTop: 3 },
+  marketCounter: {
+    minWidth: 62,
+    borderWidth: 1,
+    borderRadius: 19,
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  marketCounterValue: { fontSize: 18, fontWeight: "900" },
+  marketCounterLabel: { fontSize: 10, fontWeight: "800" },
+  marketStage: {
+    borderWidth: 1,
+    borderRadius: 30,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  marketAisleGlow: {
+    position: "absolute",
+    top: -120,
+    alignSelf: "center",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    opacity: 0.5,
+  },
+  marketHorizon: {
+    position: "absolute",
+    top: 26,
+    alignSelf: "center",
+    width: 124,
+    height: 24,
+    borderRadius: 999,
+  },
+  marketLane: {
+    position: "absolute",
+    top: 58,
+    bottom: 28,
+    width: 72,
+    marginLeft: -36,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderRadius: 36,
+    transform: [{ perspective: 560 }, { rotateX: "16deg" }, { scaleY: 1.05 }],
+  },
+  marketHud: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    right: 12,
+    minHeight: 38,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    zIndex: 200,
+  },
+  marketHudText: { fontSize: 11.5, fontWeight: "900" },
+  marketItem: {
+    position: "absolute",
+    width: 78,
+    minHeight: 84,
+    borderWidth: 1.4,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 7,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  marketItemEmoji: { fontSize: 27, lineHeight: 31 },
+  marketItemLabel: { fontSize: 10.5, lineHeight: 13, fontWeight: "900", marginTop: 3, maxWidth: "100%" },
+  marketItemTag: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  marketPlayer: {
+    position: "absolute",
+    width: 72,
+    height: 72,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 10,
+    zIndex: 250,
+  },
+  marketPlayerText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.8, marginTop: 1 },
+  marketControls: { flexDirection: "row", alignItems: "center", gap: 10 },
+  marketControlBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  marketControlStatus: {
+    flex: 1,
+    minHeight: 56,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  marketControlStatusText: { fontSize: 13.5, fontWeight: "900" },
+  marketControlMeta: { fontSize: 11, fontWeight: "800", marginTop: 2 },
 });

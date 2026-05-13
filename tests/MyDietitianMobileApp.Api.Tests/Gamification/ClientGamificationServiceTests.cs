@@ -78,7 +78,7 @@ public class ClientGamificationServiceTests
     }
 
     [Fact]
-    public async Task TrackEventAsync_UnlocksGameMonster_AfterThreeDifferentDailyGames()
+    public async Task TrackEventAsync_UnlocksGameMonster_AfterFiveDifferentDailyGames()
     {
         await using var db = CreateDbContext();
 
@@ -89,17 +89,19 @@ public class ClientGamificationServiceTests
         await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "memory" });
         await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "quiz" });
         await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "word" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "guess" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "market" });
 
         var summary = await service.GetSummaryAsync(clientId, isPremium: true, dietitianId);
 
         var gameMonster = summary.Achievements.Single(x => x.Id == "game_monster");
-        gameMonster.ProgressCurrent.Should().Be(3);
+        gameMonster.ProgressCurrent.Should().Be(5);
         gameMonster.Unlocked.Should().BeTrue();
         db.ClientAchievementUnlocks.Count(x => x.ClientId == clientId && x.BadgeId == "game_monster").Should().Be(1);
     }
 
     [Fact]
-    public async Task TrackEventAsync_KeepsGameMonsterLocked_BeforeThreeDailyGames()
+    public async Task TrackEventAsync_KeepsGameMonsterLocked_BeforeFiveDailyGames()
     {
         await using var db = CreateDbContext();
 
@@ -109,12 +111,60 @@ public class ClientGamificationServiceTests
 
         await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "memory" });
         await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "quiz" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "word" });
+        await service.TrackEventAsync(clientId, isPremium: true, dietitianId, ClientGamificationService.EventTypes.GameCompleted, new { gameType = "guess" });
 
         var summary = await service.GetSummaryAsync(clientId, isPremium: true, dietitianId);
 
         var gameMonster = summary.Achievements.Single(x => x.Id == "game_monster");
-        gameMonster.ProgressCurrent.Should().Be(2);
+        gameMonster.ProgressCurrent.Should().Be(4);
         gameMonster.Unlocked.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_UnlocksTabakJurnali_AfterThreeMealLogsInOneDay()
+    {
+        await using var db = CreateDbContext();
+
+        var clientId = Guid.NewGuid();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        db.ClientMealLogs.AddRange(
+            new ClientMealLog(clientId, today, "Breakfast", notes: "Omlet", photoUrl: null, source: "manual"),
+            new ClientMealLog(clientId, today, "Lunch", notes: "Tavuklu salata", photoUrl: null, source: "manual"),
+            new ClientMealLog(clientId, today, "Dinner", notes: "Corba", photoUrl: null, source: "manual"));
+
+        await db.SaveChangesAsync();
+
+        var service = new ClientGamificationService(db);
+        var summary = await service.GetSummaryAsync(clientId, isPremium: false, dietitianId: null);
+
+        var mealJournal = summary.Achievements.Single(x => x.Id == "tabak_jurnali");
+        mealJournal.ProgressCurrent.Should().Be(3);
+        mealJournal.Unlocked.Should().BeTrue();
+        db.ClientAchievementUnlocks.Count(x => x.ClientId == clientId && x.BadgeId == "tabak_jurnali").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_KeepsTabakJurnaliLocked_BeforeThreeMealLogsInOneDay()
+    {
+        await using var db = CreateDbContext();
+
+        var clientId = Guid.NewGuid();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        db.ClientMealLogs.AddRange(
+            new ClientMealLog(clientId, today, "Breakfast", notes: "Yulaf", photoUrl: null, source: "manual"),
+            new ClientMealLog(clientId, today, "Lunch", notes: "Mercimek", photoUrl: null, source: "manual"));
+
+        await db.SaveChangesAsync();
+
+        var service = new ClientGamificationService(db);
+        var summary = await service.GetSummaryAsync(clientId, isPremium: false, dietitianId: null);
+
+        var mealJournal = summary.Achievements.Single(x => x.Id == "tabak_jurnali");
+        mealJournal.ProgressCurrent.Should().Be(2);
+        mealJournal.Unlocked.Should().BeFalse();
     }
 
     private static AppDbContext CreateDbContext()

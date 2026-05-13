@@ -31,6 +31,7 @@ import { getShoppingList, type ShoppingListSummary } from '../api/shopping-list'
 import { getActiveAnnouncement, type ActiveAnnouncement } from '../api/announcements';
 import { getFavoriteRecipesSummary, type FavoriteRecipesSummaryDto } from '../api/favorites';
 import { getDailyGames, type DailyGamePack } from '../api/games';
+import { getMealLogs, type MealLog } from '../api/meal-logs';
 import ProduceBubble from '../components/decor/ProduceBubble';
 import DytopiaWatermark from '../components/decor/DytopiaWatermark';
 import DytopiaLogoBubble from '../components/decor/DytopiaLogoBubble';
@@ -83,6 +84,19 @@ function getComplianceLabel(pct: number, d: ComplianceKeys): string {
   if (pct >= 45) return d.complianceGood;
   if (pct >= 20) return d.complianceFair;
   return d.compliancePoor;
+}
+
+function summarizeMealLogs(logs: MealLog[]) {
+  return logs.reduce(
+    (acc, log) => ({
+      count: acc.count + 1,
+      calories: acc.calories + (log.caloriesKcal ?? 0),
+      protein: acc.protein + (log.proteinGrams ?? 0),
+      carbs: acc.carbs + (log.carbsGrams ?? 0),
+      fat: acc.fat + (log.fatGrams ?? 0),
+    }),
+    { count: 0, calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
 }
 
 const noop = () => {};
@@ -265,6 +279,13 @@ export default function DashboardScreen({
     enabled: (user?.isPremium ?? false) && isActive,
     staleTime: 45_000,
   });
+  const todayMealLogDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const { data: mealLogs = [] } = useQuery({
+    queryKey: ['meal-logs-dashboard', todayMealLogDate],
+    queryFn: () => getMealLogs(todayMealLogDate),
+    enabled: (user?.isPremium ?? false) && isActive,
+    staleTime: 45_000,
+  });
 
   const compliancePercent = data?.compliancePercent ?? 0;
   const todayStatus       = data?.todayStatus ?? 'on-track';
@@ -274,6 +295,7 @@ export default function DashboardScreen({
   const summary           = data?.summary;
   const motivation        = mapGamificationToMotivation(gamification) ?? data?.motivation;
   const streakValue = gamification?.currentStreak ?? summary?.streak ?? 0;
+  const mealLogSummary = useMemo(() => summarizeMealLogs(mealLogs), [mealLogs]);
 
   // Water uses tracking as the source of truth so dashboard, hydration screen, and widgets stay aligned.
   const [waterTracking, setWaterTracking] = useState<TodayTracking | null>(null);
@@ -434,6 +456,9 @@ export default function DashboardScreen({
   }, [navigation]);
   const handleOpenGames = useCallback(() => {
     (navigation as any).navigate(Routes.App.GameCenter);
+  }, [navigation]);
+  const handleOpenMealLog = useCallback(() => {
+    (navigation as any).navigate(Routes.App.MealLog);
   }, [navigation]);
   const lockTabSwipe = useCallback(() => {
     onTabSwipeEnabledChange?.(false);
@@ -680,6 +705,7 @@ export default function DashboardScreen({
                 todayPanelItems={todayPanelItems}
                 rescueMission={rescueMission}
                 dailyGames={dailyGames}
+                mealLogSummary={mealLogSummary}
                 nextMeal={upcomingNextMeal}
                 coachTask={data?.coachTask}
                 dietitianNote={data?.dietitianNote}
@@ -692,6 +718,7 @@ export default function DashboardScreen({
                   onPressPantry={handleOpenPantry}
                   onPressBadgeVault={handleOpenBadgeVault}
                   onPressGames={handleOpenGames}
+                  onPressMealLog={handleOpenMealLog}
                   onPressWater={handleAddWater}
                   onRemoveWater={handleRemoveWater}
                 onHorizontalGestureStart={lockTabSwipe}
@@ -1213,7 +1240,7 @@ function DashboardLoadingState({
 
 function PremiumGrid({
   theme, compliancePercent, streak, water, waterBusy, pantryCount, shoppingSummary, motivation, todayPanelItems, rescueMission, dailyGames, nextMeal, coachTask, dietitianNote,
-  activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressCoachTask, onPressMeasurements, onPressPantry, onPressBadgeVault, onPressGames,
+  mealLogSummary, activePlan, onPressKitchen, onPressPlans, onPressMessages, onPressCoachTask, onPressMeasurements, onPressPantry, onPressBadgeVault, onPressGames, onPressMealLog,
   onPressWater, onRemoveWater, onHorizontalGestureStart, onHorizontalGestureEnd, language,
 }: {
   theme: import('../theme/tokens').Theme;
@@ -1227,6 +1254,7 @@ function PremiumGrid({
   todayPanelItems: TodayPanelItem[];
   rescueMission: RescueMission;
   dailyGames?: DailyGamePack;
+  mealLogSummary: ReturnType<typeof summarizeMealLogs>;
   nextMeal?: any;
   coachTask?: DashboardCoachTask;
   dietitianNote?: string;
@@ -1239,6 +1267,7 @@ function PremiumGrid({
   onPressPantry: () => void;
   onPressBadgeVault: () => void;
   onPressGames: () => void;
+  onPressMealLog: () => void;
   onPressWater?: () => void;
   onRemoveWater?: () => void;
   onHorizontalGestureStart?: () => void;
@@ -1283,6 +1312,14 @@ function PremiumGrid({
         language={language}
         pack={dailyGames}
         onPress={onPressGames}
+        index={idx++}
+      />
+
+      <PlateScanHomeCard
+        theme={theme}
+        language={language}
+        summary={mealLogSummary}
+        onPress={onPressMealLog}
         index={idx++}
       />
 
@@ -1355,6 +1392,63 @@ function PremiumGrid({
   );
 }
 
+function PlateScanHomeCard({
+  theme,
+  language,
+  summary,
+  onPress,
+  index,
+}: {
+  theme: import('../theme/tokens').Theme;
+  language: 'tr' | 'en';
+  summary: ReturnType<typeof summarizeMealLogs>;
+  onPress: () => void;
+  index: number;
+}) {
+  const style = useStaggerItem(index, 300, 60);
+  const calories = Math.round(summary.calories);
+
+  return (
+    <Animated.View style={style}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        style={[s.plateScanCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}
+      >
+        <View style={[s.plateScanIcon, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
+          <Ionicons name="camera-outline" size={23} color={theme.primaryDark} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.plateScanEyebrow, { color: theme.primary }]}>
+            {language === 'tr' ? 'GÜNLÜK YENİLENLER' : 'DAILY EATS'}
+          </Text>
+          <Text style={[s.plateScanTitle, { color: theme.text }]}>
+            {language === 'tr' ? 'Bugün ne yedin?' : 'What did you eat today?'}
+          </Text>
+          <Text style={[s.plateScanBody, { color: theme.textSub }]}>
+            {language === 'tr'
+              ? 'Tabağını tara; 1 porsiyon yaklaşık kalori ve makrolar günlük listeye eklenir.'
+              : 'Scan your plate; approximate 1 portion calories and macros join your daily list.'}
+          </Text>
+          <View style={s.plateScanStats}>
+            <View style={[s.plateScanStat, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
+              <Text style={[s.plateScanStatValue, { color: theme.primaryDark }]}>{summary.count}</Text>
+              <Text style={[s.plateScanStatLabel, { color: theme.textMuted }]}>{language === 'tr' ? 'kayıt' : 'logs'}</Text>
+            </View>
+            <View style={[s.plateScanStat, { backgroundColor: '#FFF8DE', borderColor: '#EAD47A55' }]}>
+              <Text style={[s.plateScanStatValue, { color: '#94770D' }]}>{calories}</Text>
+              <Text style={[s.plateScanStatLabel, { color: '#94770D' }]}>kcal</Text>
+            </View>
+          </View>
+        </View>
+        <View style={[s.plateScanArrow, { backgroundColor: theme.primary }]}>
+          <Ionicons name="scan-outline" size={22} color="#fff" />
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 function DailyGamesCard({
   theme,
   language,
@@ -1369,13 +1463,15 @@ function DailyGamesCard({
   index: number;
 }) {
   const style = useStaggerItem(index, 300, 60);
-  const total = pack?.totalCount ?? 3;
+  const total = pack?.totalCount ?? 4;
   const completed = pack?.completedCount ?? 0;
   const ratio = Math.min(1, completed / Math.max(1, total));
   const challengeMeta = [
     { type: 'memory', icon: 'grid-outline' as const, label: language === 'tr' ? 'Eşleştir' : 'Match', color: theme.accentCyan },
     { type: 'quiz', icon: 'help-circle-outline' as const, label: language === 'tr' ? 'Sorular' : 'Quiz', color: theme.accentGold },
     { type: 'word', icon: 'text-outline' as const, label: language === 'tr' ? 'Kelime' : 'Words', color: theme.primary },
+    { type: 'guess', icon: 'search-outline' as const, label: language === 'tr' ? 'Tahmin' : 'Guess', color: theme.accentCoral },
+    { type: 'market', icon: 'storefront-outline' as const, label: language === 'tr' ? 'Market' : 'Market', color: theme.emerald },
   ];
   const completedTypes = new Set((pack?.challenges ?? [])
     .filter(challenge => challenge.status === 'completed')
@@ -1402,8 +1498,8 @@ function DailyGamesCard({
             </Text>
             <Text style={[s.dailyGamesBody, { color: theme.textSub }]}>
               {language === 'tr'
-                ? 'Kolay kartlar, tatlı sorular ve kelime bulmaca. Hepsi kısa, hepsi rozetli.'
-                : 'Easy cards, gentle questions, and a word puzzle. Short, friendly, badge-ready.'}
+                ? 'Kartlar, sorular, kelime, tahmin ve market koşusu. Hepsi kısa, hepsi rozetli.'
+                : 'Cards, questions, words, guessing, and market run. Short, friendly, badge-ready.'}
             </Text>
           </View>
           <View style={[s.dailyGamesScore, { backgroundColor: theme.glassEmerald, borderColor: theme.borderEmerald }]}>
@@ -3138,6 +3234,37 @@ const s = StyleSheet.create({
 
   /* Grid */
   grid: { gap: spacing.sm },
+
+  plateScanCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    shadowColor: '#0F3D2E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  plateScanIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plateScanEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 0.9, marginBottom: 3 },
+  plateScanTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.3 },
+  plateScanBody: { fontSize: 12, lineHeight: 17, fontWeight: '600', marginTop: 4 },
+  plateScanStats: { flexDirection: 'row', gap: 7, marginTop: 10 },
+  plateScanStat: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', gap: 5, alignItems: 'baseline' },
+  plateScanStatValue: { fontSize: 13, fontWeight: '900' },
+  plateScanStatLabel: { fontSize: 10, fontWeight: '800' },
+  plateScanArrow: { width: 44, height: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 
   dailyGamesCard: {
     borderRadius: 26,

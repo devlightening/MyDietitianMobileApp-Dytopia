@@ -1,6 +1,6 @@
 import apiClient from "./client";
 
-export type DailyGameType = "memory" | "quiz" | "word";
+export type DailyGameType = "memory" | "quiz" | "word" | "guess" | "market";
 export type DailyGameStatus = "available" | "completed";
 
 export interface DailyGamePack {
