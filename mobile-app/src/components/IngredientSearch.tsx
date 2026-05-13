@@ -45,12 +45,12 @@ export default function IngredientSearch({
   const copy = language === 'en'
     ? {
         placeholder: t.kitchen.searchPlaceholder,
-        loading: 'Scanning ingredients with AI suggestions...',
+        loading: 'Finding matching ingredients...',
         empty: 'No suggestions found, try another keyword',
       }
     : {
         placeholder: t.kitchen.searchPlaceholder,
-        loading: 'AI önerileri malzemeleri tarıyor...',
+        loading: 'Uygun malzemeler aranıyor...',
         empty: 'Uygun öneri bulunamadı, farklı bir kelime dene',
       };
 

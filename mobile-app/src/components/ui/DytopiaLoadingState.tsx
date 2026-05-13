@@ -2,8 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, Image, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../../context/ThemeContext";
 import { radii, spacing } from "../../theme/tokens";
-
-const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+import { BRAND_LOGO } from "../../assets/brandAssets";
 
 type Props = {
   title?: string;
@@ -32,7 +31,7 @@ export default function DytopiaLoadingState({
     <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
       <View style={[s.halo, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
         <Animated.View style={{ transform: [{ scale: pulse }] }}>
-          <Image source={BRAND_LOGO} style={s.logo} resizeMode="contain" />
+          <Image source={BRAND_LOGO} style={s.logo} resizeMode="contain" fadeDuration={0} />
         </Animated.View>
       </View>
       <Text style={[s.title, { color: theme.text }]}>{title}</Text>

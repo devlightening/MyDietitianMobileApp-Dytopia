@@ -21,17 +21,19 @@ import { getPantry, replacePantry, type PantryItem, type PantryUpdateSource } fr
 import { buildPantryActivitySummary } from "../features/smartInsights";
 import { buildPantryUpdatedNotification } from "../notifications/notificationEvents";
 import { Routes } from "../navigation/routes";
+import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
 import { useInAppNotifications } from "../context/InAppNotificationContext";
 import { useFeedback } from "../context/FeedbackContext";
 import { radii, spacing } from "../theme/tokens";
+import { registerScanResultHandler, resolveScanResult } from "../utils/scanResultStore";
 import type { Ingredient } from "../types/alternative";
 
 type PantryParams = {
   Pantry: {
     selectedIngredients?: Ingredient[];
-    onConfirm?: (ingredients: Ingredient[]) => void;
+    scanResultId?: string;
   };
 };
 
@@ -105,6 +107,7 @@ export default function PantryScreen() {
   const { language } = useTranslation();
   const { notify } = useInAppNotifications();
   const { showDialog, showToast } = useFeedback();
+  const { user } = useAuth();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<PantryParams, "Pantry">>();
   const initialSelected = useMemo(
@@ -120,6 +123,7 @@ export default function PantryScreen() {
   const [syncing, setSyncing] = useState(false);
   const [searchPrefill, setSearchPrefill] = useState("");
   const [searchPrefillKey, setSearchPrefillKey] = useState(0);
+  const isPremium = user?.isPremium === true;
 
   useEffect(() => {
     if (initialSelected.length > 0) {
@@ -191,7 +195,7 @@ export default function PantryScreen() {
       const normalized = mapPantryToIngredients(updated);
       setPantrySnapshot(updated);
       setSelected(normalized);
-      route.params?.onConfirm?.(normalized);
+      resolveScanResult(route.params?.scanResultId, normalized);
 
       const changeLabel = normalized.length === 0
         ? (language === "tr" ? "Dolap temizlendi." : "Your pantry was cleared.")
@@ -215,7 +219,7 @@ export default function PantryScreen() {
     } finally {
       setSyncing(false);
     }
-  }, [language, notify, route.params, showToast, syncSnapshotWithIngredients]);
+  }, [language, notify, route.params?.scanResultId, showToast, syncSnapshotWithIngredients]);
 
   const appendIngredients = useCallback(async (
     ingredients: Ingredient[],
@@ -282,33 +286,82 @@ export default function PantryScreen() {
     setSearchPrefillKey((value) => value + 1);
   }, []);
 
+  const openPremiumScanGate = useCallback(() => {
+    showDialog({
+      variant: "info",
+      icon: "lock-closed-outline",
+      eyebrow: language === "tr" ? "Premium tarama" : "Premium scan",
+      title: language === "tr" ? "AI tarama premium ile açılır" : "AI scanning unlocks with premium",
+      message: language === "tr"
+        ? "Free modda dolabını manuel arama ile kullanabilirsin. Kamera, fiş ve barkod taraması klinik bağlantılı premium özelliktir."
+        : "In free mode, use manual pantry search. Camera, receipt and barcode scans are premium clinic features.",
+      secondaryAction: { label: language === "tr" ? "Tamam" : "OK", tone: "muted" },
+      primaryAction: {
+        label: language === "tr" ? "Premium'u Aktive Et" : "Activate premium",
+        tone: "primary",
+        onPress: () => {
+          const parent = (navigation as any).getParent?.();
+          if (parent?.navigate) {
+            parent.navigate(Routes.Modal.ActivatePremium);
+            return;
+          }
+          (navigation as any).navigate(Routes.Modal.ActivatePremium);
+        },
+      },
+    });
+  }, [language, navigation, showDialog]);
+
   const handleReceiptScan = useCallback(() => {
-    (navigation as any).navigate(Routes.App.ReceiptScan, {
+    if (!isPremium) {
+      openPremiumScanGate();
+      return;
+    }
+
+    const scanResultId = registerScanResultHandler({
       onConfirm: (ingredients: Ingredient[]) => {
         void appendIngredients(ingredients, "receipt");
       },
       onUseSearchTerm: handleSearchFallback,
     });
-  }, [appendIngredients, handleSearchFallback, navigation]);
+    (navigation as any).navigate(Routes.App.ReceiptScan, {
+      scanResultId,
+    });
+  }, [appendIngredients, handleSearchFallback, isPremium, navigation, openPremiumScanGate]);
 
   const handleIngredientScan = useCallback(() => {
-    (navigation as any).navigate(Routes.App.IngredientScan, {
+    if (!isPremium) {
+      openPremiumScanGate();
+      return;
+    }
+
+    const scanResultId = registerScanResultHandler({
       onConfirm: (ingredients: Ingredient[]) => {
         void appendIngredients(ingredients, "photo");
       },
       onUseSearchTerm: handleSearchFallback,
     });
-  }, [appendIngredients, handleSearchFallback, navigation]);
+    (navigation as any).navigate(Routes.App.IngredientScan, {
+      scanResultId,
+    });
+  }, [appendIngredients, handleSearchFallback, isPremium, navigation, openPremiumScanGate]);
 
   const handleBarcodeScan = useCallback(() => {
-    (navigation as any).navigate(Routes.App.BarcodeScan, {
-      usageContext: "pantry",
+    if (!isPremium) {
+      openPremiumScanGate();
+      return;
+    }
+
+    const scanResultId = registerScanResultHandler({
       onConfirm: (ingredients: Ingredient[]) => {
         void appendIngredients(ingredients, "barcode");
       },
       onUseSearchTerm: handleSearchFallback,
     });
-  }, [appendIngredients, handleSearchFallback, navigation]);
+    (navigation as any).navigate(Routes.App.BarcodeScan, {
+      usageContext: "pantry",
+      scanResultId,
+    });
+  }, [appendIngredients, handleSearchFallback, isPremium, navigation, openPremiumScanGate]);
 
   const handleClear = useCallback(() => {
     if (selected.length === 0) return;
@@ -361,9 +414,13 @@ export default function PantryScreen() {
             {language === "tr" ? "Dolabım" : "My Pantry"}
           </Text>
           <Text style={[s.headerSub, { color: theme.textMuted }]}>
-            {language === "tr"
-              ? "Fişten ekle, elle düzenle, mutfak akışını hazır tut"
-              : "Add from receipts, refine manually, and keep the kitchen flow ready"}
+            {isPremium
+              ? (language === "tr"
+                ? "Fişten ekle, elle düzenle, mutfak akışını hazır tut"
+                : "Add from receipts, refine manually, and keep the kitchen flow ready")
+              : (language === "tr"
+                ? "Elle düzenle, klasik tarif havuzuna hazır tut"
+                : "Manage manually and stay ready for the classic recipe pool")}
           </Text>
         </View>
         <View style={s.headerBtn} />
@@ -558,8 +615,8 @@ export default function PantryScreen() {
             ) : selected.length === 0 ? (
               <Text style={[s.emptyTxt, { color: theme.textMuted }]}>
                 {language === "tr"
-                  ? "Henüz dolap ürünü yok. Fiş tarayabilir veya yukarıdan manuel ekleyebilirsin."
-                  : "There are no pantry items yet. Scan a receipt or add items manually above."}
+                  ? "Henüz dolap ürünü yok. Yukarıdan manuel ekleyebilirsin."
+                  : "There are no pantry items yet. Add items manually above."}
               </Text>
             ) : (
               selected.map((ingredient, index) => {

@@ -53,18 +53,20 @@ import DytopiaLogoBubble from '../components/decor/DytopiaLogoBubble';
 import KitchenStreakRail from '../components/gamification/KitchenStreakRail';
 import RecipeSearchStage from '../components/kitchen/RecipeSearchStage';
 import { Routes } from '../navigation/routes';
+import { BRAND_LOGO } from '../assets/brandAssets';
 import { getRecentPantryIngredients } from '../api/kitchen';
 import type { Ingredient } from '../types/alternative';
 import { useTranslation } from '../context/I18nContext';
+import { useAuth } from '../auth/AuthContext';
 import { useGamification } from '../queries/useGamification';
 import { useCustomPacks, type CustomPack } from '../hooks/useCustomPacks';
 import { useShakeDetector } from '../hooks/useShakeDetector';
 import * as Haptics from 'expo-haptics';
 import CreatePackSheet from '../components/CreatePackSheet';
+import { registerScanResultHandler } from '../utils/scanResultStore';
 
 const CHIP_COLLAPSE_AT = 8;
 const BOTTOM_NAV_CLEARANCE = Platform.OS === 'ios' ? 112 : 96;
-const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 
 const MERGE_TEXTS = {
   tr: ['Malzemeler tencerede', 'Aromalar yükseliyor', 'Tarif servis ediliyor'],
@@ -702,7 +704,7 @@ function KitchenPotComposer({
                 ]}
               />
               <View style={s.composerLidBrand}>
-                <Image source={BRAND_LOGO} resizeMode="contain" style={s.composerLidBrandLogo} />
+                <Image source={BRAND_LOGO} resizeMode="contain" fadeDuration={0} style={s.composerLidBrandLogo} />
                 <Text style={[s.composerLidBrandText, { color: theme.primaryDark }]}>DYTOPIA</Text>
               </View>
             </Animated.View>
@@ -862,6 +864,8 @@ export default function KitchenScreen({
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { t, language } = useTranslation();
+  const { user } = useAuth();
+  const isPremium = user?.isPremium === true;
   const { data: gamification } = useGamification();
   const lockTabSwipe = React.useCallback(() => {
     onTabSwipeEnabledChange?.(false);
@@ -880,13 +884,13 @@ export default function KitchenScreen({
         collapse: 'Collapse',
         more: 'more',
         clear: 'Clear',
-        reactorTitle: 'AI Recipe Pot',
+        reactorTitle: isPremium ? 'Recipe Pot' : 'Classic Recipe Pot',
         reactorReady: `${selectedIngredients.length} ingredients are simmering in the pot`,
         reactorWaiting: 'Choose ingredients and watch them fall into the pot',
         reactorHintReady: 'The lid is open. Tap Find Recipes when you are ready.',
-        reactorHintIdle: 'Each ingredient drops into the pot and wakes the AI gently.',
+        reactorHintIdle: 'Each ingredient drops into the pot and brings the recipe closer.',
         reactorAction: 'Find Recipes',
-        reactorActionSub: 'The pot is warm and ready for tasting',
+        reactorActionSub: isPremium ? 'The pot is warm and ready for tasting' : 'Matches come from the public classic catalog',
         reactorActionClosing: 'Sealing the pot',
         reactorActionClosingSub: 'The lid is closing before the recipe story begins',
         reactorModeLive: 'Live',
@@ -912,13 +916,13 @@ export default function KitchenScreen({
         collapse: 'Daralt',
         more: 'daha',
         clear: 'Temizle',
-        reactorTitle: 'AI Tarif Kazanı',
+        reactorTitle: isPremium ? 'Tarif Kazanı' : 'Klasik Tarif Kazanı',
         reactorReady: `${selectedIngredients.length} malzeme kazanda demleniyor`,
         reactorWaiting: 'Malzeme seç, tencereye yumuşakça düşsün',
         reactorHintReady: 'Kapak aralandı. Hazırsan Tarif Bul’a dokun.',
         reactorHintIdle: 'Her malzeme seçimi tencereye düşer ve kapağı biraz daha açar.',
         reactorAction: 'Tarif Bul',
-        reactorActionSub: 'Kazan ısındı, AI tadım için hazır',
+        reactorActionSub: isPremium ? 'Kazan ısındı, tarif seçimi hazır' : 'Eşleşmeler klasik public katalogdan gelir',
         reactorActionClosing: 'Kazan kapanıyor',
         reactorActionClosingSub: 'Kapak kapanıyor, tarif hikâyesi şimdi başlıyor',
         reactorModeLive: 'Canlı',
@@ -1075,22 +1079,47 @@ export default function KitchenScreen({
     }
   }
 
+  const openPremiumGate = React.useCallback(() => {
+    const parent = (nav as any).getParent?.();
+    if (parent?.navigate) {
+      parent.navigate(Routes.Modal.ActivatePremium);
+      return;
+    }
+    (nav as any).navigate(Routes.Modal.ActivatePremium);
+  }, [nav]);
+
   function handlePhotoScanPress() {
-    (nav as any).navigate(Routes.App.IngredientScan, {
+    if (!isPremium) {
+      openPremiumGate();
+      return;
+    }
+
+    const scanResultId = registerScanResultHandler({
       onConfirm: (ingredients: Ingredient[]) => {
         appendIngredients(ingredients);
       },
       onUseSearchTerm: handleSearchFallback,
     });
+    (nav as any).navigate(Routes.App.IngredientScan, {
+      scanResultId,
+    });
   }
 
   function handleBarcodeScanPress() {
-    (nav as any).navigate(Routes.App.BarcodeScan, {
-      usageContext: 'kitchen',
+    if (!isPremium) {
+      openPremiumGate();
+      return;
+    }
+
+    const scanResultId = registerScanResultHandler({
       onConfirm: (ingredients: Ingredient[]) => {
         appendIngredients(ingredients);
       },
       onUseSearchTerm: handleSearchFallback,
+    });
+    (nav as any).navigate(Routes.App.BarcodeScan, {
+      usageContext: 'kitchen',
+      scanResultId,
     });
   }
 
@@ -1122,12 +1151,15 @@ export default function KitchenScreen({
   }, isActive && hasIngredients && !searchTransitioning);
 
   function handlePantryPress() {
-    (nav as any).navigate(Routes.App.Pantry, {
-      selectedIngredients: pantryIngredients,
+    const scanResultId = registerScanResultHandler({
       onConfirm: (ingredients: Ingredient[]) => {
         onChangePantry?.(ingredients);
         onChangeSelected(ingredients);
       },
+    });
+    (nav as any).navigate(Routes.App.Pantry, {
+      selectedIngredients: pantryIngredients,
+      scanResultId,
     });
   }
 
@@ -1173,7 +1205,9 @@ export default function KitchenScreen({
                 <View style={s.wsEyebrowRow}>
                   <View style={[s.wsEyebrowDot, { backgroundColor: theme.emerald }]} />
                   <Text style={[s.wsEyebrow, { color: theme.emerald }]}>
-                    {language === 'en' ? 'AI KITCHEN' : 'AI MUTFAK'}
+                    {isPremium
+                      ? (language === 'en' ? 'SMART KITCHEN' : 'AKILLI MUTFAK')
+                      : (language === 'en' ? 'CLASSIC POOL' : 'KLASİK HAVUZ')}
                   </Text>
                 </View>
                 <Text
@@ -1182,10 +1216,16 @@ export default function KitchenScreen({
                   adjustsFontSizeToFit
                   minimumFontScale={0.76}
                 >
-                  {t.kitchen.title}
+                  {isPremium
+                    ? t.kitchen.title
+                    : (language === 'en' ? 'Classic recipe pool' : 'Klasik tarif havuzu')}
                 </Text>
                 <Text style={[s.wsSubtitle, { color: theme.textMuted }]}>
-                  {t.kitchen.subtitle}
+                  {isPremium
+                    ? t.kitchen.subtitle
+                    : (language === 'en'
+                      ? 'Search manually and match with system public recipes.'
+                      : 'Manuel malzeme seç; sistem public tarif havuzundan eşleşmeleri gör.')}
                 </Text>
               </View>
 

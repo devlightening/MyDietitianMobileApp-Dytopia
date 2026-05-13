@@ -1,13 +1,15 @@
 ﻿import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { registerClient as registerClientAPI, loginClient as loginClientAPI, activatePremium as activatePremiumAPI } from '../api/auth';
-import { getClientState } from '../api/client-state';
+import { getClientState, type ClientCapabilities, type SubscriptionTier } from '../api/client-state';
 import { Gender } from '../types/auth';
 import { syncWidgetSessionFromAuth } from '../widgets/services/widgetSyncService';
 
 interface User {
   publicUserId: string;
   isPremium: boolean;
+  subscriptionTier: SubscriptionTier;
+  capabilities?: ClientCapabilities;
   activeDietitianId: string | null;
   gender?: Gender;
   birthDate?: string;
@@ -126,6 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({
         publicUserId: state.publicUserId,
         isPremium: state.isPremium, // ğŸ”¥ Single source of truth
+        subscriptionTier: state.subscriptionTier ?? (state.isPremium ? 'premium' : 'free'),
+        capabilities: state.capabilities,
         activeDietitianId: state.activeDietitianId,
         gender: undefined, // Not returned by /api/client/me
         birthDate: undefined, // Not returned by /api/client/me
@@ -303,4 +307,3 @@ export function useAuth() {
   }
   return context;
 }
-

@@ -1,0 +1,38 @@
+{
+  "Ingredient normalization": {
+    "Count": 100,
+    "MinMs": 1.2299,
+    "MaxMs": 18.3642,
+    "AverageMs": 2.6916,
+    "MedianMs": 2.4652,
+    "P95Ms": 4.7748,
+    "ErrorCount": 0
+  },
+  "Kitchen recipe match": {
+    "Count": 100,
+    "MinMs": 0.0078,
+    "MaxMs": 0.4754,
+    "AverageMs": 0.0141,
+    "MedianMs": 0.0092,
+    "P95Ms": 0.0113,
+    "ErrorCount": 0
+  },
+  "Premium visibility filter": {
+    "Count": 100,
+    "MinMs": 0.7003,
+    "MaxMs": 5.1743,
+    "AverageMs": 0.9889,
+    "MedianMs": 0.8587,
+    "P95Ms": 1.36,
+    "ErrorCount": 0
+  },
+  "Public recipes filter": {
+    "Count": 100,
+    "MinMs": 0.5976,
+    "MaxMs": 5.5103,
+    "AverageMs": 0.7617,
+    "MedianMs": 0.6724,
+    "P95Ms": 1.0912,
+    "ErrorCount": 0
+  }
+}

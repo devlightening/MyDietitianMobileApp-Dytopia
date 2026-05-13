@@ -41,9 +41,11 @@ import StreakMilestoneToast, { STREAK_MILESTONES } from "../components/ui/Streak
 import { buildBadgeUnlockedBanner, buildStreakMilestoneBanner } from "../notifications/notificationEvents";
 import { migrateLegacyFavoriteRecipes } from "../api/favorites";
 import { subscribeToGamificationChanges } from "../utils/gamificationEvents";
+import { Routes } from "./routes";
 
 const TAB_ORDER: TabKey[] = ["dashboard", "plans", "kitchen", "messages", "profile"];
-const SEEN_BADGES_KEY = "celebrated_badge_ids_v1";
+const SEEN_BADGES_KEY = "celebrated_badge_unlocks_v2";
+const LEGACY_SEEN_BADGES_KEY = "celebrated_badge_ids_v1";
 const SEEN_STREAKS_KEY = "celebrated_streak_milestones_v1";
 const TAB_SHIFT = 6;
 const TAB_EXIT_SHIFT = 4;
@@ -61,9 +63,23 @@ type SceneAnimationState = {
 };
 
 type SceneAnimationMap = Record<TabKey, SceneAnimationState>;
+type QueuedBadgeInfo = BadgeInfo & { celebrationKey: string };
+
+function getBadgeCelebrationKey(badge: ReturnType<typeof buildBadgeCollection>[number]): string {
+  if (!badge.isDailyReset) {
+    return badge.id;
+  }
+
+  const unlockedDate = badge.unlockedAtUtc
+    ? new Date(badge.unlockedAtUtc).toISOString().slice(0, 10)
+    : "daily";
+
+  return `${badge.id}:${unlockedDate}`;
+}
 
 export default function AppShell() {
   const { user } = useAuth();
+  const isPremium = user?.isPremium === true;
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
   const { notify } = useInAppNotifications();
@@ -91,10 +107,9 @@ export default function AppShell() {
   });
 
   // ── Celebration state ────────────────────────────────────────────────────
-  const [pendingBadge, setPendingBadge] = useState<BadgeInfo | null>(null);
-  const [badgeQueue, setBadgeQueue] = useState<BadgeInfo[]>([]);
+  const [pendingBadge, setPendingBadge] = useState<QueuedBadgeInfo | null>(null);
+  const [badgeQueue, setBadgeQueue] = useState<QueuedBadgeInfo[]>([]);
   const [pendingStreak, setPendingStreak] = useState<number | null>(null);
-
   // Persistence refs — loaded from SecureStore
   const seenBadgesRef  = useRef<Set<string>>(new Set());
   const seenStreaksRef  = useRef<Set<number>>(new Set());
@@ -102,8 +117,18 @@ export default function AppShell() {
 
   // ── Load persisted seen IDs ──────────────────────────────────────────────
   useEffect(() => {
-    void SecureStore.getItemAsync(SEEN_BADGES_KEY).then(val => {
-      if (val) (JSON.parse(val) as string[]).forEach(id => seenBadgesRef.current.add(id));
+    void Promise.all([
+      SecureStore.getItemAsync(SEEN_BADGES_KEY),
+      SecureStore.getItemAsync(LEGACY_SEEN_BADGES_KEY),
+    ]).then(([currentVal, legacyVal]) => {
+      if (currentVal) {
+        (JSON.parse(currentVal) as string[]).forEach(id => seenBadgesRef.current.add(id));
+        return;
+      }
+
+      if (legacyVal) {
+        (JSON.parse(legacyVal) as string[]).forEach(id => seenBadgesRef.current.add(id));
+      }
     });
     void SecureStore.getItemAsync(SEEN_STREAKS_KEY).then(val => {
       if (val) (JSON.parse(val) as number[]).forEach(n => seenStreaksRef.current.add(n));
@@ -152,17 +177,20 @@ export default function AppShell() {
 
     if (!celebInitRef.current) {
       // First load — mark everything as already seen, no celebration
-      unlocked.forEach(b => seenBadgesRef.current.add(b.id));
+      unlocked.forEach((badge) => {
+        seenBadgesRef.current.add(getBadgeCelebrationKey(badge));
+      });
       const streakVal = motivation.currentStreak ?? 0;
       STREAK_MILESTONES.filter(m => m <= streakVal).forEach(m => seenStreaksRef.current.add(m));
       celebInitRef.current = true;
+      void SecureStore.setItemAsync(SEEN_BADGES_KEY, JSON.stringify([...seenBadgesRef.current]));
       return;
     }
 
     // Check for newly unlocked badges
     const recentUnlockIds = new Set(gamification.recentUnlocks ?? []);
     const newBadges = unlocked
-      .filter(b => !seenBadgesRef.current.has(b.id))
+      .filter((badge) => !seenBadgesRef.current.has(getBadgeCelebrationKey(badge)))
       .sort((left, right) => {
         const leftRecent = recentUnlockIds.has(left.id) ? 0 : 1;
         const rightRecent = recentUnlockIds.has(right.id) ? 0 : 1;
@@ -170,16 +198,26 @@ export default function AppShell() {
       });
     if (newBadges.length > 0) {
       const badgeInfos = newBadges.map((badge) => ({
+        celebrationKey: getBadgeCelebrationKey(badge),
         id: badge.id,
         title: badge.title,
         flavor: badge.flavor,
         icon: badge.icon,
         color: getToneColor(theme, badge.tone),
       }));
-      setBadgeQueue((current) => [...current, ...badgeInfos]);
+      setBadgeQueue((current) => {
+        const existingKeys = new Set([
+          ...current.map((item) => item.celebrationKey),
+          ...(pendingBadge ? [pendingBadge.celebrationKey] : []),
+        ]);
+        return [
+          ...current,
+          ...badgeInfos.filter((item) => !existingKeys.has(item.celebrationKey)),
+        ];
+      });
       newBadges.forEach((badge) => {
         notify(buildBadgeUnlockedBanner(language, badge.title, badge.flavor, badge.id));
-        seenBadgesRef.current.add(badge.id);
+        seenBadgesRef.current.add(getBadgeCelebrationKey(badge));
       });
       void SecureStore.setItemAsync(SEEN_BADGES_KEY, JSON.stringify([...seenBadgesRef.current]));
       return; // Show badge first, streak toast will wait
@@ -286,8 +324,18 @@ export default function AppShell() {
     switchTabFn.current("messages");
   }, []);
   const openQuickKitchen = useCallback(() => setSheetOpen(true), []);
+  const openGameCenter = useCallback(() => {
+    setSheetOpen(false);
+    navigation.navigate(Routes.App.GameCenter as never);
+  }, [navigation]);
 
   const refreshCareAttention = useCallback(async () => {
+    if (!isPremium) {
+      setMessagesAttention(false);
+      careSeededRef.current = false;
+      latestInboundMessageIdRef.current = null;
+      return;
+    }
     if (careRefreshLockRef.current) return;
     careRefreshLockRef.current = true;
     try {
@@ -320,22 +368,30 @@ export default function AppShell() {
     } finally {
       careRefreshLockRef.current = false;
     }
-  }, []);
+  }, [isPremium]);
 
   useCareSignalR(() => {
     void refreshCareAttention();
-  }, true);
+  }, isPremium);
 
   useEffect(() => {
+    if (!isPremium) {
+      setMessagesAttention(false);
+      return;
+    }
     void refreshCareAttention();
-  }, [refreshCareAttention]);
+  }, [isPremium, refreshCareAttention]);
 
   useEffect(() => {
+    if (!isPremium) {
+      setMessagesAttention(false);
+      return;
+    }
     if (active === "messages") {
       setMessagesAttention(false);
       void refreshCareAttention();
     }
-  }, [active, refreshCareAttention]);
+  }, [active, isPremium, refreshCareAttention]);
 
   // ── Pantry ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -470,7 +526,7 @@ export default function AppShell() {
         })}
       </View>
 
-      <BottomBar active={active} onChange={handleTabChange} messagesAttention={messagesAttention} />
+      <BottomBar active={active} onChange={handleTabChange} onOpenGames={openGameCenter} messagesAttention={messagesAttention} />
 
       <KitchenQuickSheet
         visible={sheetOpen}

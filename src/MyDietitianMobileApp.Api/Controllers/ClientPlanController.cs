@@ -715,12 +715,14 @@ public class ClientPlanController : ControllerBase
         var query = _appDb.Recipes
             .AsNoTracking()
             .Where(x => x.Id == recipeId)
-            .Where(x => !x.IsDemo && !x.IsDraft && !x.IsHiddenFromProduction);
+            .Where(x => !x.IsDemo && !x.IsDraft && !x.IsHiddenFromProduction && !x.IsArchived);
 
         if (!premium.IsPremium)
-            return await query.FirstOrDefaultAsync(x => x.IsPublic);
+            return await query.FirstOrDefaultAsync(x => x.IsPublic && x.DietitianId == null);
 
-        return await query.FirstOrDefaultAsync(x => x.IsPublic || x.DietitianId == premium.ActiveDietitianId);
+        return await query.FirstOrDefaultAsync(x =>
+            (x.IsPublic && x.DietitianId == null) ||
+            (premium.ActiveDietitianId.HasValue && x.DietitianId == premium.ActiveDietitianId.Value));
     }
 
     private static string? NormalizeSelectionType(string? selectionType)

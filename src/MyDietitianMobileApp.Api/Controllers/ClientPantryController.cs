@@ -144,7 +144,7 @@ public class ClientPantryController : ControllerBase
 
     [HttpPost("analyze-receipt")]
     [EnableRateLimiting("kitchen-vision")]
-    [RequestSizeLimit(10 * 1024 * 1024)]
+    [RequestSizeLimit(16 * 1024 * 1024)]
     public async Task<IActionResult> AnalyzeReceipt(
         [FromBody] AnalyzeReceiptRequest request,
         CancellationToken cancellationToken)
@@ -166,6 +166,17 @@ public class ClientPantryController : ControllerBase
             mediaType,
             VisionScanKind.Receipt);
         var result = await _mediator.Send(command, cancellationToken);
+
+        if (result.Reason == "image_too_large")
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new
+            {
+                code = "IMAGE_TOO_LARGE",
+                message = result.UserMessage ?? "Fotoğraf çok büyük. Lütfen daha küçük bir fotoğraf seçin.",
+                reason = result.Reason,
+                userMessage = result.UserMessage,
+            });
+        }
 
         return Ok(new
         {

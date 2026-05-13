@@ -8,6 +8,9 @@ public static class AppTime
 
     public static DateTime LocalNow => TimeZoneInfo.ConvertTimeFromUtc(UtcNow, IstanbulTimeZone.Value);
 
+    public static DateTime ToLocal(DateTime utcDateTime) =>
+        TimeZoneInfo.ConvertTimeFromUtc(EnsureUtc(utcDateTime), IstanbulTimeZone.Value);
+
     public static DateOnly LocalToday => DateOnly.FromDateTime(LocalNow);
 
     public static TimeOnly LocalTimeNow => TimeOnly.FromDateTime(LocalNow);

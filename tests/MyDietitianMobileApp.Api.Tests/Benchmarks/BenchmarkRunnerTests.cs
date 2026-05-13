@@ -639,7 +639,10 @@ public class BenchmarkRunnerTests
             alternativeDecisionService,
             new LlmNormalizationOptions(),
             barcodeService,
-            new VisionIngredientOptions());
+            new VisionIngredientOptions
+            {
+                ClosedSetCanonicalNames = ["Tomato", "Banana"]
+            });
 
         var dataset = new MultimodalAcquisitionBenchmarkDataset
         {

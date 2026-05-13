@@ -1,7 +1,7 @@
 import { Asset } from "expo-asset";
 import { Image } from "react-native";
 
-export const BRAND_LOGO = require("../../assets/dytopia-logo.png");
+export const BRAND_LOGO = require("../../assets/dytopia-logo-transparent.png");
 
 const BRAND_IMAGE_ASSETS = [BRAND_LOGO];
 

@@ -71,7 +71,7 @@ public class AnalyzeIngredientImageCommandHandler
                 TotalDetected = 0,
                 FeatureStatus = "active",
                 Reason        = "image_too_large",
-                UserMessage   = "Fotoğraf çok büyük olduğu için analiz edilemedi. Lütfen tekrar deneyin.",
+                UserMessage   = "Fotoğraf çok büyük. Lütfen daha küçük bir fotoğraf seçin.",
             };
         }
 

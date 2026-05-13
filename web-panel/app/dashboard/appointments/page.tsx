@@ -72,6 +72,18 @@ function toLocalDatetimeValue(utc: string) {
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
+function localDatetimeToUtcIso(value: string): string {
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = (datePart || '').split('-').map(Number);
+  const [hour, minute] = (timePart || '').split(':').map(Number);
+
+  if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) {
+    return '';
+  }
+
+  return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
+}
+
 interface ModalProps {
   editing: DietitianAppointment | null;
   onClose: () => void;
@@ -99,7 +111,9 @@ function AppointmentModal({ editing, onClose, onSave, clients, isSaving }: Modal
     if (!title.trim()) return setError('Başlık gereklidir.');
     if (!scheduledAt) return setError('Tarih ve saat seçiniz.');
 
-    const utcIso = new Date(scheduledAt).toISOString();
+    const utcIso = localDatetimeToUtcIso(scheduledAt);
+    if (!utcIso) return setError('Geçerli bir tarih ve saat seçiniz.');
+
     const payload: AppointmentPayload = {
       title: title.trim(),
       scheduledAtUtc: utcIso,
@@ -276,15 +290,19 @@ type FilterKey = 'today' | 'week' | 'all';
 
 function getDateParams(filter: FilterKey) {
   const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
   if (filter === 'today') {
     const end = new Date(now);
     end.setHours(23, 59, 59, 999);
-    return { from: now.toISOString(), to: end.toISOString() };
+    return { from: start.toISOString(), to: end.toISOString() };
   }
   if (filter === 'week') {
-    const end = new Date(now);
+    const end = new Date(start);
     end.setDate(end.getDate() + 7);
-    return { from: now.toISOString(), to: end.toISOString() };
+    end.setHours(23, 59, 59, 999);
+    return { from: start.toISOString(), to: end.toISOString() };
   }
   return { from: undefined, to: undefined };
 }
@@ -343,7 +361,9 @@ export default function AppointmentsPage() {
   });
 
   const now = new Date();
-  const visible = appointments.filter((a) => !a.isCancelled);
+  const visible = appointments
+    .filter((a) => !a.isCancelled)
+    .sort((a, b) => new Date(a.scheduledAtUtc).getTime() - new Date(b.scheduledAtUtc).getTime());
 
   const todayCount = visible.filter(
     (a) => new Date(a.scheduledAtUtc).toDateString() === now.toDateString(),

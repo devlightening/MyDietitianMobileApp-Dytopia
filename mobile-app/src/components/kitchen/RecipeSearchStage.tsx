@@ -12,8 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { radii, spacing, type Theme } from "../../theme/tokens";
 import DytopiaLogoBubble from "../decor/DytopiaLogoBubble";
-
-const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+import { BRAND_LOGO } from "../../assets/brandAssets";
 
 const PHASES = {
   tr: ["Malzemeler tencerede", "Aromalar yükseliyor", "Tarif servis ediliyor"],
@@ -196,8 +195,8 @@ export default function RecipeSearchStage({
   const activePhase = phaseLabelsResolved[Math.min(phase, phaseLabelsResolved.length - 1)];
   const sceneTitle = language === "tr" ? "Tarif kazanı ısınıyor" : "The recipe pot is simmering";
   const sceneDetail = language === "tr"
-      ? `${ingredientNames.length} malzeme kapağın altında buluşuyor. Yapay zekâ şimdi en uyumlu tarifi hazırlıyor.`
-    : `${ingredientNames.length} ingredients are blending under the lid while AI pulls out the best recipe.`;
+      ? `${ingredientNames.length} malzeme kapağın altında buluşuyor. En uyumlu tarif hazırlanıyor.`
+    : `${ingredientNames.length} ingredients are blending under the lid while the best recipe is prepared.`;
   const sceneFooter = language === "tr"
     ? "Seçilen malzemeler buharla birlikte sırayla yükseliyor"
     : "Selected ingredients are rising with the steam";
@@ -206,8 +205,8 @@ export default function RecipeSearchStage({
     : `${ingredientNames.length} ingredients in the pot`;
   const title = language === "tr" ? "Tarif kazanı kaynıyor" : "The recipe pot is simmering";
   const detail = language === "tr"
-    ? `${ingredientNames.length} malzeme kapağın altında birleşiyor. AI şimdi en uyumlu tarifi çıkarıyor.`
-    : `${ingredientNames.length} ingredients are blending under the lid while AI pulls out the best recipe.`;
+    ? `${ingredientNames.length} malzeme kapağın altında birleşiyor. En uyumlu tarif hazırlanıyor.`
+    : `${ingredientNames.length} ingredients are blending under the lid while the best recipe is prepared.`;
   const footer = language === "tr"
     ? "Seçilen malzemeler buharla birlikte yükseliyor"
     : "Selected ingredients are rising with the steam";
@@ -230,8 +229,8 @@ export default function RecipeSearchStage({
     ? "Tarif kazan\u0131 \u0131s\u0131n\u0131yor"
     : "The recipe pot is simmering";
   const displayDetail = language === "tr"
-    ? `${ingredientNames.length} malzeme kapa\u011F\u0131n alt\u0131nda bulu\u015Fuyor. Yapay zek\u00E2 \u015Fimdi en uyumlu tarifi haz\u0131rl\u0131yor.`
-    : `${ingredientNames.length} ingredients are blending under the lid while AI pulls out the best recipe.`;
+    ? `${ingredientNames.length} malzeme kapa\u011F\u0131n alt\u0131nda bulu\u015Fuyor. En uyumlu tarif haz\u0131rlan\u0131yor.`
+    : `${ingredientNames.length} ingredients are blending under the lid while the best recipe is prepared.`;
   const displayFooter = language === "tr"
     ? "Se\u00E7ilen malzemeler buharla birlikte s\u0131rayla y\u00FCkseliyor"
     : "Selected ingredients are rising with the steam";
@@ -416,7 +415,7 @@ export default function RecipeSearchStage({
           <View style={[s.lidKnob, { backgroundColor: theme.accentGold, borderColor: `${theme.accentGold}55` }]} />
           <View style={[s.lidHighlight, { backgroundColor: `${theme.surfaceElevated}CC` }]} />
           <View style={s.lidBrand}>
-            <Image source={BRAND_LOGO} resizeMode="contain" style={s.lidBrandLogo} />
+            <Image source={BRAND_LOGO} resizeMode="contain" fadeDuration={0} style={s.lidBrandLogo} />
             <Text style={[s.lidBrandText, { color: theme.primaryDark }]}>DYTOPIA</Text>
           </View>
         </Animated.View>

@@ -106,16 +106,18 @@ public class ClientRecipeFavoritesController : ControllerBase
                 return StatusCode(problem.Status ?? 403, problem);
             }
 
-            var isAccessible = await IsRecipeAccessibleAsync(id, context.ActiveDietitianId.Value, cancellationToken);
+            var clientId = context.ClientId!.Value;
+            var activeDietitianId = context.ActiveDietitianId.Value;
+            var isAccessible = await IsRecipeAccessibleAsync(id, activeDietitianId, cancellationToken);
             if (!isAccessible)
                 return NotFound(ApiProblems.NotFound("RECIPE_NOT_FOUND", "Tarif bulunamadı veya artık erişilebilir değil."));
 
             var favorite = await _appDb.ClientRecipeFavorites
-                .FirstOrDefaultAsync(item => item.ClientId == context.ClientId!.Value && item.RecipeId == id, cancellationToken);
+                .FirstOrDefaultAsync(item => item.ClientId == clientId && item.RecipeId == id, cancellationToken);
 
             if (favorite == null)
             {
-                _appDb.ClientRecipeFavorites.Add(new ClientRecipeFavorite(context.ClientId.Value, id));
+                _appDb.ClientRecipeFavorites.Add(new ClientRecipeFavorite(clientId, id));
             }
             else if (!favorite.IsActive)
             {
@@ -181,6 +183,8 @@ public class ClientRecipeFavoritesController : ControllerBase
                 return StatusCode(problem.Status ?? 403, problem);
             }
 
+            var clientId = context.ClientId!.Value;
+            var activeDietitianId = context.ActiveDietitianId.Value;
             var requestedIds = (request.RecipeIds ?? new List<Guid>())
                 .Distinct()
                 .ToList();
@@ -195,12 +199,13 @@ public class ClientRecipeFavoritesController : ControllerBase
                     !recipe.IsArchived &&
                     !recipe.IsDraft &&
                     !recipe.IsHiddenFromProduction &&
-                    (recipe.IsPublic || recipe.DietitianId == context.ActiveDietitianId.Value))
+                    (recipe.DietitianId == activeDietitianId ||
+                     (recipe.IsPublic && recipe.DietitianId == null)))
                 .Select(recipe => recipe.Id)
                 .ToListAsync(cancellationToken);
 
             var existing = await _appDb.ClientRecipeFavorites
-                .Where(item => item.ClientId == context.ClientId!.Value && accessibleIds.Contains(item.RecipeId))
+                .Where(item => item.ClientId == clientId && accessibleIds.Contains(item.RecipeId))
                 .ToListAsync(cancellationToken);
 
             var existingMap = existing.ToDictionary(item => item.RecipeId);
@@ -218,7 +223,7 @@ public class ClientRecipeFavoritesController : ControllerBase
                     continue;
                 }
 
-                _appDb.ClientRecipeFavorites.Add(new ClientRecipeFavorite(context.ClientId.Value, recipeId));
+                _appDb.ClientRecipeFavorites.Add(new ClientRecipeFavorite(clientId, recipeId));
                 importedCount++;
             }
 
@@ -266,7 +271,8 @@ public class ClientRecipeFavoritesController : ControllerBase
                 !recipe.IsArchived &&
                 !recipe.IsDraft &&
                 !recipe.IsHiddenFromProduction &&
-                (recipe.IsPublic || recipe.DietitianId == activeDietitianId))
+                (recipe.DietitianId == activeDietitianId ||
+                 (recipe.IsPublic && recipe.DietitianId == null)))
             .ToListAsync(cancellationToken);
 
         if (recipes.Count == 0)
@@ -363,7 +369,8 @@ public class ClientRecipeFavoritesController : ControllerBase
                 !recipe.IsArchived &&
                 !recipe.IsDraft &&
                 !recipe.IsHiddenFromProduction &&
-                (recipe.IsPublic || recipe.DietitianId == activeDietitianId), cancellationToken);
+                (recipe.DietitianId == activeDietitianId ||
+                 (recipe.IsPublic && recipe.DietitianId == null)), cancellationToken);
     }
 
     private static FavoriteIngredientGroups BuildIngredientGroups(

@@ -2,7 +2,6 @@
 import {
   ActivityIndicator,
   Image,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -33,10 +33,12 @@ import {
   type VisionFeatureStatus,
 } from '../api/vision';
 import { logIngredientAcquisition } from '../api/acquisition';
+import { BRAND_LOGO } from '../assets/brandAssets';
 import { radii, spacing } from '../theme/tokens';
+import { compressImage } from '../utils/imageCompressor';
+import { clearScanResultHandler, resolveScanResult, resolveScanSearchTerm } from '../utils/scanResultStore';
 import type { Ingredient } from '../types/alternative';
 
-const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 const SCAN_MESSAGES = [
   'Fotoğraf analiz ediliyor...',
   'Malzemeler tanımlanıyor...',
@@ -45,12 +47,20 @@ const SCAN_MESSAGES = [
 
 type IngredientScanParams = {
   IngredientScan: {
-    onConfirm: (ingredients: Ingredient[]) => void;
-    onUseSearchTerm?: (term: string) => void;
+    scanResultId?: string;
   };
 };
 
 type Phase = 'picker' | 'analyzing' | 'results';
+
+function formatMatchHint(item: DetectedIngredient): string {
+  const confidence = `%${Math.round(item.confidence * 100)}`;
+  if (item.isAutoSelected) {
+    return `${confidence} güvenilir eşleşme`;
+  }
+
+  return `${confidence} eşleşme • kontrol et`;
+}
 
 function AnalyzingView({ theme }: { theme: any }) {
   const [msgIndex, setMsgIndex] = useState(0);
@@ -146,7 +156,7 @@ function AnalyzingView({ theme }: { theme: any }) {
         <Animated.View
           style={[sa.logoBubble, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }, logoStyle]}
         >
-          <Image source={BRAND_LOGO} style={sa.logoImg} resizeMode="contain" />
+          <Image source={BRAND_LOGO} style={sa.logoImg} resizeMode="contain" fadeDuration={0} />
         </Animated.View>
       </View>
 
@@ -191,12 +201,13 @@ export default function IngredientScanScreen() {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       allowsEditing: false,
-      base64: true,
-      quality: 0.7,
+      base64: false,
+      quality: 1,
     });
 
-    if (!result.canceled && result.assets[0]?.base64) {
-      await submitImage(result.assets[0].base64, result.assets[0].mimeType ?? 'image/jpeg');
+    if (!result.canceled && result.assets[0]?.uri) {
+      const compressed = await compressImage(result.assets[0].uri, 'ingredient');
+      await submitImage(compressed.base64, compressed.mediaType);
     }
   }
 
@@ -210,12 +221,13 @@ export default function IngredientScanScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: false,
-      base64: true,
-      quality: 0.7,
+      base64: false,
+      quality: 1,
     });
 
-    if (!result.canceled && result.assets[0]?.base64) {
-      await submitImage(result.assets[0].base64, result.assets[0].mimeType ?? 'image/jpeg');
+    if (!result.canceled && result.assets[0]?.uri) {
+      const compressed = await compressImage(result.assets[0].uri, 'ingredient');
+      await submitImage(compressed.base64, compressed.mediaType);
     }
   }
 
@@ -226,12 +238,20 @@ export default function IngredientScanScreen() {
 
     try {
       const response = await analyzeIngredientImage(base64Image, mediaType);
+
+      if (response.reason === 'image_too_large') {
+        setError(response.userMessage ?? 'Fotoğraf çok büyük. Lütfen daha küçük bir fotoğraf seçin.');
+        setPhase('picker');
+        return;
+      }
+
       setAnalysis(response);
       setSelectedIds(new Set(response.matched.filter(item => item.isAutoSelected).map(item => item.ingredientId)));
       setPhase('results');
     } catch (err: any) {
       setError(
-        err?.response?.data?.error ??
+        err?.response?.data?.message ??
+          err?.response?.data?.error ??
           'Görüntü analizi tamamlanamadı. Lütfen farklı bir fotoğraf deneyin.',
       );
       setPhase('picker');
@@ -252,7 +272,8 @@ export default function IngredientScanScreen() {
   }
 
   function handleSearchFallback(term: string) {
-    route.params.onUseSearchTerm?.(term);
+    resolveScanSearchTerm(route.params?.scanResultId, term);
+    clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
 
@@ -288,7 +309,8 @@ export default function IngredientScanScreen() {
       completedAtUtc: new Date().toISOString(),
     }).catch(() => undefined);
 
-    route.params.onConfirm(ingredients);
+    resolveScanResult(route.params?.scanResultId, ingredients);
+    clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
 
@@ -340,7 +362,8 @@ export default function IngredientScanScreen() {
       startedAtUtc: startedAt ? new Date(startedAt).toISOString() : undefined,
       completedAtUtc: new Date().toISOString(),
     }).catch(() => undefined);
-    route.params.onConfirm(ingredients);
+    resolveScanResult(route.params?.scanResultId, ingredients);
+    clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
 
@@ -363,7 +386,7 @@ export default function IngredientScanScreen() {
           </View>
           <Text style={[s.title, { color: theme.text }]}>Fotoğrafla Malzeme Tara</Text>
           <Text style={[s.subtitle, { color: theme.textMuted }]}>
-            Faz 1: 30 temel malzeme için görsel algılama. Yüksek güvenli eşleşmeler otomatik seçilir, belirsizler onayını bekler.
+            Fotoğraftaki malzemeleri bulur, emin olduklarını seçili getirir. Dilersen sonuçları eklemeden önce düzenleyebilirsin.
           </Text>
 
           {error && (
@@ -405,13 +428,13 @@ export default function IngredientScanScreen() {
                 <Ionicons name="cloud-offline-outline" size={48} color={theme.textMuted} />
                 <Text style={[s.emptyTitle, { color: theme.text }]}>
                   {featureStatus === 'disabled'
-                    ? 'Görsel tanıma devre dışı'
-                    : 'API anahtarı eksik'}
+                    ? 'Fotoğrafla tarama kullanılamıyor'
+                    : 'Servis bağlantısı hazır değil'}
                 </Text>
                 <Text style={[s.emptyText, { color: theme.textMuted }]}>
                   {featureStatus === 'disabled'
-                    ? 'Sunucu yapılandırmasında VisionIngredient:Enabled = false. Yöneticiye bildirin.'
-                    : 'OPENAI_API_KEY ortam değişkeni ayarlanmamış. Sunucu yapılandırmasını kontrol edin.'}
+                    ? 'Fotoğrafla tarama şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.'
+                    : 'Fotoğrafla tarama için gerekli servis bağlantısı hazır değil. Lütfen daha sonra tekrar deneyin.'}
                 </Text>
                 <TouchableOpacity
                   style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surface, marginTop: spacing.sm }]}
@@ -427,7 +450,7 @@ export default function IngredientScanScreen() {
                 <Ionicons name="search-circle-outline" size={48} color={theme.textMuted} />
                 <Text style={[s.emptyTitle, { color: theme.text }]}>Malzeme tespit edilemedi</Text>
                 <Text style={[s.emptyText, { color: theme.textMuted }]}>
-                  Fotoğrafta Faz 1 malzemesi bulunamadı. Daha net veya farklı bir açıdan çekilmiş fotoğraf deneyin.
+                  Fotoğrafta eklenebilir bir malzeme bulamadık. Daha aydınlık, net veya farklı açıdan çekilmiş bir fotoğraf deneyin.
                 </Text>
                 <TouchableOpacity
                   style={[s.secondaryButton, { borderColor: theme.border, backgroundColor: theme.surface, marginTop: spacing.sm }]}
@@ -448,7 +471,7 @@ export default function IngredientScanScreen() {
                 {autoCount > 0 && (
                   <View style={[s.statChip, { backgroundColor: `${theme.emerald}18` }]}>
                     <Ionicons name="checkmark-circle" size={13} color={theme.emerald} />
-                    <Text style={[s.statTxt, { color: theme.emerald }]}>{autoCount} otomatik</Text>
+                    <Text style={[s.statTxt, { color: theme.emerald }]}>{autoCount} hazır</Text>
                   </View>
                 )}
                 {reviewCount > 0 && (
@@ -460,7 +483,7 @@ export default function IngredientScanScreen() {
                 {unmatchedCount > 0 && (
                   <View style={[s.statChip, { backgroundColor: `${theme.error}15` }]}>
                     <Ionicons name="help-circle" size={13} color={theme.error} />
-                    <Text style={[s.statTxt, { color: theme.error }]}>{unmatchedCount} tanınamadı</Text>
+                    <Text style={[s.statTxt, { color: theme.error }]}>{unmatchedCount} elle eklenebilir</Text>
                   </View>
                 )}
               </View>
@@ -472,7 +495,7 @@ export default function IngredientScanScreen() {
                 {matched.some(i => i.isAutoSelected) && (
                   <>
                     <View style={s.sectionRow}>
-                      <Text style={[s.sectionLabel, { color: theme.textMuted }]}>Otomatik seçildi</Text>
+                      <Text style={[s.sectionLabel, { color: theme.textMuted }]}>Hazır eşleşmeler</Text>
                       <View style={[s.badge, { backgroundColor: `${theme.emerald}20` }]}>
                         <Ionicons name="checkmark-circle" size={12} color={theme.emerald} />
                         <Text style={[s.badgeTxt, { color: theme.emerald }]}>Yüksek güven</Text>
@@ -496,7 +519,7 @@ export default function IngredientScanScreen() {
                           <View style={s.itemMain}>
                             <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
                             <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                              %{Math.round(item.confidence * 100)} • {item.matchedBy ?? item.mappingType}
+                              {formatMatchHint(item)}
                             </Text>
                             {item.detectedName !== item.canonicalName && (
                               <Text style={[s.itemRaw, { color: theme.textMuted }]}>"{item.detectedName}"</Text>
@@ -547,7 +570,7 @@ export default function IngredientScanScreen() {
                           <View style={s.itemMain}>
                             <Text style={[s.itemTitle, { color: theme.text }]}>{item.canonicalName}</Text>
                             <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                              %{Math.round(item.confidence * 100)} • {item.matchedBy ?? item.mappingType} • onay gerekli
+                              {formatMatchHint(item)}
                             </Text>
                             {item.detectedName !== item.canonicalName && (
                               <Text style={[s.itemRaw, { color: theme.textMuted }]}>"{item.detectedName}"</Text>
@@ -575,10 +598,10 @@ export default function IngredientScanScreen() {
             {unmatched.length > 0 && (
               <>
                 <View style={s.sectionRow}>
-                  <Text style={[s.sectionLabel, { color: theme.textMuted }]}>Tanınamadı</Text>
+                  <Text style={[s.sectionLabel, { color: theme.textMuted }]}>Elle kontrol et</Text>
                   <View style={[s.badge, { backgroundColor: `${theme.error}15` }]}>
                     <Ionicons name="help-circle" size={12} color={theme.error} />
-                    <Text style={[s.badgeTxt, { color: theme.error }]}>Çözümsüz</Text>
+                    <Text style={[s.badgeTxt, { color: theme.error }]}>Eşleşme bulunamadı</Text>
                   </View>
                 </View>
                 {unmatched.map(name => (
@@ -589,7 +612,7 @@ export default function IngredientScanScreen() {
                     <View style={s.itemMain}>
                       <Text style={[s.itemTitle, { color: theme.text }]}>{name}</Text>
                       <Text style={[s.itemMeta, { color: theme.textMuted }]}>
-                        GPT tarafından algılandı, veritabanında eşleştirilemedi. Elle ara.
+                        Listende birebir karşılığını bulamadık. İstersen arayarak ekleyebilirsin.
                       </Text>
                     </View>
                     <TouchableOpacity

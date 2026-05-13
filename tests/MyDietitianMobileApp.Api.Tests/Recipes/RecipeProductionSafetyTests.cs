@@ -21,8 +21,8 @@ namespace MyDietitianMobileApp.Api.Tests.Recipes;
 ///   PS-02  Draft isolation        (IsDraft = true → never reaches evaluator)
 ///   PS-03  Hidden isolation       (IsHiddenFromProduction = true → never reaches evaluator)
 ///   PS-04  Normal recipe passes   (all flags false → reaches evaluator normally)
-///   PS-05  Premium clinic scope   (only activeDietitianId clinic + public, not other tenants)
-///   PS-06  Free user scope        (only public recipes)
+///   PS-05  Premium clinic scope   (activeDietitianId clinic + system public fallback when enabled)
+///   PS-06  Free user scope        (only DietitianId=null system public recipes)
 ///   PS-07  Selin Aydın scenario   (deterministic evaluation for spec test basket)
 ///   PS-08  Demo + valid coexist   (demo filtered even when valid recipes exist)
 /// </summary>
@@ -64,17 +64,21 @@ public class RecipeProductionSafetyTests
     private static IEnumerable<Recipe> SimulateCandidateQuery(
         IEnumerable<Recipe> allRecipes,
         bool isPremium,
-        Guid? activeDietitianId)
+        Guid? activeDietitianId,
+        bool allowGlobalPublicFallback = false)
     {
         // Mirrors the exact WHERE logic in RecipeMatchController
-        return allRecipes
+        var baseQuery = allRecipes
+            .AsQueryable()
             .Where(r => !r.IsDemo)
             .Where(r => !r.IsDraft)
             .Where(r => !r.IsHiddenFromProduction)
-            .Where(r => r.IsPublic || r.DietitianId.HasValue)
-            .Where(r => !isPremium
-                ? r.IsPublic
-                : r.IsPublic || (r.DietitianId.HasValue && r.DietitianId == activeDietitianId));
+            .Where(r => !r.IsArchived)
+            .Where(r => r.IsPublic || r.DietitianId.HasValue);
+
+        return PremiumKitchenCandidateFilter
+            .ApplyVisibilityPolicy(baseQuery, isPremium, activeDietitianId, allowGlobalPublicFallback)
+            .ToList();
     }
 
     // ── PS-01: Demo recipe must be filtered before evaluation ──────────────────
@@ -160,45 +164,53 @@ public class RecipeProductionSafetyTests
         candidates.Should().ContainSingle(r => r.Id == recipe.Id);
     }
 
-    // ── PS-05: Premium user sees ONLY own clinic + public ─────────────────────
+    // ── PS-05: Premium user sees own clinic + system public fallback ─────────
 
     [Fact]
-    public void PS05_PremiumUser_SeeOnlyOwnClinicAndPublic()
+    public void PS05_PremiumUser_SeeOwnClinicAndSystemPublicFallback()
     {
         var pasta = Ing("Makarna");
 
         var ownClinic   = MakeRecipe("Klinik Tarif Aydin",  DietitianAydin, isPublic: false, mandatory: new[] { pasta });
         var otherClinic = MakeRecipe("Klinik Tarif Diğer",  DietitianOther, isPublic: false, mandatory: new[] { pasta });
+        var otherPublic = MakeRecipe("Diger Public",         DietitianOther, isPublic: true,  mandatory: new[] { pasta });
         var publicRecipe= MakeRecipe("Genel Tarif",          null,           isPublic: true,  mandatory: new[] { pasta });
 
         var candidates = SimulateCandidateQuery(
-            new[] { ownClinic, otherClinic, publicRecipe },
-            isPremium: true, DietitianAydin).ToList();
+            new[] { ownClinic, otherClinic, otherPublic, publicRecipe },
+            isPremium: true,
+            DietitianAydin,
+            allowGlobalPublicFallback: true).ToList();
 
         candidates.Should().Contain(r => r.Id == ownClinic.Id,
             "own clinic recipe must appear");
         candidates.Should().NotContain(r => r.Id == otherClinic.Id,
             "other tenant's private recipe must be excluded");
+        candidates.Should().NotContain(r => r.Id == otherPublic.Id,
+            "other tenant's public recipe is still tenant content");
         candidates.Should().Contain(r => r.Id == publicRecipe.Id,
-            "public recipe must appear for premium users");
+            "system public catalog recipe can appear when fallback is enabled");
     }
 
-    // ── PS-06: Free user sees ONLY public recipes ──────────────────────────────
+    // ── PS-06: Free user sees ONLY system public catalog recipes ─────────────
 
     [Fact]
-    public void PS06_FreeUser_SeesOnlyPublicRecipes()
+    public void PS06_FreeUser_SeesOnlySystemPublicCatalogRecipes()
     {
         var pasta = Ing("Makarna");
 
         var clinicRecipe = MakeRecipe("Klinik", DietitianAydin, isPublic: false, mandatory: new[] { pasta });
+        var clinicPublic = MakeRecipe("Klinik Public", DietitianAydin, isPublic: true, mandatory: new[] { pasta });
         var publicRecipe = MakeRecipe("Genel",  null,           isPublic: true,  mandatory: new[] { pasta });
 
         var candidates = SimulateCandidateQuery(
-            new[] { clinicRecipe, publicRecipe },
+            new[] { clinicRecipe, clinicPublic, publicRecipe },
             isPremium: false, activeDietitianId: null).ToList();
 
         candidates.Should().NotContain(r => r.Id == clinicRecipe.Id,
             "free users must not see clinic recipes");
+        candidates.Should().NotContain(r => r.Id == clinicPublic.Id,
+            "free users must not see dietitian-owned public recipes");
         candidates.Should().ContainSingle(r => r.Id == publicRecipe.Id);
     }
 
@@ -291,7 +303,11 @@ public class RecipeProductionSafetyTests
             isPublic: true, mandatory: new[] { pasta });
 
         var all = new[] { demoRecipe, validRecipe, publicRecipe };
-        var candidates = SimulateCandidateQuery(all, isPremium: true, DietitianAydin).ToList();
+        var candidates = SimulateCandidateQuery(
+            all,
+            isPremium: true,
+            DietitianAydin,
+            allowGlobalPublicFallback: true).ToList();
 
         // Demo must be absent
         candidates.Should().NotContain(r => r.Name.Contains("Demo"),

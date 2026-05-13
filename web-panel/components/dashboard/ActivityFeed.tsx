@@ -297,10 +297,12 @@ export function ActivityFeed() {
   });
 
   return (
-    <section className="card-sfcos h-full p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <section className="relative flex h-full min-h-[720px] flex-col overflow-hidden rounded-[2rem] border border-primary/20 bg-white shadow-[0_22px_70px_-38px_rgba(24,51,36,0.45)] ring-1 ring-primary/10">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-primary/8 to-transparent" />
+      <div className="relative shrink-0 border-b border-primary/15 bg-gradient-to-r from-primary/8 via-white to-[var(--surface-glass)] px-6 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/15 bg-white text-primary shadow-sm">
             <Activity className="h-5 w-5" />
           </div>
           <div>
@@ -308,16 +310,18 @@ export function ActivityFeed() {
             <p className="text-sm text-muted-foreground">Danışan hareketleri ve uygulamadan gelen son olaylar</p>
           </div>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
-          <span className="h-2 w-2 rounded-full bg-primary" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-white px-3 py-1.5 text-xs font-semibold text-primary shadow-sm">
+          <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_4px_rgba(67,181,117,0.12)]" />
           30 sn yenilenir
         </div>
       </div>
+      </div>
 
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent">
       {isLoading ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="flex items-start gap-3 rounded-2xl bg-surface-overlay px-4 py-4">
+            <div key={index} className="flex items-start gap-3 rounded-3xl border border-border/70 bg-surface-overlay px-4 py-4">
               <div className="h-10 w-10 rounded-2xl shimmer" />
               <div className="flex-1 space-y-2">
                 <div className="h-4 w-2/3 rounded-xl shimmer" />
@@ -327,7 +331,7 @@ export function ActivityFeed() {
           ))}
         </div>
       ) : !activities || activities.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-surface-overlay px-6 py-12 text-center">
+        <div className="flex min-h-[430px] flex-col items-center justify-center rounded-3xl border border-dashed border-primary/25 bg-primary/5 px-6 py-12 text-center">
           <Clock className="mx-auto h-10 w-10 text-muted-foreground" />
           <p className="mt-4 text-sm font-semibold text-foreground">Henüz aktivite kaydı yok</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -335,7 +339,7 @@ export function ActivityFeed() {
           </p>
         </div>
       ) : (
-        <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           {activities.map((activity) => {
             const Icon = ICON_MAP[activity.type] ?? Clock;
             const meta = parseActivityMetadata(activity.metadata);
@@ -351,7 +355,7 @@ export function ActivityFeed() {
             return (
               <div
                 key={activity.id}
-                className="flex items-start gap-3 rounded-2xl border border-border/80 bg-white/70 px-4 py-4 transition hover:border-primary/15 hover:bg-primary/5"
+                className="flex items-start gap-4 rounded-3xl border border-primary/15 bg-white px-4 py-4 shadow-[0_12px_32px_-24px_rgba(24,51,36,0.45)] transition hover:-translate-y-0.5 hover:border-primary/25 hover:bg-primary/5 hover:shadow-[0_18px_44px_-28px_rgba(24,51,36,0.55)]"
               >
                 {isBadgeActivity ? (
                   <BadgeToken badgeId={typeof meta.badgeId === 'string' ? meta.badgeId : undefined} />
@@ -389,6 +393,7 @@ export function ActivityFeed() {
           })}
         </div>
       )}
+      </div>
     </section>
   );
 }

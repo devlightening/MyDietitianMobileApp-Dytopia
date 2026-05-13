@@ -16,11 +16,14 @@ public static class PremiumKitchenCandidateFilter
         Guid? activeDietitianId,
         bool allowGlobalPublicFallback)
     {
+        static IQueryable<Recipe> SystemPublicCatalog(IQueryable<Recipe> source)
+            => source.Where(r => r.IsPublic && r.DietitianId == null);
+
         if (!isPremium)
-            return query.Where(r => r.IsPublic);
+            return SystemPublicCatalog(query);
 
         if (!activeDietitianId.HasValue)
-            return query.Where(r => r.IsPublic);
+            return SystemPublicCatalog(query);
 
         var aid = activeDietitianId.Value;
 
@@ -30,9 +33,10 @@ public static class PremiumKitchenCandidateFilter
         if (!allowGlobalPublicFallback)
             return linked;
 
-        // Fallback: public recipes not owned by this clinic (includes system catalog where DietitianId is null)
+        // Fallback is intentionally limited to the system public catalog.
+        // Public recipes owned by another dietitian are tenant content and stay hidden.
         return query.Where(r =>
             r.DietitianId == aid
-            || (r.IsPublic && (r.DietitianId == null || r.DietitianId != aid)));
+            || (r.IsPublic && r.DietitianId == null));
     }
 }

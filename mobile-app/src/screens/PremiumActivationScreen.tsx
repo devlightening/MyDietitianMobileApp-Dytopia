@@ -10,11 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Image,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { radii, spacing } from "../theme/tokens";
+import { BRAND_LOGO } from "../assets/brandAssets";
 
 export default function PremiumActivationScreen() {
   const nav = useNavigation();
@@ -85,7 +87,7 @@ export default function PremiumActivationScreen() {
           },
         ]}
       >
-        {/* Key icon */}
+        {/* Brand logo */}
         <Animated.View
           style={[
             s.iconWrap,
@@ -96,7 +98,12 @@ export default function PremiumActivationScreen() {
             { transform: [{ scale: iconScale }] },
           ]}
         >
-          <Text style={s.iconEmoji}>ğŸ”‘</Text>
+          <Image
+            source={BRAND_LOGO}
+            resizeMode="contain"
+            fadeDuration={0}
+            style={s.iconLogo}
+          />
         </Animated.View>
 
         {/* Title */}
@@ -228,7 +235,11 @@ const s = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing.lg,
   },
-  iconEmoji: { fontSize: 34 },
+  iconLogo: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+  },
 
   title: {
     fontSize: 22,

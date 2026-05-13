@@ -2,12 +2,12 @@ import apiClient from './client';
 import type { RegisterRequest, LoginRequest, AuthResponse, ActivatePremiumRequest, ActivatePremiumResponse } from '../types/auth';
 
 export async function registerClient(data: RegisterRequest): Promise<AuthResponse> {
-  const response = await apiClient.post<AuthResponse>('/api/auth/client/register', data);
+  const response = await apiClient.post<AuthResponse>('/api/client/register', data);
   return response.data;
 }
 
 export async function loginClient(data: LoginRequest): Promise<AuthResponse> {
-  const response = await apiClient.post<AuthResponse>('/api/auth/client/login', data);
+  const response = await apiClient.post<AuthResponse>('/api/client/login', data);
   return response.data;
 }
 

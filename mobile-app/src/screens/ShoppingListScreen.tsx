@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from "react-native-reanimated";
+import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
 import { useFeedback } from "../context/FeedbackContext";
@@ -74,8 +75,10 @@ export default function ShoppingListScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
-  const { showToast } = useFeedback();
+  const { showDialog, showToast } = useFeedback();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const isPremium = user?.isPremium === true;
 
   const [items, setItems] = useState<ShoppingListItem[]>([]);
   const [summary, setSummary] = useState<ShoppingListSummary>(EMPTY_SUMMARY);
@@ -107,7 +110,7 @@ export default function ShoppingListScreen() {
         add: "Add item",
         generate: "Generate from today plan",
         clearChecked: "Clear checked",
-        aiTitle: "AI grocery sweep",
+        aiTitle: "Smart grocery sweep",
         aiCountLabel: "items",
         emptyTitle: "Your list is fresh",
         emptyDesc: "Generate ingredients from your plan or add custom pantry needs.",
@@ -152,7 +155,7 @@ export default function ShoppingListScreen() {
         add: "Madde ekle",
         generate: "Bugünün planından üret",
         clearChecked: "Tamamlananları temizle",
-        aiTitle: "AI alışveriş özeti",
+        aiTitle: "Akıllı alışveriş özeti",
         aiCountLabel: "ürün",
         emptyTitle: "Listen hazır bekliyor",
         emptyDesc: "Planından malzeme üret veya kendi ihtiyaçlarını tek satırla ekle.",
@@ -317,6 +320,32 @@ export default function ShoppingListScreen() {
   }
 
   async function handleGenerateFromPlan() {
+    if (!isPremium) {
+      showDialog({
+        variant: "info",
+        icon: "lock-closed-outline",
+        eyebrow: language === "tr" ? "Premium plan" : "Premium plan",
+        title: language === "tr" ? "Plan bazlı liste premium ile açılır" : "Plan-based list generation is premium",
+        message: language === "tr"
+          ? "Free modda manuel liste ve public tarif eksikleri açık. Bugünün klinik planından otomatik üretim için premium aktivasyon gerekir."
+          : "Free mode supports manual lists and public recipe gaps. Automatic generation from today's clinic plan requires premium.",
+        secondaryAction: { label: language === "tr" ? "Tamam" : "OK", tone: "muted" },
+        primaryAction: {
+          label: language === "tr" ? "Premium'u Aktive Et" : "Activate premium",
+          tone: "primary",
+          onPress: () => {
+            const parent = (navigation as any).getParent?.();
+            if (parent?.navigate) {
+              parent.navigate(Routes.Modal.ActivatePremium);
+              return;
+            }
+            (navigation as any).navigate(Routes.Modal.ActivatePremium);
+          },
+        },
+      });
+      return;
+    }
+
     setGenerating(true);
     try {
       const res = await generateShoppingListFromTodayPlan();
@@ -1685,4 +1714,3 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
 });
-

@@ -10,8 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { radii, spacing, type Theme } from "../../theme/tokens";
-
-const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+import { BRAND_LOGO } from "../../assets/brandAssets";
 
 type Props = {
   theme: Theme;
@@ -89,7 +88,7 @@ export default function ProfileEditCard({
             ) : (
               <>
                 <View style={[s.previewAura, { backgroundColor: theme.primaryGlow, borderColor: theme.borderEmerald }]} />
-                <Image source={BRAND_LOGO} resizeMode="contain" style={s.defaultLogo} />
+                <Image source={BRAND_LOGO} resizeMode="contain" fadeDuration={0} style={s.defaultLogo} />
                 {hasInitials ? (
                   <View style={[s.previewInitialBadge, { backgroundColor: theme.primary, borderColor: theme.surface }]}>
                     <Text style={s.previewInitialText}>{initials.slice(0, 1)}</Text>

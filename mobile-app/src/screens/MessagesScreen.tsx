@@ -21,9 +21,11 @@ import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import ProduceBubble from "../components/decor/ProduceBubble";
+import { useAuth } from "../auth/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
+import { Routes } from "../navigation/routes";
 import { radii, spacing } from "../theme/tokens";
 import {
   getAppointments,
@@ -59,6 +61,25 @@ function formatCompactSchedule(value: string, locale: "tr-TR" | "en-US") {
   return new Date(value).toLocaleString(locale, {
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
   });
+}
+
+function formatAppointmentDate(value: string, locale: "tr-TR" | "en-US") {
+  return new Date(value).toLocaleDateString(locale, {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  });
+}
+
+function formatAppointmentTime(value: string, locale: "tr-TR" | "en-US") {
+  return new Date(value).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatAppointmentMode(value: string, language: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "online" || normalized === "remote") return language === "tr" ? "Online" : "Online";
+  if (["in-person", "in_person", "face-to-face", "face_to_face", "yuz-yuze", "yüz yüze"].includes(normalized)) {
+    return language === "tr" ? "Yüz yüze" : "In person";
+  }
+  return value || (language === "tr" ? "Online" : "Online");
 }
 
 function formatBubbleTime(value: string, locale: "tr-TR" | "en-US") {
@@ -184,6 +205,31 @@ function ReplyQuote({ snippet, inbound, theme }: { snippet: string; inbound: boo
   );
 }
 
+function AppointmentDetailRow({
+  label,
+  value,
+  theme,
+  multiline = false,
+}: {
+  label: string;
+  value?: string | null;
+  theme: any;
+  multiline?: boolean;
+}) {
+  if (!value?.trim()) return null;
+  return (
+    <View style={[s.sessionDetailRow, { borderColor: theme.borderLight }]}>
+      <Text style={[s.sessionDetailLabel, { color: theme.textMuted }]}>{label}</Text>
+      <Text
+        style={[s.sessionDetailValue, { color: theme.text }]}
+        numberOfLines={multiline ? 4 : 2}
+      >
+        {value.trim()}
+      </Text>
+    </View>
+  );
+}
+
 // â”€â”€ Reply preview bar (above composer) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ReplyBar({
   item,
@@ -220,10 +266,12 @@ function ReplyBar({
 
 export default function MessagesScreen({ isActive = true }: { isActive?: boolean } = {}) {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
   const { permissionStatus, preferences, requestPermission, syncSchedules } = useNotifications();
   const insets = useSafeAreaInsets();
+  const isPremium = user?.isPremium === true;
   const locale = language === "tr" ? "tr-TR" : "en-US";
   const scrollRef = useRef<ScrollView>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -264,9 +312,14 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
           attendedButton: "I attended", missedButton: "I missed it",
           holdForDetails: "Hold for details", closeDetails: "Close details",
           detailsTitle: "Session details",
+          detailDate: "Date", detailTime: "Time", detailMode: "Type",
+          detailLocation: "Location", detailNote: "Note", detailStatus: "Status",
           calendarError: "Calendar event could not be created.",
           attendanceError: "Session status could not be saved.", send: "Send",
           sendError: "Your message could not be sent.", replyCancel: "Cancel reply",
+          lockedTitle: "Dietitian chat unlocks with premium",
+          lockedBody: "Activate your clinic connection to use messages, appointments and care notes.",
+          lockedAction: "Activate premium",
         }
       : {
           eyebrow: "Care Hub", title: "Diyetisyen sohbeti",
@@ -284,9 +337,14 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
           attendedButton: "Gittim", missedButton: "Gitmedim",
           holdForDetails: "Detaylar için basılı tut", closeDetails: "Detayları kapat",
           detailsTitle: "Görüşme detayları",
+          detailDate: "Tarih", detailTime: "Saat", detailMode: "Tür",
+          detailLocation: "Konum", detailNote: "Not", detailStatus: "Durum",
           calendarError: "Takvim etkinliği oluşturulamadı.",
           attendanceError: "Görüşme durumu kaydedilemedi.", send: "Gönder",
           sendError: "Mesaj gönderilemedi.", replyCancel: "Yanıtı iptal et",
+          lockedTitle: "Diyetisyen sohbeti premium ile açılır",
+          lockedBody: "Mesajlar, randevular ve klinik notları için premium klinik bağlantını aktive et.",
+          lockedAction: "Premium'u Aktive Et",
         }
   ), [language]);
 
@@ -308,6 +366,15 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
   }, [scrollToConversationEnd]);
 
   const load = useCallback(async () => {
+    if (!isPremium) {
+      setDietitian(null);
+      setAppointments([]);
+      setItems([]);
+      setLoading(false);
+      setSending(false);
+      return;
+    }
+
     try {
       const [thread, nextAppointments] = await Promise.all([getCareThread(), getAppointments()]);
       setDietitian(thread.activeDietitian ?? null);
@@ -321,20 +388,20 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
       setLoading(false);
       setSending(false);
     }
-  }, []);
+  }, [isPremium]);
 
   // Real-time refresh via SignalR
   const handleSignalRUpdate = useCallback(() => {
     void load();
   }, [load]);
 
-  useCareSignalR(handleSignalRUpdate, isActive);
+  useCareSignalR(handleSignalRUpdate, isActive && isPremium);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !isPremium) return;
     setLoading(true);
     void load();
-  }, [isActive, load]);
+  }, [isActive, isPremium, load]);
 
   useEffect(() => {
     if (!appointments.length || permissionStatus !== "granted" || !preferences.notificationsEnabled) return;
@@ -456,6 +523,15 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
     ? Math.max(insets.bottom, 8) + 2
     : bottomBarClearance;
 
+  const openPremiumGate = useCallback(() => {
+    const parent = (navigation as any).getParent?.();
+    if (parent?.navigate) {
+      parent.navigate(Routes.Modal.ActivatePremium);
+      return;
+    }
+    (navigation as any).navigate(Routes.Modal.ActivatePremium);
+  }, [navigation]);
+
   async function handleEnableReminder() {
     const status = await requestPermission();
     if (status === "granted") await syncSchedules();
@@ -490,6 +566,47 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
     } finally {
       setAttendanceSavingId(null);
     }
+  }
+
+  if (!isPremium) {
+    return (
+      <View style={[s.root, { backgroundColor: theme.bg, paddingTop: insets.top + 24 }]}>
+        <StatusBar
+          barStyle={isDark ? "light-content" : "dark-content"}
+          backgroundColor="transparent"
+          translucent
+        />
+        <ProduceBubble
+          icon="food-apple-outline"
+          iconSize={30}
+          iconColor={`${theme.primary}42`}
+          style={[s.glowA, { backgroundColor: theme.primaryGlow }]}
+        />
+        <ProduceBubble
+          icon="carrot"
+          iconSize={26}
+          iconColor={`${theme.emerald}3E`}
+          style={[s.glowB, { backgroundColor: theme.emeraldGlow }]}
+        />
+        <View style={s.lockedRoot}>
+          <View style={[s.lockedCard, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
+            <View style={[s.lockedIcon, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }]}>
+              <Ionicons name="lock-closed-outline" size={24} color={theme.primary} />
+            </View>
+            <Text style={[s.lockedTitle, { color: theme.text }]}>{copy.lockedTitle}</Text>
+            <Text style={[s.lockedBody, { color: theme.textSub }]}>{copy.lockedBody}</Text>
+            <TouchableOpacity
+              style={[s.lockedButton, { backgroundColor: theme.primary }]}
+              activeOpacity={0.86}
+              onPress={openPremiumGate}
+            >
+              <Text style={s.lockedButtonText}>{copy.lockedAction}</Text>
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -606,6 +723,56 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
                       <Text style={[s.sessionPopoverMeta, { color: theme.emerald }]}>
                         {formatSchedule(nextAppointment.scheduledAtUtc, locale)}
                       </Text>
+                      <ScrollView
+                        style={s.sessionDetailScroll}
+                        contentContainerStyle={s.sessionDetailList}
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator={false}
+                      >
+                        <AppointmentDetailRow
+                          label={copy.detailDate}
+                          value={formatAppointmentDate(nextAppointment.scheduledAtUtc, locale)}
+                          theme={theme}
+                        />
+                        <AppointmentDetailRow
+                          label={copy.detailTime}
+                          value={formatAppointmentTime(nextAppointment.scheduledAtUtc, locale)}
+                          theme={theme}
+                        />
+                        <AppointmentDetailRow
+                          label={copy.detailMode}
+                          value={formatAppointmentMode(nextAppointment.mode, language)}
+                          theme={theme}
+                        />
+                        <AppointmentDetailRow
+                          label={copy.detailLocation}
+                          value={nextAppointment.location}
+                          theme={theme}
+                          multiline
+                        />
+                        <AppointmentDetailRow
+                          label={copy.detailNote}
+                          value={nextAppointment.note}
+                          theme={theme}
+                          multiline
+                        />
+                        <AppointmentDetailRow
+                          label={copy.detailStatus}
+                          value={
+                            nextAppointment.attendanceStatus === "attended"
+                              ? copy.attendanceDone
+                              : nextAppointment.attendanceStatus === "missed"
+                                ? copy.attendanceMissed
+                                : nextAppointmentNeedsAttendance
+                                  ? copy.attendancePrompt
+                                  : remindersEnabledForAppointment
+                                    ? copy.reminderReady
+                                    : copy.reminderPrompt
+                          }
+                          theme={theme}
+                          multiline
+                        />
+                      </ScrollView>
                       <Text style={[s.sessionPopoverHint, { color: theme.textSub }]}>
                         {nextAppointment.attendanceStatus === "attended"
                           ? copy.attendanceDone
@@ -860,6 +1027,35 @@ export default function MessagesScreen({ isActive = true }: { isActive?: boolean
 const s = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
+  lockedRoot: { flex: 1, paddingHorizontal: 18, justifyContent: "center" },
+  lockedCard: {
+    borderWidth: 1,
+    borderRadius: 24,
+    paddingHorizontal: 22,
+    paddingVertical: 28,
+    alignItems: "center",
+  },
+  lockedIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  lockedTitle: { fontSize: 19, lineHeight: 24, fontWeight: "900", textAlign: "center", marginBottom: 8 },
+  lockedBody: { fontSize: 13, lineHeight: 19, textAlign: "center", marginBottom: 18 },
+  lockedButton: {
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  lockedButtonText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   glowA: { position: "absolute", top: 8, right: -62, width: 200, height: 200, borderRadius: 100, opacity: 0.68 },
   glowB: { position: "absolute", top: 310, left: -76, width: 170, height: 170, borderRadius: 85, opacity: 0.42 },
   content: { flex: 1, paddingHorizontal: 14, paddingBottom: 0 },
@@ -918,6 +1114,11 @@ const s = StyleSheet.create({
   sessionPopoverLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 3 },
   sessionPopoverTitle: { fontSize: 15, lineHeight: 20, fontWeight: "900" },
   sessionPopoverMeta: { fontSize: 12, fontWeight: "800", marginBottom: 6 },
+  sessionDetailScroll: { maxHeight: 230, marginBottom: 8 },
+  sessionDetailList: { gap: 6, marginBottom: 8 },
+  sessionDetailRow: { borderWidth: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 8 },
+  sessionDetailLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 0.55, textTransform: "uppercase", marginBottom: 3 },
+  sessionDetailValue: { fontSize: 12, lineHeight: 17, fontWeight: "800" },
   sessionPopoverHint: { fontSize: 11.5, lineHeight: 17 },
   sessionCloseBtn: {
     width: 28,
@@ -976,4 +1177,3 @@ const s = StyleSheet.create({
   input: { flex: 1, minHeight: 26, maxHeight: 108, paddingTop: 8, paddingBottom: 8, paddingRight: 6, fontSize: 15, lineHeight: 20, textAlignVertical: "top" },
   sendButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginBottom: 1 },
 });
-

@@ -1,8 +1,7 @@
 import React from "react";
 import { Image, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { useTheme } from "../../context/ThemeContext";
-
-const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+import { BRAND_LOGO } from "../../assets/brandAssets";
 
 type Position = "topRight" | "bottomRight" | "bottomLeft" | "center";
 
@@ -20,7 +19,7 @@ export default function DytopiaWatermark({
   style,
 }: Props) {
   const { isDark } = useTheme();
-  const finalOpacity = isDark ? Math.min(opacity, 0.032) : opacity;
+  const finalOpacity = isDark ? Math.min(Math.max(opacity * 1.25, 0.038), 0.058) : opacity;
 
   return (
     <View
@@ -28,11 +27,16 @@ export default function DytopiaWatermark({
       style={[
         s.base,
         getPositionStyle(position, size),
-        { width: size, height: size, opacity: finalOpacity },
+        {
+          width: size,
+          height: size,
+          opacity: finalOpacity,
+          transform: [{ scale: isDark ? 0.96 : 1 }],
+        },
         style,
       ]}
     >
-      <Image source={BRAND_LOGO} resizeMode="contain" style={s.logo} />
+      <Image source={BRAND_LOGO} resizeMode="contain" fadeDuration={0} style={s.logo} />
     </View>
   );
 }

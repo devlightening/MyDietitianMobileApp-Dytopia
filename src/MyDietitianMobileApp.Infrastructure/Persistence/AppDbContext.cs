@@ -2031,6 +2031,15 @@ namespace MyDietitianMobileApp.Infrastructure.Persistence
                 entity.Property(e => e.MealType).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.Notes).HasMaxLength(1000);
                 entity.Property(e => e.PhotoUrl).HasMaxLength(500);
+                entity.Property(e => e.FoodName).HasMaxLength(160);
+                entity.Property(e => e.CaloriesKcal);
+                entity.Property(e => e.ProteinGrams).HasPrecision(8, 2);
+                entity.Property(e => e.CarbsGrams).HasPrecision(8, 2);
+                entity.Property(e => e.FatGrams).HasPrecision(8, 2);
+                entity.Property(e => e.PortionCount).HasPrecision(5, 2).HasDefaultValue(1m);
+                entity.Property(e => e.AiConfidence).HasPrecision(4, 2);
+                entity.Property(e => e.AnalysisJson).HasColumnType("text");
+                entity.Property(e => e.Source).IsRequired().HasMaxLength(32).HasDefaultValue("manual");
                 entity.HasIndex(e => new { e.ClientId, e.Date })
                     .HasDatabaseName("IX_ClientMealLogs_ClientId_Date");
                 entity.HasOne(e => e.Client)

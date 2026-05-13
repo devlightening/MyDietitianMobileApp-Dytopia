@@ -8,13 +8,17 @@ import { Input } from '@/components/ui/Input';
 import {
   AlertCircle,
   Check,
+  CalendarDays,
   Clock,
   Copy,
+  Hash,
   Key,
   Loader2,
+  Mail,
   Plus,
   ShieldCheck,
   ShieldOff,
+  UserCircle2,
 } from 'lucide-react';
 import { getAccessKeys, createAccessKeyForClient } from '@/lib/api/access-keys';
 import { cn } from '@/lib/utils';
@@ -41,6 +45,18 @@ function addDays(days: number): string {
 
 function todayStr(): string {
   return toDateInputValue(new Date());
+}
+
+function formatDateLabel(value?: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('tr-TR');
+}
+
+function compactGuid(value?: string | null): string {
+  if (!value) return '-';
+  return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
 }
 
 function KeyStatusBadge({ isActive, expiresAt }: { isActive: boolean; expiresAt?: string }) {
@@ -322,7 +338,14 @@ export default function AccessKeysPage() {
             <div className="space-y-3">
               {accessKeys.map((accessKey: any) => {
                 const expiresAt = accessKey.expiresAtUtc || accessKey.endDate || accessKey.ExpiresAtUtc;
-                const rawKey = accessKey.keyValue || accessKey.key || accessKey.KeyValue || '-';
+                const createdAt = accessKey.createdAtUtc || accessKey.createdAt || accessKey.startDate || accessKey.CreatedAtUtc;
+                const startDate = accessKey.startDate || accessKey.createdAtUtc || accessKey.CreatedAtUtc;
+                const rawKey = accessKey.keyValue || accessKey.key || accessKey.accessKey || accessKey.KeyValue || '-';
+                const clientName = accessKey.clientFullName || accessKey.ClientFullName || 'Danışan adı yok';
+                const clientEmail = accessKey.clientEmail || accessKey.ClientEmail;
+                const publicUserId = accessKey.publicUserId || accessKey.PublicUserId;
+                const clientId = accessKey.clientId || accessKey.ClientId;
+                const isActive = accessKey.isActive ?? accessKey.IsActive ?? true;
 
                 return (
                   <Card key={accessKey.id ?? rawKey} className="p-5">
@@ -341,7 +364,54 @@ export default function AccessKeysPage() {
                           </button>
                         </div>
 
-                        <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                        <div className="mt-4 grid gap-3 rounded-2xl border border-border/70 bg-[var(--surface-glass)] p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary/75">
+                              <UserCircle2 className="h-3.5 w-3.5" />
+                              Danışan
+                            </div>
+                            <p className="mt-2 truncate text-sm font-semibold text-foreground">{clientName}</p>
+                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                              {publicUserId ? (
+                                <p className="flex min-w-0 items-center gap-2">
+                                  <Hash className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span className="truncate font-mono">{publicUserId}</span>
+                                </p>
+                              ) : null}
+                              {clientEmail ? (
+                                <p className="flex min-w-0 items-center gap-2">
+                                  <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span className="truncate">{clientEmail}</span>
+                                </p>
+                              ) : null}
+                              {clientId ? (
+                                <p className="font-mono text-[11px] text-muted-foreground/80">
+                                  Client ID: {compactGuid(String(clientId))}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <div className="rounded-2xl bg-white/70 px-3 py-3 text-xs">
+                              <CalendarDays className="mb-1 h-3.5 w-3.5 text-primary" />
+                              <p className="text-muted-foreground">Başlangıç</p>
+                              <p className="mt-1 font-semibold text-foreground">{formatDateLabel(startDate)}</p>
+                            </div>
+                            <div className="rounded-2xl bg-white/70 px-3 py-3 text-xs">
+                              <Clock className="mb-1 h-3.5 w-3.5 text-primary" />
+                              <p className="text-muted-foreground">Bitiş</p>
+                              <p className="mt-1 font-semibold text-foreground">{formatDateLabel(expiresAt)}</p>
+                            </div>
+                            <div className="rounded-2xl bg-white/70 px-3 py-3 text-xs">
+                              <Key className="mb-1 h-3.5 w-3.5 text-primary" />
+                              <p className="text-muted-foreground">Oluşturma</p>
+                              <p className="mt-1 font-semibold text-foreground">{formatDateLabel(createdAt)}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="hidden">
                           <p>
                             Bitiş:{' '}
                             <span className="font-medium text-foreground">
@@ -357,7 +427,7 @@ export default function AccessKeysPage() {
                       </div>
 
                       <KeyStatusBadge
-                        isActive={accessKey.isActive ?? accessKey.IsActive ?? true}
+                        isActive={isActive}
                         expiresAt={expiresAt}
                       />
                     </div>

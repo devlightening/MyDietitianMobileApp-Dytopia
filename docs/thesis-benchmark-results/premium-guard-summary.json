@@ -1,0 +1,7 @@
+{
+  "TotalCases": 10,
+  "CorrectCases": 10,
+  "PremiumGuardSuccessPct": 100,
+  "TenantIsolationSuccessPct": 100,
+  "FailedCases": []
+}

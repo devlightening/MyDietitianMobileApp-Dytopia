@@ -15,6 +15,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
+import { useAuth } from "../auth/AuthContext";
 import { useInAppNotifications } from "../context/InAppNotificationContext";
 import { spacing, radii } from "../theme/tokens";
 import { addIngredientsToShoppingList } from "../api/shopping-list";
@@ -68,9 +69,11 @@ export default function KitchenResultScreen() {
   const { ingredientIds, ingredientNames } = route.params;
   const { theme, isDark } = useTheme();
   const { language } = useTranslation();
+  const { user } = useAuth();
   const { notify } = useInAppNotifications();
   const insets = useSafeAreaInsets();
   const { data: gamification } = useGamification();
+  const isPremium = user?.isPremium === true;
 
   const [results, setResults] = useState<RecipeMatchResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,10 +89,12 @@ export default function KitchenResultScreen() {
         full: "Full Match",
         partial: "Almost",
         clinic: "Clinic",
-        title: "Suggested recipes",
-        sub: "The strongest recipe matches for your selected ingredients.",
+        title: isPremium ? "Suggested recipes" : "Classic recipe pool",
+        sub: isPremium
+          ? "The strongest recipe matches for your selected ingredients."
+          : "Matches from system public recipes, independent of any clinic.",
         feature: "TOP MATCH",
-        featureTitle: "Suggested Recipe",
+        featureTitle: isPremium ? "Suggested Recipe" : "Classic Recipe",
         why: "Why this recipe?",
         retry: "Try Again",
         empty: "No matching recipes found",
@@ -116,10 +121,12 @@ export default function KitchenResultScreen() {
         full: "Tam Uyum",
         partial: "Eksikle",
         clinic: "Klinik",
-        title: "Önerilen tarifler",
-        sub: "Seçtiğin malzemeler için en güçlü tarif eşleşmeleri.",
+        title: isPremium ? "Önerilen tarifler" : "Klasik tarifler",
+        sub: isPremium
+          ? "Seçtiğin malzemeler için en güçlü tarif eşleşmeleri."
+          : "Klinik bağlı olmayan sistem public katalogdan eşleşmeler.",
         feature: "EN GÜÇLÜ EŞLEŞME",
-        featureTitle: "Önerilen Tarif",
+        featureTitle: isPremium ? "Önerilen Tarif" : "Klasik Tarif",
         why: "Neden önerildi?",
         retry: "Tekrar Dene",
         empty: "Uygun tarif bulunamadı",
@@ -144,6 +151,12 @@ export default function KitchenResultScreen() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!isPremium && tab === "clinic") {
+      setTab("all");
+    }
+  }, [isPremium, tab]);
 
   useEffect(() => {
     if (!loading) return;
@@ -174,7 +187,7 @@ export default function KitchenResultScreen() {
   }
 
   const grouped = useMemo(() => {
-    const clinic = results.filter((item) => isOwnedByLinkedClinic(item));
+    const clinic = isPremium ? results.filter((item) => isOwnedByLinkedClinic(item)) : [];
     const full = results.filter((item) => !isOwnedByLinkedClinic(item) && isFull(item));
     const partial = results.filter((item) => isPartial(item));
 
@@ -189,7 +202,7 @@ export default function KitchenResultScreen() {
       full: full.filter((item) => item.recipeId !== featured?.recipeId),
       partial: partial.filter((item) => item.recipeId !== featured?.recipeId),
     };
-  }, [results]);
+  }, [isPremium, results]);
 
   const prioritySummary = useMemo(() => summarizeRecipePriority(results), [results]);
 
@@ -204,7 +217,7 @@ export default function KitchenResultScreen() {
     { key: "all" as TabKey, label: copy.all },
     { key: "full" as TabKey, label: copy.full },
     { key: "partial" as TabKey, label: copy.partial },
-    { key: "clinic" as TabKey, label: copy.clinic },
+    ...(isPremium ? [{ key: "clinic" as TabKey, label: copy.clinic }] : []),
   ];
 
   if (loading) {
@@ -465,8 +478,8 @@ export default function KitchenResultScreen() {
         )}
 
         {([
-          { key: "clinic", title: copy.clinic, sub: copy.clinicSub, items: sections.clinic },
-          { key: "full", title: copy.full, sub: copy.fullSub, items: sections.full },
+          ...(isPremium ? [{ key: "clinic", title: copy.clinic, sub: copy.clinicSub, items: sections.clinic }] : []),
+          { key: "full", title: isPremium ? copy.full : (language === "tr" ? "Klasik tarifler" : "Classic recipes"), sub: copy.fullSub, items: sections.full },
           { key: "partial", title: copy.partial, sub: copy.partialSub, items: sections.partial },
         ] as const).map((section) => section.items.length > 0 && (
           <Animated.View

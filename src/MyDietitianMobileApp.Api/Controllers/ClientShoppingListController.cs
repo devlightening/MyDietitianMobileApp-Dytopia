@@ -123,6 +123,13 @@ public class ClientShoppingListController : ControllerBase
         if (!identity.HasValue)
             return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Client hesabi bulunamadi."));
 
+        var premium = await _premiumStatusService.GetPremiumStatusAsync(identity.Value.userId, CancellationToken.None);
+        if (!premium.IsPremium)
+        {
+            var problem = ApiProblems.PremiumRequired("Plan bazli alisveris listesi yalnizca premium kullanicilar icin kullanilabilir.");
+            return StatusCode(problem.Status ?? StatusCodes.Status403Forbidden, problem);
+        }
+
         var (today, tomorrow) = AppTime.ToStoredDayRange(AppTime.LocalToday);
         var plan = await _appDb.MealPlans
             .AsNoTracking()
@@ -1037,9 +1044,11 @@ public class ClientShoppingListController : ControllerBase
             .Include(x => x.MandatoryIngredients);
 
         if (!premium.IsPremium)
-            return await query.FirstOrDefaultAsync(x => x.IsPublic);
+            return await query.FirstOrDefaultAsync(x => x.IsPublic && x.DietitianId == null);
 
-        return await query.FirstOrDefaultAsync(x => x.IsPublic || x.DietitianId == premium.ActiveDietitianId);
+        return await query.FirstOrDefaultAsync(x =>
+            (x.IsPublic && x.DietitianId == null)
+            || (premium.ActiveDietitianId.HasValue && x.DietitianId == premium.ActiveDietitianId.Value));
     }
 }
 

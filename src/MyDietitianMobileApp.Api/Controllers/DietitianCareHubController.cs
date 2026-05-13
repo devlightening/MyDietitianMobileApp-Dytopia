@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using System.Globalization;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -169,12 +170,12 @@ public class DietitianCareHubController : ControllerBase
         if (!dietitianId.HasValue)
             return Unauthorized(ApiProblems.Unauthorized("AUTH_REQUIRED", "Dietitian hesabi bulunamadi."));
 
-        var fromUtc = DateTime.TryParse(from, out var parsedFrom)
-            ? DateTime.SpecifyKind(parsedFrom, DateTimeKind.Utc)
+        var fromUtc = TryParseUtcDateTime(from, out var parsedFrom)
+            ? parsedFrom
             : DateTime.UtcNow.Date;
 
-        var toUtc = DateTime.TryParse(to, out var parsedTo)
-            ? DateTime.SpecifyKind(parsedTo, DateTimeKind.Utc)
+        var toUtc = TryParseUtcDateTime(to, out var parsedTo)
+            ? parsedTo
             : fromUtc.AddDays(90);
 
         var safeLimit = Math.Clamp(limit, 1, 200);
@@ -241,5 +242,27 @@ public class DietitianCareHubController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == Guid.Parse(userId) && x.Role == "Dietitian");
 
         return user?.LinkedDietitianId;
+    }
+
+    private static bool TryParseUtcDateTime(string? value, out DateTime utcDateTime)
+    {
+        utcDateTime = default;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        const DateTimeStyles styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, styles, out var dateTimeOffset))
+        {
+            utcDateTime = dateTimeOffset.UtcDateTime;
+            return true;
+        }
+
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, styles, out var dateTime))
+        {
+            utcDateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+            return true;
+        }
+
+        return false;
     }
 }

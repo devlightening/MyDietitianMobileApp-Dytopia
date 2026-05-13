@@ -1,0 +1,891 @@
+[
+  {
+    "ScenarioId": "R001",
+    "RecipeName": "Ton Balıklı Salata",
+    "Basket": [
+      "Ton Balığı",
+      "Marul",
+      "Limon"
+    ],
+    "Mandatory": [
+      "Ton Balığı"
+    ],
+    "Optional": [
+      "Marul",
+      "Limon"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.056,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R002",
+    "RecipeName": "Yoğurtlu Yulaf",
+    "Basket": [
+      "Yoğurt",
+      "Yulaf",
+      "Muz"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Optional": [
+      "Muz"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0461,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R003",
+    "RecipeName": "Kefirli Yulaf",
+    "Basket": [
+      "Kefir",
+      "Yulaf"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [
+      "Kefir=>Yoğurt"
+    ],
+    "ExpectedDecision": "Tam Uyum (Alternatifli)",
+    "ActualDecision": "Tam Uyum (Alternatifli)",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0337,
+    "Type": "substitute",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
+  },
+  {
+    "ScenarioId": "R004",
+    "RecipeName": "Domatesli Yumurta",
+    "Basket": [
+      "Yumurta",
+      "Domates"
+    ],
+    "Mandatory": [
+      "Yumurta",
+      "Domates"
+    ],
+    "Optional": [
+      "Karabiber"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.6667,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0224,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R005",
+    "RecipeName": "Tavuk Salata",
+    "Basket": [
+      "Tavuk Göğsü",
+      "Marul"
+    ],
+    "Mandatory": [
+      "Tavuk Göğsü",
+      "Marul"
+    ],
+    "Optional": [
+      "Limon"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.6667,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0173,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R006",
+    "RecipeName": "Kuru Fasulye",
+    "Basket": [
+      "Kuru Fasulye",
+      "Domates"
+    ],
+    "Mandatory": [
+      "Kuru Fasulye",
+      "Domates"
+    ],
+    "Optional": [
+      "Tuz"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.6667,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0176,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R007",
+    "RecipeName": "Bulgur Pilavı",
+    "Basket": [
+      "Bulgur",
+      "Domates"
+    ],
+    "Mandatory": [
+      "Bulgur",
+      "Domates"
+    ],
+    "Optional": [
+      "Zeytinyağı"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.6667,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0165,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R008",
+    "RecipeName": "Mercimek Çorbası",
+    "Basket": [
+      "Mercimek",
+      "Havuç"
+    ],
+    "Mandatory": [
+      "Mercimek",
+      "Havuç"
+    ],
+    "Optional": [
+      "Karabiber"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.6667,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0187,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R009",
+    "RecipeName": "Peynirli Salata",
+    "Basket": [
+      "Peynir",
+      "Marul",
+      "Domates"
+    ],
+    "Mandatory": [
+      "Peynir",
+      "Marul"
+    ],
+    "Optional": [
+      "Domates"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0177,
+    "Type": "full",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R010",
+    "RecipeName": "Muzlu Süt",
+    "Basket": [
+      "Laktozsuz Süt",
+      "Muz"
+    ],
+    "Mandatory": [
+      "Süt",
+      "Muz"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [
+      "Laktozsuz Süt=>Süt"
+    ],
+    "ExpectedDecision": "Tam Uyum (Alternatifli)",
+    "ActualDecision": "Tam Uyum (Alternatifli)",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0223,
+    "Type": "substitute",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
+  },
+  {
+    "ScenarioId": "R011",
+    "RecipeName": "Eksik Ton Salata",
+    "Basket": [
+      "Marul",
+      "Limon"
+    ],
+    "Mandatory": [
+      "Ton Balığı",
+      "Marul"
+    ],
+    "Optional": [
+      "Limon"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "1 Eksikle Olur",
+    "ActualDecision": "1 Eksikle Olur",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0084,
+    "Type": "one_missing",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R012",
+    "RecipeName": "Eksik Tavuk Salata",
+    "Basket": [
+      "Marul",
+      "Limon"
+    ],
+    "Mandatory": [
+      "Tavuk Göğsü",
+      "Marul"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "1 Eksikle Olur",
+    "ActualDecision": "1 Eksikle Olur",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0059,
+    "Type": "one_missing",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R013",
+    "RecipeName": "Eksik Yulaf Bowl",
+    "Basket": [
+      "Yoğurt",
+      "Muz"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Optional": [
+      "Muz"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "1 Eksikle Olur",
+    "ActualDecision": "1 Eksikle Olur",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0077,
+    "Type": "one_missing",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R014",
+    "RecipeName": "Eksik Fasulye",
+    "Basket": [
+      "Domates"
+    ],
+    "Mandatory": [
+      "Kuru Fasulye",
+      "Domates"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "1 Eksikle Olur",
+    "ActualDecision": "1 Eksikle Olur",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0059,
+    "Type": "one_missing",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R015",
+    "RecipeName": "Eksik Pilav",
+    "Basket": [
+      "Domates"
+    ],
+    "Mandatory": [
+      "Bulgur",
+      "Domates"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "1 Eksikle Olur",
+    "ActualDecision": "1 Eksikle Olur",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0055,
+    "Type": "one_missing",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R016",
+    "RecipeName": "Laktoz Yasaklı Yoğurt",
+    "Basket": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Mandatory": [
+      "Yoğurt"
+    ],
+    "Optional": [],
+    "Prohibited": [
+      "Yoğurt"
+    ],
+    "Substitutes": [],
+    "ExpectedDecision": "Yasak nedeniyle elendi",
+    "ActualDecision": "Yasak nedeniyle elendi",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": true,
+    "LatencyMs": 0.0138,
+    "Type": "prohibited",
+    "Notes": "Recipe contains ingredients prohibited for the client."
+  },
+  {
+    "ScenarioId": "R017",
+    "RecipeName": "Tuz Yasaklı Tarif",
+    "Basket": [
+      "Domates"
+    ],
+    "Mandatory": [
+      "Domates"
+    ],
+    "Optional": [],
+    "Prohibited": [
+      "Tuz"
+    ],
+    "Substitutes": [],
+    "ExpectedDecision": "Yasak nedeniyle elendi",
+    "ActualDecision": "Yasak nedeniyle elendi",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": true,
+    "LatencyMs": 0.006,
+    "Type": "prohibited",
+    "Notes": "Recipe contains ingredients prohibited for the client."
+  },
+  {
+    "ScenarioId": "R018",
+    "RecipeName": "Ton Yasaklı Tarif",
+    "Basket": [
+      "Marul"
+    ],
+    "Mandatory": [
+      "Marul"
+    ],
+    "Optional": [],
+    "Prohibited": [
+      "Ton Balığı"
+    ],
+    "Substitutes": [],
+    "ExpectedDecision": "Yasak nedeniyle elendi",
+    "ActualDecision": "Yasak nedeniyle elendi",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": true,
+    "LatencyMs": 0.005,
+    "Type": "prohibited",
+    "Notes": "Recipe contains ingredients prohibited for the client."
+  },
+  {
+    "ScenarioId": "R019",
+    "RecipeName": "Süt Yasaklı Tarif",
+    "Basket": [
+      "Muz"
+    ],
+    "Mandatory": [
+      "Muz"
+    ],
+    "Optional": [],
+    "Prohibited": [
+      "Süt"
+    ],
+    "Substitutes": [],
+    "ExpectedDecision": "Yasak nedeniyle elendi",
+    "ActualDecision": "Yasak nedeniyle elendi",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": true,
+    "LatencyMs": 0.0049,
+    "Type": "prohibited",
+    "Notes": "Recipe contains ingredients prohibited for the client."
+  },
+  {
+    "ScenarioId": "R020",
+    "RecipeName": "Yumurta Yasaklı Tarif",
+    "Basket": [
+      "Domates"
+    ],
+    "Mandatory": [
+      "Domates"
+    ],
+    "Optional": [],
+    "Prohibited": [
+      "Yumurta"
+    ],
+    "Substitutes": [],
+    "ExpectedDecision": "Yasak nedeniyle elendi",
+    "ActualDecision": "Yasak nedeniyle elendi",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": true,
+    "LatencyMs": 0.0046,
+    "Type": "prohibited",
+    "Notes": "Recipe contains ingredients prohibited for the client."
+  },
+  {
+    "ScenarioId": "R021",
+    "RecipeName": "Çok Eksik Bowl",
+    "Basket": [
+      "Muz"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Yulaf",
+      "Süt"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Uygun Değil",
+    "ActualDecision": "Uygun Değil",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.009,
+    "Type": "not_eligible",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R022",
+    "RecipeName": "Çok Eksik Salata",
+    "Basket": [
+      "Limon"
+    ],
+    "Mandatory": [
+      "Ton Balığı",
+      "Marul",
+      "Domates"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Uygun Değil",
+    "ActualDecision": "Uygun Değil",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0067,
+    "Type": "not_eligible",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R023",
+    "RecipeName": "Çok Eksik Tavuk",
+    "Basket": [
+      "Karabiber"
+    ],
+    "Mandatory": [
+      "Tavuk Göğsü",
+      "Marul"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Uygun Değil",
+    "ActualDecision": "Uygun Değil",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0057,
+    "Type": "not_eligible",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R024",
+    "RecipeName": "Çok Eksik Bakliyat",
+    "Basket": [
+      "Tuz"
+    ],
+    "Mandatory": [
+      "Kuru Fasulye",
+      "Domates"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Uygun Değil",
+    "ActualDecision": "Uygun Değil",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0067,
+    "Type": "not_eligible",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R025",
+    "RecipeName": "Çok Eksik Kahvaltı",
+    "Basket": [
+      "Elma"
+    ],
+    "Mandatory": [
+      "Yumurta",
+      "Peynir"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Uygun Değil",
+    "ActualDecision": "Uygun Değil",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": true,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0051,
+    "Type": "not_eligible",
+    "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R026",
+    "RecipeName": "Sadece Tuz",
+    "Basket": [
+      "Tuz"
+    ],
+    "Mandatory": [
+      "Tuz"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Düşük skor / önerilmemeli",
+    "ActualDecision": "Düşük skor / önerilmemeli",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.008,
+    "Type": "condiment_guard",
+    "Notes": "CONDIMENT_ONLY_MATCH: All matched mandatory ingredients are condiments/pantry helpers — not a meaningful recipe match."
+  },
+  {
+    "ScenarioId": "R027",
+    "RecipeName": "Sadece Zeytinyağı",
+    "Basket": [
+      "Zeytinyağı"
+    ],
+    "Mandatory": [
+      "Zeytinyağı"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Düşük skor / önerilmemeli",
+    "ActualDecision": "Düşük skor / önerilmemeli",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0076,
+    "Type": "condiment_guard",
+    "Notes": "CONDIMENT_ONLY_MATCH: All matched mandatory ingredients are condiments/pantry helpers — not a meaningful recipe match."
+  },
+  {
+    "ScenarioId": "R028",
+    "RecipeName": "Sadece Karabiber",
+    "Basket": [
+      "Karabiber"
+    ],
+    "Mandatory": [
+      "Karabiber"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Düşük skor / önerilmemeli",
+    "ActualDecision": "Düşük skor / önerilmemeli",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0067,
+    "Type": "condiment_guard",
+    "Notes": "CONDIMENT_ONLY_MATCH: All matched mandatory ingredients are condiments/pantry helpers — not a meaningful recipe match."
+  },
+  {
+    "ScenarioId": "R029",
+    "RecipeName": "Boş Zorunlu Tarif",
+    "Basket": [
+      "Domates"
+    ],
+    "Mandatory": [],
+    "Optional": [
+      "Domates"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Düşük skor / önerilmemeli",
+    "ActualDecision": "Düşük skor / önerilmemeli",
+    "Score": 0,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0045,
+    "Type": "quality_guard",
+    "Notes": "QUALITY_INVALID: Recipe has no mandatory ingredients — excluded from recommendation pool."
+  },
+  {
+    "ScenarioId": "R030",
+    "RecipeName": "Alternatif Laktozsuz Yoğurt",
+    "Basket": [
+      "Laktozsuz Yoğurt",
+      "Yulaf"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [
+      "Laktozsuz Yoğurt=>Yoğurt"
+    ],
+    "ExpectedDecision": "Tam Uyum (Alternatifli)",
+    "ActualDecision": "Tam Uyum (Alternatifli)",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0237,
+    "Type": "substitute",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
+  },
+  {
+    "ScenarioId": "R031",
+    "RecipeName": "Alternatif Laktozsuz Süt",
+    "Basket": [
+      "Laktozsuz Süt",
+      "Muz"
+    ],
+    "Mandatory": [
+      "Süt",
+      "Muz"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [
+      "Laktozsuz Süt=>Süt"
+    ],
+    "ExpectedDecision": "Tam Uyum (Alternatifli)",
+    "ActualDecision": "Tam Uyum (Alternatifli)",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0188,
+    "Type": "substitute",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
+  },
+  {
+    "ScenarioId": "R032",
+    "RecipeName": "Alternatif Kefir",
+    "Basket": [
+      "Kefir",
+      "Muz"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Muz"
+    ],
+    "Optional": [],
+    "Prohibited": [],
+    "Substitutes": [
+      "Kefir=>Yoğurt"
+    ],
+    "ExpectedDecision": "Tam Uyum (Alternatifli)",
+    "ActualDecision": "Tam Uyum (Alternatifli)",
+    "Score": 1,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0202,
+    "Type": "substitute",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
+  },
+  {
+    "ScenarioId": "R033",
+    "RecipeName": "Opsiyonel Eksik Tam",
+    "Basket": [
+      "Ton Balığı"
+    ],
+    "Mandatory": [
+      "Ton Balığı"
+    ],
+    "Optional": [
+      "Marul",
+      "Limon"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.3333,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0147,
+    "Type": "optional_missing",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R034",
+    "RecipeName": "Opsiyonel Eksik Yulaf",
+    "Basket": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Mandatory": [
+      "Yoğurt",
+      "Yulaf"
+    ],
+    "Optional": [
+      "Muz"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.6667,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.014,
+    "Type": "optional_missing",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R035",
+    "RecipeName": "Opsiyonel Eksik Tavuk",
+    "Basket": [
+      "Tavuk Göğsü"
+    ],
+    "Mandatory": [
+      "Tavuk Göğsü"
+    ],
+    "Optional": [
+      "Marul",
+      "Limon"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.3333,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0151,
+    "Type": "optional_missing",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
+  },
+  {
+    "ScenarioId": "R036",
+    "RecipeName": "Opsiyonel Eksik Domates",
+    "Basket": [
+      "Yumurta"
+    ],
+    "Mandatory": [
+      "Yumurta"
+    ],
+    "Optional": [
+      "Domates"
+    ],
+    "Prohibited": [],
+    "Substitutes": [],
+    "ExpectedDecision": "Tam Uyum",
+    "ActualDecision": "Tam Uyum",
+    "Score": 0.5,
+    "IsCorrect": true,
+    "ExplanationContainsMissingIngredient": false,
+    "ExplanationContainsProhibitedReason": false,
+    "LatencyMs": 0.0128,
+    "Type": "optional_missing",
+    "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
+  }
+]

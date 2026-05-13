@@ -764,12 +764,14 @@ export default function PlansScreen({
               </Text>
               <Text style={[s.shoppingLinkSub, { color: theme.textMuted }]}>
                 {language === "tr"
-                  ? "AI, bugünkü tariflerinden eksikleri tek akışta çıkarır"
-                  : "AI turns today’s plan into a clean grocery sweep"}
+                  ? "Bugünkü tariflerinden eksikler tek akışta listeye dönüşür"
+                  : "Today’s plan turns into a clean grocery sweep"}
               </Text>
             </View>
             <View style={[s.shoppingLinkBadge, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-              <Text style={[s.shoppingLinkBadgeTxt, { color: theme.primary }]}>AI</Text>
+              <Text style={[s.shoppingLinkBadgeTxt, { color: theme.primary }]}>
+                {language === "tr" ? "Akıllı" : "Smart"}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.textSub} />
           </TouchableOpacity>

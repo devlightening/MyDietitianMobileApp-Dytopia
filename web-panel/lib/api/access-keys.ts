@@ -2,13 +2,21 @@ import api from '../api';
 
 export interface AccessKey {
   id: string;
-  accessKey: string;
-  publicUserId: string;
-  clientFullName: string;
-  startDate: string;
-  endDate: string;
+  key?: string;
+  keyValue?: string;
+  accessKey?: string;
+  code?: string | null;
+  publicUserId?: string | null;
+  clientId?: string;
+  clientFullName?: string | null;
+  clientEmail?: string | null;
+  startDate?: string;
+  endDate?: string;
   isActive: boolean;
-  createdAt: string;
+  isExpired?: boolean;
+  createdAt?: string;
+  createdAtUtc?: string;
+  expiresAtUtc?: string;
 }
 
 export interface CreateAccessKeyRequest {
@@ -33,7 +41,7 @@ export async function getAccessKeys(): Promise<{ accessKeys: AccessKey[] }> {
 export async function createAccessKeyForClient(
   publicUserId: string,
   data: { createdAtUtc: string; expiresAtUtc: string }
-): Promise<{ key: string; accessKey: string; success: boolean; startDate: string; endDate: string }> {
+): Promise<AccessKey & { key: string; accessKey: string; success: boolean }> {
   const res = await api.post(`/api/dietitian/clients/${publicUserId}/access-key`, data);
   // Normalise: backend returns `key`, expose as both `key` and `accessKey` for compat
   const d = res.data;

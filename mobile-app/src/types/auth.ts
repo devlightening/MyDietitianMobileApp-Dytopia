@@ -1,3 +1,5 @@
+import type { ClientCapabilities, SubscriptionTier } from '../api/client-state';
+
 export enum Gender {
   Male = 0,
   Female = 1,
@@ -25,6 +27,10 @@ export interface AuthResponse {
   clientId?: string;
   publicUserId: string;
   isPremium: boolean;
+  subscriptionTier?: SubscriptionTier;
+  capabilities?: ClientCapabilities;
+  premiumUntilUtc?: string | null;
+  activeDietitianId?: string | null;
 }
 
 export interface ActivatePremiumRequest {
@@ -45,6 +51,8 @@ export interface UserProfile {
   publicUserId: string;
   clientId: string;
   isPremium: boolean;
+  subscriptionTier?: SubscriptionTier;
+  capabilities?: ClientCapabilities;
   gender: Gender;
   birthDate: string;
   age: number;

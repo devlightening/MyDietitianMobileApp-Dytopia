@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   Keyboard,
+  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
@@ -46,6 +48,7 @@ const GLOW_SIZE = 86;   // soft glow ring diameter
 const ORBIT_D   = 96;   // orbit path diameter
 const DOT_SIZE  = 5.5;  // orbit dot size
 const STEAM_R   = 4;    // steam wisp radius
+const GAME_REVEAL_HOLD_MS = 650;
 
 // ─── Steam Wisp ───────────────────────────────────────────────────────────
 function SteamWisp({
@@ -117,6 +120,7 @@ function KitchenButton({
   active,
   label,
   onPress,
+  onOpenGames,
   activeText,
   inactiveText,
   isDark,
@@ -124,6 +128,7 @@ function KitchenButton({
   active: boolean;
   label: string;
   onPress: () => void;
+  onOpenGames?: () => void;
   activeText: string;
   inactiveText: string;
   isDark: boolean;
@@ -134,6 +139,12 @@ function KitchenButton({
   const orbitRotate = useRef(new Animated.Value(0)).current;
   const orbitOpacity = useRef(new Animated.Value(0)).current;
   const iconRotate  = useRef(new Animated.Value(0)).current;
+  const gameReveal = useRef(new Animated.Value(0)).current;
+  const gameBurst = useRef(new Animated.Value(0)).current;
+  const gameDragY = useRef(new Animated.Value(0)).current;
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameArmedRef = useRef(false);
+  const gameLaunchingRef = useRef(false);
 
   // Glow breathing — restarts when active state changes
   useEffect(() => {
@@ -221,15 +232,129 @@ function KitchenButton({
     }).start();
   }
 
-  function handlePressOut() {
+  function clearLongPressTimer() {
+    if (!longPressTimerRef.current) return;
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  }
+
+  function hideGameShortcut() {
+    if (!gameArmedRef.current || gameLaunchingRef.current) return;
+    gameArmedRef.current = false;
+    Animated.parallel([
+      Animated.timing(gameReveal, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.spring(gameDragY, {
+        toValue: 0,
+        damping: 16,
+        stiffness: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+
+  function revealGameShortcut() {
+    if (gameArmedRef.current || gameLaunchingRef.current || !onOpenGames) return;
+    gameArmedRef.current = true;
+    gameBurst.setValue(0);
+    gameDragY.setValue(0);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Animated.parallel([
+      Animated.spring(gameReveal, {
+        toValue: 1,
+        damping: 10,
+        stiffness: 170,
+        mass: 0.8,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(glowOpacity, {
+          toValue: isDark ? 0.78 : 0.66,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowOpacity, {
+          toValue: active ? (isDark ? 0.34 : 0.28) : (isDark ? 0.10 : 0.08),
+          duration: 320,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }
+
+  function launchGames() {
+    if (!onOpenGames || gameLaunchingRef.current) return;
+    clearLongPressTimer();
+    gameLaunchingRef.current = true;
+    gameArmedRef.current = false;
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.parallel([
+      Animated.timing(gameBurst, {
+        toValue: 1,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(gameDragY, {
+        toValue: -72,
+        damping: 11,
+        stiffness: 210,
+        useNativeDriver: true,
+      }),
+      Animated.timing(pressScale, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    setTimeout(() => onOpenGames(), 170);
+    setTimeout(() => {
+      gameBurst.setValue(0);
+      gameReveal.setValue(0);
+      gameDragY.setValue(0);
+      gameLaunchingRef.current = false;
+    }, 540);
+  }
+
+  function handlePressOut(shouldPress: boolean) {
+    clearLongPressTimer();
     Animated.spring(pressScale, {
       toValue: 1,
       speed: 12,
       bounciness: 16,
       useNativeDriver: true,
     }).start();
-    onPress();
+    if (shouldPress && !gameArmedRef.current && !gameLaunchingRef.current) onPress();
+    else hideGameShortcut();
   }
+
+  useEffect(() => () => clearLongPressTimer(), []);
+
+  const kitchenResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        handlePressIn();
+        clearLongPressTimer();
+        longPressTimerRef.current = setTimeout(revealGameShortcut, GAME_REVEAL_HOLD_MS);
+      },
+      onPanResponderMove: (_, gesture) => {
+        if (!gameArmedRef.current) return;
+        gameDragY.setValue(Math.max(-82, Math.min(0, gesture.dy)));
+        if (gesture.dy < -54) launchGames();
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const shouldPress = Math.abs(gesture.dx) < 10 && Math.abs(gesture.dy) < 10 && !gameArmedRef.current;
+        handlePressOut(shouldPress);
+      },
+      onPanResponderTerminate: () => handlePressOut(false),
+    })
+  ).current;
 
   const rotateStr = orbitRotate.interpolate({
     inputRange: [0, 1],
@@ -249,11 +374,65 @@ function KitchenButton({
   const dotColorB  = isDark ? "#80EDB8" : "#4DC885";
   const steamColor = isDark ? "rgba(160,242,194,0.90)" : "rgba(48,160,86,0.72)";
   const labelColor = active ? activeText : inactiveText;
+  const gameButtonScale = gameReveal.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [0.52, 1.08, 1],
+  });
+  const gameButtonOpacity = gameReveal.interpolate({
+    inputRange: [0, 0.35, 1],
+    outputRange: [0, 1, 1],
+  });
+  const gameButtonY = gameReveal.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, -76],
+  });
+  const burstScale = gameBurst.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.7, 2.9],
+  });
+  const burstOpacity = gameBurst.interpolate({
+    inputRange: [0, 0.18, 1],
+    outputRange: [0, 0.7, 0],
+  });
 
   return (
     <View style={kb.slot}>
       {/* Floating container — holds glow, orbit, steam, button */}
-      <View style={kb.floatWrap}>
+      <View style={kb.floatWrap} {...kitchenResponder.panHandlers}>
+
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            kb.gameBurst,
+            {
+              backgroundColor: glowColor,
+              opacity: burstOpacity,
+              transform: [{ scale: burstScale }],
+            },
+          ]}
+        />
+
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            kb.gameShortcut,
+            {
+              backgroundColor: isDark ? "#153C29" : "#FFFFFF",
+              borderColor: isDark ? "rgba(128,237,184,0.42)" : "rgba(56,168,94,0.24)",
+              opacity: gameButtonOpacity,
+              transform: [
+                { translateY: Animated.add(gameButtonY, gameDragY) },
+                { scale: gameButtonScale },
+              ],
+            },
+          ]}
+        >
+          <View style={[kb.gameIconBubble, { backgroundColor: isDark ? "rgba(111,224,164,0.18)" : "#E8F8EE" }]}>
+            <Ionicons name="game-controller" size={18} color={glowColor} />
+          </View>
+          <Text style={[kb.gameShortcutText, { color: activeText }]}>OYUN</Text>
+          <Ionicons name="arrow-up" size={14} color={glowColor} />
+        </Animated.View>
 
         {/* ① Soft glow ring */}
         <Animated.View
@@ -289,18 +468,12 @@ function KitchenButton({
         <SteamWisp delay={740} dx={10}  color={steamColor} />
 
         {/* ④ Main button — circular, press-bounces */}
-        <Pressable
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          android_ripple={{ color: "transparent" }}
-          hitSlop={{ top: 8, bottom: 0, left: 8, right: 8 }}
+        <Animated.View
+          style={[
+            kb.btn,
+            { backgroundColor: btnFill, transform: [{ scale: pressScale }] },
+          ]}
         >
-          <Animated.View
-            style={[
-              kb.btn,
-              { backgroundColor: btnFill, transform: [{ scale: pressScale }] },
-            ]}
-          >
             {/* Top-right shine cap */}
             <View style={kb.shineCap} />
 
@@ -314,8 +487,7 @@ function KitchenButton({
 
             {/* Label inside button */}
             <Text style={kb.btnLabel}>{label}</Text>
-          </Animated.View>
-        </Pressable>
+        </Animated.View>
       </View>
 
       {/* Active indicator pill below button */}
@@ -436,10 +608,12 @@ function SideTab({
 export default function BottomBar({
   active,
   onChange,
+  onOpenGames,
   messagesAttention = false,
 }: {
   active: TabKey;
   onChange: (t: TabKey) => void;
+  onOpenGames?: () => void;
   messagesAttention?: boolean;
 }) {
   const { isDark } = useTheme();
@@ -511,6 +685,7 @@ export default function BottomBar({
           active={active === "kitchen"}
           label={labels.kitchen}
           onPress={() => onChange("kitchen")}
+          onOpenGames={onOpenGames}
           activeText={activeText}
           inactiveText={inactiveText}
           isDark={isDark}
@@ -722,6 +897,46 @@ const kb = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: -24,        // float above bar
+  },
+  gameShortcut: {
+    position: "absolute",
+    top: -8,
+    minWidth: 104,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingLeft: 8,
+    paddingRight: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    shadowColor: "#0F3D2E",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+    zIndex: 8,
+  },
+  gameIconBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gameShortcutText: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  gameBurst: {
+    position: "absolute",
+    top: -28,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    zIndex: 7,
   },
   glow: {
     position: "absolute",

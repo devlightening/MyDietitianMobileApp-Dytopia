@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 using MyDietitianMobileApp.Api.Extensions;
+using MyDietitianMobileApp.Api.Models;
 using MyDietitianMobileApp.Domain.Services;
 
 namespace MyDietitianMobileApp.Api.Controllers;
@@ -59,6 +60,8 @@ public class ClientStateController : ControllerBase
                 clientId = client.Id,
                 publicUserId = user.PublicUserId,
                 isPremium = premiumStatus.IsPremium,
+                subscriptionTier = ClientCapabilityCatalog.GetSubscriptionTier(premiumStatus.IsPremium),
+                capabilities = ClientCapabilityCatalog.For(premiumStatus.IsPremium),
                 premiumUntilUtc = premiumStatus.PremiumUntilUtc?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                 activeDietitianId = premiumStatus.ActiveDietitianId?.ToString(),
                 fullName = client.FullName,
@@ -101,6 +104,8 @@ public class ClientStateController : ControllerBase
                 clientId = client.Id,
                 publicUserId = user.PublicUserId,
                 isPremium = premiumStatus.IsPremium,
+                subscriptionTier = ClientCapabilityCatalog.GetSubscriptionTier(premiumStatus.IsPremium),
+                capabilities = ClientCapabilityCatalog.For(premiumStatus.IsPremium),
                 premiumUntilUtc = premiumStatus.PremiumUntilUtc?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                 activeDietitianId = premiumStatus.ActiveDietitianId?.ToString(),
                 fullName = client.FullName,

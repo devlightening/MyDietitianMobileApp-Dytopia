@@ -39,7 +39,12 @@ public class PublicRecipesController : ControllerBase
         try
         {
             var queryable = _appDb.Recipes
-                .Where(r => r.IsPublic && !r.IsArchived && !r.IsDemo && !r.IsDraft && !r.IsHiddenFromProduction);
+                .Where(r => r.IsPublic
+                    && r.DietitianId == null
+                    && !r.IsArchived
+                    && !r.IsDemo
+                    && !r.IsDraft
+                    && !r.IsHiddenFromProduction);
 
             if (!string.IsNullOrWhiteSpace(q))
             {

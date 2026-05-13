@@ -10,8 +10,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-
-const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+import { BRAND_LOGO } from "../../assets/brandAssets";
 
 const DEFAULT_MESSAGES = [
   "Fotoğraf analiz ediliyor...",
@@ -124,7 +123,7 @@ export default function AnalyzingView({
         <Animated.View
           style={[s.logoBubble, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }, logoStyle]}
         >
-          <Image source={BRAND_LOGO} style={s.logoImg} resizeMode="contain" />
+          <Image source={BRAND_LOGO} style={s.logoImg} resizeMode="contain" fadeDuration={0} />
         </Animated.View>
       </View>
 

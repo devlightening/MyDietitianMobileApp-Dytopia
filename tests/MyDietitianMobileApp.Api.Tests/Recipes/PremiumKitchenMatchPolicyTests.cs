@@ -38,7 +38,7 @@ public class PremiumKitchenMatchPolicyTests
     }
 
     [Fact]
-    public void Premium_WithFallback_Includes_Global_And_OtherDietitian_Public_Not_Private_Other()
+    public void Premium_WithFallback_Includes_Global_PublicCatalog_Not_OtherDietitian_Public()
     {
         var recipes = new[]
         {
@@ -53,9 +53,29 @@ public class PremiumKitchenMatchPolicyTests
             .ToList();
 
         filtered.Should().Contain(r => r.Name == "Clinic");
-        filtered.Should().Contain(r => r.Name == "B public");
         filtered.Should().Contain(r => r.Name == "Global");
+        filtered.Should().NotContain(r => r.Name == "B public");
         filtered.Should().NotContain(r => r.Name == "B private");
+    }
+
+    [Fact]
+    public void FreePool_IncludesOnly_SystemPublicCatalog_Excludes_DietitianPublic()
+    {
+        var recipes = new[]
+        {
+            new Recipe(Guid.NewGuid(), ClinicA, "A public", "d", isPublic: true),
+            new Recipe(Guid.NewGuid(), ClinicB, "B public", "d", isPublic: true),
+            new Recipe(Guid.NewGuid(), null, "Global", "d", isPublic: true),
+            new Recipe(Guid.NewGuid(), null, "Global private", "d", isPublic: false),
+        }.AsQueryable();
+
+        var filtered = PremiumKitchenCandidateFilter
+            .ApplyVisibilityPolicy(recipes, isPremium: false, activeDietitianId: null, allowGlobalPublicFallback: false)
+            .ToList();
+
+        filtered.Should().ContainSingle(r => r.Name == "Global");
+        filtered.Should().NotContain(r => r.DietitianId.HasValue);
+        filtered.Should().NotContain(r => !r.IsPublic);
     }
 
     [Fact]

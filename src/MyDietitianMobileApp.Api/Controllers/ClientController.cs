@@ -304,17 +304,25 @@ public class ClientController : ControllerBase
 
             var queryable = _appDb.Recipes.AsQueryable();
 
-            // Filter by premium status
+            queryable = queryable
+                .Where(r => !r.IsDemo)
+                .Where(r => !r.IsDraft)
+                .Where(r => !r.IsHiddenFromProduction)
+                .Where(r => !r.IsArchived);
+
+            // Filter by premium status. Free users only see the system public catalog;
+            // dietitian-owned public recipes remain tenant content.
             if (premiumStatus.IsPremium && premiumStatus.ActiveDietitianId.HasValue)
             {
-                // Premium: public recipes + own dietitian's recipes
+                // Premium: system public catalog + own dietitian's recipes
                 queryable = queryable.Where(r =>
-                    r.IsPublic || (r.DietitianId == premiumStatus.ActiveDietitianId.Value));
+                    (r.IsPublic && r.DietitianId == null) ||
+                    r.DietitianId == premiumStatus.ActiveDietitianId.Value);
             }
             else
             {
-                // Free: only public recipes
-                queryable = queryable.Where(r => r.IsPublic);
+                // Free: only system public catalog
+                queryable = queryable.Where(r => r.IsPublic && r.DietitianId == null);
             }
 
             // Search filter

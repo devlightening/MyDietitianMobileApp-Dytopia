@@ -1,0 +1,31 @@
+{
+  "TotalCases": 73,
+  "CorrectCount": 72,
+  "IncorrectCount": 1,
+  "UnresolvedCount": 11,
+  "FalseMatchCount": 0,
+  "AccuracyPct": 98.6301,
+  "UnresolvedRatePct": 15.0685,
+  "FalseMatchRatePct": 0,
+  "AverageLatencyMs": 2.6948,
+  "MedianLatencyMs": 1.7405,
+  "P95LatencyMs": 8.9968,
+  "ResolverLayerDistribution": {
+    "Alias": {
+      "Count": 23,
+      "Percent": 31.5068
+    },
+    "Canonical": {
+      "Count": 26,
+      "Percent": 35.6164
+    },
+    "Fuzzy": {
+      "Count": 13,
+      "Percent": 17.8082
+    },
+    "Unresolved": {
+      "Count": 11,
+      "Percent": 15.0685
+    }
+  }
+}

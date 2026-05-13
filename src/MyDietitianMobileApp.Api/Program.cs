@@ -1160,6 +1160,33 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS "IX_ClientGamificationSnapshots_Date_QualifiedForStreak"
                 ON "ClientGamificationSnapshots" ("Date", "QualifiedForStreak");
 
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "FoodName" character varying(160) NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "CaloriesKcal" integer NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "ProteinGrams" numeric(8,2) NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "CarbsGrams" numeric(8,2) NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "FatGrams" numeric(8,2) NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "PortionCount" numeric(5,2) NOT NULL DEFAULT 1;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "AiConfidence" numeric(4,2) NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "AnalysisJson" text NULL;
+
+            ALTER TABLE IF EXISTS "ClientMealLogs"
+                ADD COLUMN IF NOT EXISTS "Source" character varying(32) NOT NULL DEFAULT 'manual';
+
             CREATE TABLE IF NOT EXISTS "DailyGameChallenges" (
                 "Id" uuid NOT NULL PRIMARY KEY,
                 "Date" date NOT NULL,

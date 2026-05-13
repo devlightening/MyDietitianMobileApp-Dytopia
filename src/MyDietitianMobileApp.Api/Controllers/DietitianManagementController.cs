@@ -720,12 +720,16 @@ public class DietitianManagementController : ControllerBase
             });
         }
 
+        var dietitianId = user.LinkedDietitianId.Value;
+
         var keys = await _appDb.AccessKeys
-            .Where(k => k.DietitianId == user.LinkedDietitianId)
+            .AsNoTracking()
+            .Where(k => k.DietitianId == dietitianId)
             .OrderByDescending(k => k.CreatedAtUtc)
             .Select(k => new {
                 k.Id,
                 k.KeyValue,
+                k.Code,
                 k.CreatedAtUtc,
                 k.ExpiresAtUtc,
                 k.ClientId,
@@ -733,7 +737,77 @@ public class DietitianManagementController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new { accessKeys = keys });
+        var clientIds = keys.Select(k => k.ClientId).Distinct().ToList();
+        var clients = await _appDb.Clients
+            .AsNoTracking()
+            .Where(c => clientIds.Contains(c.Id))
+            .Select(c => new
+            {
+                c.Id,
+                c.FullName,
+                c.Email
+            })
+            .ToDictionaryAsync(c => c.Id);
+
+        var linkPublicIds = await _appDb.DietitianClientLinks
+            .AsNoTracking()
+            .Where(l => l.DietitianId == dietitianId && clientIds.Contains(l.ClientId))
+            .OrderByDescending(l => l.IsActive)
+            .ThenByDescending(l => l.LinkedAt)
+            .Select(l => new
+            {
+                l.ClientId,
+                l.PublicUserId
+            })
+            .ToListAsync();
+
+        var publicUserIdByClientId = linkPublicIds
+            .Where(x => !string.IsNullOrWhiteSpace(x.PublicUserId))
+            .GroupBy(x => x.ClientId)
+            .ToDictionary(g => g.Key, g => g.First().PublicUserId);
+
+        var authPublicIds = await _authDb.UserAccounts
+            .AsNoTracking()
+            .Where(u => u.LinkedClientId.HasValue && clientIds.Contains(u.LinkedClientId.Value))
+            .Select(u => new
+            {
+                ClientId = u.LinkedClientId!.Value,
+                u.PublicUserId
+            })
+            .ToListAsync();
+
+        foreach (var item in authPublicIds.Where(x => !string.IsNullOrWhiteSpace(x.PublicUserId)))
+        {
+            publicUserIdByClientId.TryAdd(item.ClientId, item.PublicUserId);
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var accessKeys = keys.Select(k =>
+        {
+            clients.TryGetValue(k.ClientId, out var client);
+            publicUserIdByClientId.TryGetValue(k.ClientId, out var publicUserId);
+
+            return new
+            {
+                id = k.Id,
+                key = k.KeyValue,
+                accessKey = k.KeyValue,
+                keyValue = k.KeyValue,
+                code = k.Code,
+                createdAtUtc = k.CreatedAtUtc,
+                expiresAtUtc = k.ExpiresAtUtc,
+                startDate = k.CreatedAtUtc.ToString("yyyy-MM-dd"),
+                endDate = k.ExpiresAtUtc.ToString("yyyy-MM-dd"),
+                clientId = k.ClientId,
+                clientFullName = client?.FullName,
+                clientEmail = client?.Email,
+                publicUserId,
+                isActive = k.IsActive,
+                isExpired = k.ExpiresAtUtc < nowUtc
+            };
+        }).ToList();
+
+        return Ok(new { accessKeys });
     }
 
     /// <summary>
@@ -992,10 +1066,19 @@ public class DietitianManagementController : ControllerBase
                 return Ok(new
                 {
                     success = true,
+                    id = existingKey.Id,
                     key = existingKey.KeyValue,
+                    accessKey = existingKey.KeyValue,
+                    keyValue = existingKey.KeyValue,
                     publicUserId,
+                    clientId = clientEntity.Id,
+                    clientFullName = clientEntity.FullName,
+                    clientEmail = clientEntity.Email,
+                    createdAtUtc = existingKey.CreatedAtUtc,
+                    expiresAtUtc = existingKey.ExpiresAtUtc,
                     startDate = existingKey.CreatedAtUtc.ToString("yyyy-MM-dd"),
                     endDate = existingKey.ExpiresAtUtc.ToString("yyyy-MM-dd"),
+                    isActive = existingKey.IsActive,
                     message = "Mevcut aktif anahtar döndürüldü"
                 });
             }
@@ -1058,10 +1141,19 @@ public class DietitianManagementController : ControllerBase
             return Ok(new
             {
                 success = true,
+                id = accessKey.Id,
                 key = accessKey.KeyValue,
+                accessKey = accessKey.KeyValue,
+                keyValue = accessKey.KeyValue,
                 publicUserId,
+                clientId = clientEntity.Id,
+                clientFullName = clientEntity.FullName,
+                clientEmail = clientEntity.Email,
+                createdAtUtc = accessKey.CreatedAtUtc,
+                expiresAtUtc = accessKey.ExpiresAtUtc,
                 startDate = accessKey.CreatedAtUtc.ToString("yyyy-MM-dd"),
-                endDate = accessKey.ExpiresAtUtc.ToString("yyyy-MM-dd")
+                endDate = accessKey.ExpiresAtUtc.ToString("yyyy-MM-dd"),
+                isActive = accessKey.IsActive
             });
         }
         catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)

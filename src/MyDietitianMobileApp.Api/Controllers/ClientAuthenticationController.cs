@@ -112,6 +112,8 @@ public class ClientAuthenticationController : ControllerBase
         var expiresAtUtc = jsonToken.ValidTo;
         var userIdClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == "sub");
         var userId = userIdClaim?.Value ?? string.Empty;
+        var clientIdClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == "clientId")?.Value
+            ?? result.ClientId?.ToString();
 
         // Resolve premium status from database for consistency
         bool isPremium = result.IsPremium;
@@ -143,8 +145,11 @@ public class ClientAuthenticationController : ControllerBase
             expiresAtUtc = expiresAtUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             role = "Client",
             userId = userId,
+            clientId = clientIdClaim,
             publicUserId = result.PublicUserId,
             isPremium = isPremium,
+            subscriptionTier = ClientCapabilityCatalog.GetSubscriptionTier(isPremium),
+            capabilities = ClientCapabilityCatalog.For(isPremium),
             premiumUntilUtc,
             activeDietitianId
         });
@@ -202,6 +207,7 @@ public class ClientAuthenticationController : ControllerBase
         // Extract userId from token claims
         var userIdClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == "sub");
         var userId = userIdClaim?.Value ?? string.Empty;
+        var clientIdClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == "clientId")?.Value;
 
         // Resolve premium status from database for consistency
         bool isPremium = false;
@@ -233,8 +239,11 @@ public class ClientAuthenticationController : ControllerBase
             expiresAtUtc = expiresAtUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             role = "Client",
             userId = userId,
+            clientId = clientIdClaim,
             publicUserId = result.PublicUserId,
             isPremium = isPremium,
+            subscriptionTier = ClientCapabilityCatalog.GetSubscriptionTier(isPremium),
+            capabilities = ClientCapabilityCatalog.For(isPremium),
             premiumUntilUtc,
             activeDietitianId
         });
@@ -428,8 +437,11 @@ public class ClientAuthenticationController : ControllerBase
             expiresAtUtc = expiresAtUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             role = "Client",
             userId = userId.ToString(),
+            clientId = clientId.ToString(),
             publicUserId,
             isPremium = premiumStatus.IsPremium,
+            subscriptionTier = ClientCapabilityCatalog.GetSubscriptionTier(premiumStatus.IsPremium),
+            capabilities = ClientCapabilityCatalog.For(premiumStatus.IsPremium),
             premiumUntilUtc = premiumStatus.PremiumUntilUtc?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             activeDietitianId = premiumStatus.ActiveDietitianId?.ToString()
         });

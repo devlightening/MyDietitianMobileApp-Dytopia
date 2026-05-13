@@ -62,7 +62,10 @@ public class VisionIngredientOptions
     public int MaxDetectedItems { get; set; } = 20;
 
     /// <summary>Max raw base64 characters accepted (guard against huge images). Default ≈ 4 MB.</summary>
-    public int MaxImageBytes { get; set; } = 4_194_304;
+    public int MaxImageBytes { get; set; } = 10_485_760;
+
+    /// <summary>Server-side normalization target before sending images to the vision model. Default around 3 MB.</summary>
+    public int TargetImageBytes { get; set; } = 3_145_728;
 
     /// <summary>OpenAI call timeout in seconds — vision is slower than text completions.</summary>
     public int TimeoutSeconds { get; set; } = 30;

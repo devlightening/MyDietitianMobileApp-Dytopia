@@ -14,11 +14,11 @@ import { Routes } from "./routes";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { InAppNotificationProvider } from "../context/InAppNotificationContext";
 import { FeedbackProvider } from "../context/FeedbackContext";
+import { BRAND_LOGO } from "../assets/brandAssets";
 
 import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
-import FreeHomeScreen from "../screens/FreeHomeScreen";
 
 import AppShell from "./AppShell";
 import PremiumActivationScreen from "../screens/PremiumActivationScreen";
@@ -54,7 +54,6 @@ import {
 
 const Root = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef<any>();
-const BRAND_LOGO = require("../../assets/dytopia-logo.png");
 
 function Splash() {
   const { theme } = useTheme();
@@ -73,7 +72,7 @@ function Splash() {
       <Animated.View style={[s.splashContent, { opacity, transform: [{ scale }] }]}>
         <View style={[s.splashLogo, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
           <View style={[s.splashLogoBg, { backgroundColor: theme.primaryLight }]} />
-          <Image source={BRAND_LOGO} style={s.splashLogoImage} resizeMode="contain" />
+          <Image source={BRAND_LOGO} style={s.splashLogoImage} resizeMode="contain" fadeDuration={0} />
         </View>
         <Text style={[s.splashTitle, { color: theme.text }]}>Dytopia</Text>
         <Text style={[s.splashSub, { color: theme.textMuted }]}>Sağlıklı yaşam rehberin</Text>
@@ -198,26 +197,8 @@ function AppNavigator() {
               )
             }
           </Root.Screen>
-        ) : !isPremium ? (
-          /* â”€â”€ Authenticated, Free user: FreeHome stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-          <Root.Screen name="Free">
-            {() =>
-              ready ? (
-                <Root.Navigator screenOptions={{
-                  headerShown: false,
-                  animation: stackAnimation,
-                  animationDuration: stackDuration,
-                  gestureEnabled: true,
-                }}>
-                  <Root.Screen name={Routes.Free.Home} component={FreeHomeScreen} />
-                </Root.Navigator>
-              ) : (
-                <Splash />
-              )
-            }
-          </Root.Screen>
         ) : (
-          /* â”€â”€ Authenticated, Premium: Full App stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+          /* â”€â”€ Authenticated: Freemium app stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
           <Root.Screen name="App">
             {() =>
               ready ? (

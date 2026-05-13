@@ -271,7 +271,7 @@ public class PremiumIsolationRegressionTests
 
     /// <summary>
     /// PIR-07: When AllowGlobalPublicFallback=true, a ClinicA FULL_MATCH must rank above
-    /// a public fallback recipe (OtherDietitianPublic) with the same match tier.
+    /// a system public catalog fallback recipe with the same match tier.
     /// The clinic bonus in KitchenMatchScoring (+260 raw points) ensures this.
     /// </summary>
     [Fact]
@@ -282,7 +282,9 @@ public class PremiumIsolationRegressionTests
         var tuz         = Tuz();
 
         var clinicRecipe  = ClinicARecipe("Etli Kuru Fasulye", kuruFasulye, domates);
-        var publicRecipe  = ClinicBPublicRecipe("Generic Bean Soup", kuruFasulye, domates);
+        var publicRecipe  = new Recipe(Guid.NewGuid(), null, "Generic Bean Soup", "desc", isPublic: true);
+        publicRecipe.AddMandatoryIngredient(kuruFasulye);
+        publicRecipe.AddMandatoryIngredient(domates);
 
         var basketIds    = new List<Guid> { kuruFasulye.Id, domates.Id, tuz.Id };
         var condimentIds = new List<Guid> { tuz.Id };
@@ -303,7 +305,7 @@ public class PremiumIsolationRegressionTests
         var scorePublic = KitchenMatchScoring.Compute(
             publicRecipe, evalPublic, 0, "FULL_MATCH",
             condimentIds.ToHashSet(),
-            isOwnedByActiveDietitian: false,   // public from ClinicB
+            isOwnedByActiveDietitian: false,   // system public catalog
             isPublicFallback: true);
 
         scoreClinic.NormalizedScore.Should().BeGreaterThan(scorePublic.NormalizedScore,
@@ -349,9 +351,8 @@ public class PremiumIsolationRegressionTests
 
     /// <summary>
     /// PIR-09: When the client is not premium (or ActiveDietitianId is null),
-    /// the filter collapses to public-only. Private ClinicA recipes must not be shown.
-    /// This documents the "free-fall to public mode" that causes the bug when premium
-    /// resolution fails.
+    /// the filter collapses to the system public catalog only. Private ClinicA recipes and
+    /// public recipes owned by another dietitian must not be shown.
     /// </summary>
     [Fact]
     public void PIR09_FreeFall_NonPremiumUser_SeesOnlyPublicRecipes()
@@ -359,8 +360,10 @@ public class PremiumIsolationRegressionTests
         var kuru   = KuruFasulye();
         var clinicAPrivate = ClinicARecipe("Etli Kuru Fasulye (private)", kuru);
         var clinicBPublic  = ClinicBPublicRecipe("Tavuk Salatası (public)", kuru);
+        var systemPublic = new Recipe(Guid.NewGuid(), null, "System Public Soup", "desc", isPublic: true);
+        systemPublic.AddMandatoryIngredient(kuru);
 
-        var allRecipes = new[] { clinicAPrivate, clinicBPublic }.AsQueryable();
+        var allRecipes = new[] { clinicAPrivate, clinicBPublic, systemPublic }.AsQueryable();
 
         // Simulating: premium resolution failed (isPremium=false or activeDietitianId=null)
         var poolNotPremium = PremiumKitchenCandidateFilter
@@ -369,8 +372,10 @@ public class PremiumIsolationRegressionTests
 
         poolNotPremium.Should().NotContain(r => r.Id == clinicAPrivate.Id,
             "free-fall to non-premium hides private clinic recipes");
-        poolNotPremium.Should().Contain(r => r.Id == clinicBPublic.Id,
-            "public recipes from any dietitian are visible to free users");
+        poolNotPremium.Should().NotContain(r => r.Id == clinicBPublic.Id,
+            "free users must not see another dietitian's public catalog content");
+        poolNotPremium.Should().ContainSingle(r => r.Id == systemPublic.Id,
+            "free users see only DietitianId=null system public catalog recipes");
 
         var poolNullDietitian = PremiumKitchenCandidateFilter
             .ApplyVisibilityPolicy(allRecipes, isPremium: true, activeDietitianId: null, allowGlobalPublicFallback: false)
@@ -378,7 +383,8 @@ public class PremiumIsolationRegressionTests
 
         poolNullDietitian.Should().NotContain(r => r.Id == clinicAPrivate.Id,
             "null activeDietitianId also collapses to public-only");
-        poolNullDietitian.Should().Contain(r => r.Id == clinicBPublic.Id);
+        poolNullDietitian.Should().NotContain(r => r.Id == clinicBPublic.Id);
+        poolNullDietitian.Should().ContainSingle(r => r.Id == systemPublic.Id);
 
         _out.WriteLine($"PIR09: notPremium={poolNotPremium.Count} nullDietitian={poolNullDietitian.Count}");
     }

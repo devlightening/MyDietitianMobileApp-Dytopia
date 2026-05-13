@@ -5,8 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using MyDietitianMobileApp.Api.Extensions;
 using MyDietitianMobileApp.Api.Problems;
 using MyDietitianMobileApp.Api.Realtime;
+using MyDietitianMobileApp.Api.Time;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Infrastructure.Persistence;
+using System.Globalization;
+using System.Text;
 
 namespace MyDietitianMobileApp.Api.Controllers;
 
@@ -224,19 +227,31 @@ public class DietitianCareController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Title))
             return BadRequest(ApiProblems.Validation("INVALID_APPOINTMENT", "Gorusme basligi gereklidir."));
 
-        if (!DateTime.TryParse(request.ScheduledAtUtc, out var scheduledAtUtc))
+        if (!TryParseUtcDateTime(request.ScheduledAtUtc, out var scheduledAtUtc))
             return BadRequest(ApiProblems.Validation("INVALID_APPOINTMENT_TIME", "Gecersiz gorusme tarihi."));
+
+        var client = await _appDb.Clients
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == clientId);
+
+        if (client == null)
+            return NotFound(ApiProblems.NotFound("CLIENT_NOT_FOUND", "Client bulunamadi."));
 
         var appointment = new ClientAppointmentSummary(
             clientId,
             dietitianId.Value,
             request.Title,
-            DateTime.SpecifyKind(scheduledAtUtc, DateTimeKind.Utc),
+            scheduledAtUtc,
             request.Mode ?? "online",
             request.Location,
             request.Note);
 
         _appDb.ClientAppointmentSummaries.Add(appointment);
+        _appDb.ClientCareMessages.Add(new ClientCareMessage(
+            clientId,
+            dietitianId.Value,
+            "Dietitian",
+            BuildAppointmentMessage(client.FullName, appointment, isUpdate: false)));
         await _appDb.SaveChangesAsync();
         await PublishCareUpdateAsync(dietitianId.Value, clientId, "appointment");
 
@@ -271,7 +286,7 @@ public class DietitianCareController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Title))
             return BadRequest(ApiProblems.Validation("INVALID_APPOINTMENT", "Gorusme basligi gereklidir."));
 
-        if (!DateTime.TryParse(request.ScheduledAtUtc, out var scheduledAtUtc))
+        if (!TryParseUtcDateTime(request.ScheduledAtUtc, out var scheduledAtUtc))
             return BadRequest(ApiProblems.Validation("INVALID_APPOINTMENT_TIME", "Gecersiz gorusme tarihi."));
 
         var appointment = await _appDb.ClientAppointmentSummaries
@@ -283,7 +298,15 @@ public class DietitianCareController : ControllerBase
         if (appointment.IsCancelled)
             return BadRequest(ApiProblems.Validation("APPOINTMENT_CANCELLED", "Iptal edilmis gorusme guncellenemez."));
 
-        appointment.UpdateDetails(request.Title, DateTime.SpecifyKind(scheduledAtUtc, DateTimeKind.Utc), request.Mode ?? "online", request.Location, request.Note);
+        appointment.UpdateDetails(request.Title, scheduledAtUtc, request.Mode ?? "online", request.Location, request.Note);
+        var client = await _appDb.Clients
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == clientId);
+        _appDb.ClientCareMessages.Add(new ClientCareMessage(
+            clientId,
+            dietitianId.Value,
+            "Dietitian",
+            BuildAppointmentMessage(client?.FullName, appointment, isUpdate: true)));
         await _appDb.SaveChangesAsync();
         await PublishCareUpdateAsync(dietitianId.Value, clientId, "appointment");
 
@@ -337,6 +360,51 @@ public class DietitianCareController : ControllerBase
         });
     }
 
+    private static string BuildAppointmentMessage(string? clientName, ClientAppointmentSummary appointment, bool isUpdate)
+    {
+        var localDateTime = AppTime.ToLocal(appointment.ScheduledAtUtc);
+        var culture = new CultureInfo("tr-TR");
+        var displayName = string.IsNullOrWhiteSpace(clientName) ? "danışanım" : clientName.Trim();
+        var mode = FormatAppointmentMode(appointment.Mode);
+        var actionText = isUpdate
+            ? "randevu bilgilerinizi güncelledim"
+            : "yeni randevunuzu oluşturdum";
+
+        var builder = new StringBuilder();
+        builder.AppendLine($"Merhaba {displayName}, {actionText}.");
+        builder.AppendLine();
+        builder.AppendLine($"Görüşme: {appointment.Title}");
+        builder.AppendLine($"Tarih: {localDateTime.ToString("d MMMM yyyy dddd", culture)}");
+        builder.AppendLine($"Saat: {localDateTime.ToString("HH:mm", culture)}");
+        builder.AppendLine($"Görüşme türü: {mode}");
+
+        if (!string.IsNullOrWhiteSpace(appointment.Location))
+        {
+            builder.AppendLine($"Konum: {appointment.Location}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(appointment.Note))
+        {
+            builder.AppendLine($"Not: {appointment.Note}");
+        }
+
+        builder.AppendLine();
+        builder.Append("Görüşme saatinden önce hazırlıklarınızı tamamlayabilirsiniz. Görüşmek üzere.");
+
+        return builder.ToString();
+    }
+
+    private static string FormatAppointmentMode(string? mode)
+    {
+        var normalized = mode?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "in-person" or "in_person" or "face-to-face" or "face_to_face" or "yuz-yuze" or "yüz yüze" => "Yüz yüze",
+            "online" or "remote" => "Online",
+            _ => string.IsNullOrWhiteSpace(mode) ? "Online" : mode.Trim()
+        };
+    }
+
     private async Task<DietitianClientLink?> ValidateLinkAsync(Guid dietitianId, Guid clientId)
     {
         return await _appDb.DietitianClientLinks
@@ -346,6 +414,28 @@ public class DietitianCareController : ControllerBase
                 x.ClientId == clientId &&
                 x.IsActive &&
                 x.UnlinkedAt == null);
+    }
+
+    private static bool TryParseUtcDateTime(string? value, out DateTime utcDateTime)
+    {
+        utcDateTime = default;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        const DateTimeStyles styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, styles, out var dateTimeOffset))
+        {
+            utcDateTime = dateTimeOffset.UtcDateTime;
+            return true;
+        }
+
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, styles, out var dateTime))
+        {
+            utcDateTime = DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+            return true;
+        }
+
+        return false;
     }
 
     private async Task<Guid?> GetDietitianIdAsync()

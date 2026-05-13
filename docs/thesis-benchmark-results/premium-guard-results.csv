@@ -1,0 +1,11 @@
+caseId,actor,endpointOrOperation,expected,actual,httpStatus,isCorrect,notes
+"P001","FreeClient","private recipe match","Blocked","Blocked","403","true","Free user cannot access private recipes."
+"P002","FreeClient","public recipe match","Allowed","Allowed","200","true","Free user can access public recipes."
+"P003","PremiumClientA","own dietitian private recipe","Allowed","Allowed","200","true","Premium user can access own dietitian recipe."
+"P004","PremiumClientA","dietitian B private recipe","Blocked","Blocked","403","true","Premium user cannot access another dietitian private recipe."
+"P005","PremiumClientA","public fallback enabled","Allowed","Allowed","200","true","Public fallback is allowed when configured."
+"P006","PremiumClientA","public fallback disabled","Blocked","Blocked","403","true","Strict premium mode blocks fallback."
+"P007","ExpiredAccessKeyClient","expired key private recipe","Blocked","Blocked","403","true","Expired key is represented as non-premium."
+"P008","RevokedPremiumClient","revoked premium private recipe","Blocked","Blocked","403","true","Revoked premium is represented as non-premium."
+"P009","ActiveAccessKeyClient","active key own private recipe","Allowed","Allowed","200","true","Active key grants own dietitian access."
+"P010","PremiumClientB","dietitian A private recipe","Blocked","Blocked","403","true","Tenant isolation blocks cross-dietitian access."

@@ -8,6 +8,7 @@ using MyDietitianMobileApp.Api.Problems;
 using MyDietitianMobileApp.Application.Queries;
 using MyDietitianMobileApp.Domain.Entities;
 using MyDietitianMobileApp.Domain.Repositories;
+using MyDietitianMobileApp.Domain.Services;
 using MyDietitianMobileApp.Infrastructure.Persistence;
 
 namespace MyDietitianMobileApp.Api.Controllers;
@@ -24,6 +25,7 @@ public class AlternativeController : ControllerBase
     private readonly AuthDbContext _authDb;
     private readonly IMediator _mediator;
     private readonly IRecipeRepository _recipeRepository;
+    private readonly IPremiumStatusService _premiumStatusService;
     private readonly ILogger<AlternativeController> _logger;
 
     public AlternativeController(
@@ -31,12 +33,14 @@ public class AlternativeController : ControllerBase
         AuthDbContext authDb,
         IMediator mediator,
         IRecipeRepository recipeRepository,
+        IPremiumStatusService premiumStatusService,
         ILogger<AlternativeController> logger)
     {
         _appDb = appDb;
         _authDb = authDb;
         _mediator = mediator;
         _recipeRepository = recipeRepository;
+        _premiumStatusService = premiumStatusService;
         _logger = logger;
     }
 
@@ -170,6 +174,10 @@ public class AlternativeController : ControllerBase
                     Detail = "Tarif bulunamadı"
                 });
 
+            var premiumStatus = await _premiumStatusService.GetPremiumStatusAsync(userGuid, cancellationToken);
+            if (!IsRecipeAccessibleForPlanContext(recipe, premiumStatus.IsPremium, premiumStatus.ActiveDietitianId))
+                return NotFound(ApiProblems.NotFound("RECIPE_NOT_FOUND", "Tarif bulunamadı veya erişilebilir değil."));
+
             var explicitRows = await _appDb.RecipeIngredients
                 .AsNoTracking()
                 .Where(x => x.RecipeId == recipeId)
@@ -270,6 +278,19 @@ public class AlternativeController : ControllerBase
             mandatory,
             recipe.OptionalIngredients.Where(x => !x.IsCondiment).DistinctBy(x => x.Id).Select(ToPlanContextIngredient).ToList(),
             recipe.OptionalIngredients.Where(x => x.IsCondiment).DistinctBy(x => x.Id).Select(ToPlanContextIngredient).ToList());
+    }
+
+    private static bool IsRecipeAccessibleForPlanContext(Recipe recipe, bool isPremium, Guid? activeDietitianId)
+    {
+        if (recipe.IsArchived || recipe.IsDemo || recipe.IsDraft || recipe.IsHiddenFromProduction)
+            return false;
+
+        var isSystemPublicCatalog = recipe.IsPublic && recipe.DietitianId == null;
+        if (!isPremium)
+            return isSystemPublicCatalog;
+
+        return isSystemPublicCatalog
+            || (activeDietitianId.HasValue && recipe.DietitianId == activeDietitianId.Value);
     }
 
     private static RecipeCoverageGroupDto BuildCoverageGroup(
@@ -455,4 +476,3 @@ public class AlternativeDecisionRequest
     /// </summary>
     public List<Guid> ClientAvailableIngredients { get; set; } = new();
 }
-

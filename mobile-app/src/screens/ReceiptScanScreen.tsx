@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   Image,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
@@ -35,10 +35,10 @@ import {
 } from "../api/vision";
 import { logIngredientAcquisition } from "../api/acquisition";
 import { compressImage } from "../utils/imageCompressor";
+import { clearScanResultHandler, resolveScanResult, resolveScanSearchTerm } from "../utils/scanResultStore";
+import { BRAND_LOGO } from "../assets/brandAssets";
 import { radii, spacing } from "../theme/tokens";
 import type { Ingredient } from "../types/alternative";
-
-const BRAND_LOGO = require("../../assets/dytopia-logo.png");
 
 const SCAN_MESSAGES = [
   "Fotoğraf analiz ediliyor...",
@@ -140,7 +140,7 @@ function AnalyzingView({ theme }: { theme: any }) {
         <Animated.View
           style={[sa.logoBubble, { backgroundColor: theme.primaryLight, borderColor: theme.borderEmerald }, logoStyle]}
         >
-          <Image source={BRAND_LOGO} style={sa.logoImg} resizeMode="contain" />
+          <Image source={BRAND_LOGO} style={sa.logoImg} resizeMode="contain" fadeDuration={0} />
         </Animated.View>
       </View>
 
@@ -226,8 +226,7 @@ const sa = StyleSheet.create({
 
 type ReceiptScanParams = {
   ReceiptScan: {
-    onConfirm: (ingredients: Ingredient[]) => void;
-    onUseSearchTerm?: (term: string) => void;
+    scanResultId?: string;
   };
 };
 
@@ -311,7 +310,8 @@ export default function ReceiptScanScreen() {
       setPhase("results");
     } catch (err: any) {
       setError(
-        err?.response?.data?.error ??
+        err?.response?.data?.message ??
+          err?.response?.data?.error ??
           "Fiş analizi tamamlanamadı. Daha net bir fotoğraf ile tekrar deneyin.",
       );
       setPhase("picker");
@@ -331,7 +331,8 @@ export default function ReceiptScanScreen() {
   }
 
   function handleUseSearchTerm(term: string) {
-    route.params.onUseSearchTerm?.(term);
+    resolveScanSearchTerm(route.params?.scanResultId, term);
+    clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
 
@@ -367,7 +368,8 @@ export default function ReceiptScanScreen() {
       completedAtUtc: new Date().toISOString(),
     }).catch(() => undefined);
 
-    route.params.onConfirm(ingredients);
+    resolveScanResult(route.params?.scanResultId, ingredients);
+    clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
 
@@ -440,10 +442,10 @@ export default function ReceiptScanScreen() {
             <View style={[s.emptyState, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
               <Ionicons name="cloud-offline-outline" size={46} color={theme.textMuted} />
               <Text style={[s.emptyTitle, { color: theme.text }]}>
-                {featureStatus === "disabled" ? "Fiş tarama devre dışı" : "API anahtarı eksik"}
+                {featureStatus === "disabled" ? "Fiş tarama kullanılamıyor" : "Servis bağlantısı hazır değil"}
               </Text>
               <Text style={[s.emptyText, { color: theme.textMuted }]}>
-                Sunucu tarafında görsel tarama servisi hazır değil.
+                Fotoğrafla tarama şu anda hazır değil. Lütfen daha sonra tekrar deneyin.
               </Text>
             </View>
           ) : isEmpty ? (
@@ -679,4 +681,3 @@ function styles(theme: any) {
     disabled: { opacity: 0.45 },
   });
 }
-

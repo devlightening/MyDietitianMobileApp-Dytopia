@@ -4,6 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using MyDietitianMobileApp.Domain.Services;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 
 namespace MyDietitianMobileApp.Infrastructure.Services;
 
@@ -96,7 +99,7 @@ public sealed class VisionIngredientService : IVisionIngredientService
                 return VisionDetectionResult.Empty;
             }
 
-            var approxBytes = (long)base64Image.Length * 3 / 4;
+            var approxBytes = GetApproxBytes(base64Image);
             if (approxBytes > _options.MaxImageBytes)
             {
                 _logger.LogWarning(
@@ -105,6 +108,20 @@ public sealed class VisionIngredientService : IVisionIngredientService
                     approxBytes,
                     _options.MaxImageBytes);
                 return VisionDetectionResult.ImageTooLarge;
+            }
+
+            if (approxBytes > _options.TargetImageBytes)
+            {
+                var normalized = await TryNormalizeImageAsync(
+                    base64Image,
+                    operationName,
+                    cancellationToken);
+                if (normalized is not null)
+                {
+                    base64Image = normalized.Base64Image;
+                    mediaType = normalized.MediaType;
+                    approxBytes = normalized.ApproxBytes;
+                }
             }
 
             var dataUri = $"data:{mediaType};base64,{base64Image}";
@@ -176,6 +193,74 @@ public sealed class VisionIngredientService : IVisionIngredientService
         }
     }
 
+    private static long GetApproxBytes(string base64Image)
+        => (long)base64Image.Length * 3 / 4;
+
+    private async Task<NormalizedImage?> TryNormalizeImageAsync(
+        string base64Image,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        var candidates = new[]
+        {
+            new { Width = 1600, Quality = 75 },
+            new { Width = 1280, Quality = 65 },
+            new { Width = 1024, Quality = 60 },
+        };
+
+        try
+        {
+            var sourceBytes = Convert.FromBase64String(base64Image);
+            NormalizedImage? best = null;
+
+            foreach (var candidate in candidates)
+            {
+                using var image = Image.Load(sourceBytes);
+                if (image.Width > candidate.Width)
+                {
+                    image.Mutate(ctx => ctx.Resize(new ResizeOptions
+                    {
+                        Mode = ResizeMode.Max,
+                        Size = new Size(candidate.Width, 0),
+                    }));
+                }
+
+                await using var stream = new MemoryStream();
+                await image.SaveAsJpegAsync(
+                    stream,
+                    new JpegEncoder { Quality = candidate.Quality },
+                    cancellationToken);
+
+                var normalizedBytes = stream.ToArray();
+                best = new NormalizedImage(
+                    Convert.ToBase64String(normalizedBytes),
+                    "image/jpeg",
+                    normalizedBytes.Length);
+
+                if (best.ApproxBytes <= _options.TargetImageBytes)
+                {
+                    break;
+                }
+            }
+
+            if (best is not null)
+            {
+                _logger.LogInformation(
+                    "{Operation}: normalized image to {Bytes} bytes approx (target {Target}).",
+                    operationName,
+                    best.ApproxBytes,
+                    _options.TargetImageBytes);
+            }
+
+            return best;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "{Operation}: image normalization failed. Continuing with original image.", operationName);
+            return null;
+        }
+    }
+
     private VisionDetectionResult ParseResult(string responseBody)
     {
         try
@@ -233,4 +318,6 @@ public sealed class VisionIngredientService : IVisionIngredientService
         [JsonPropertyName("items")]
         public List<string>? Items { get; set; }
     }
+
+    private sealed record NormalizedImage(string Base64Image, string MediaType, long ApproxBytes);
 }

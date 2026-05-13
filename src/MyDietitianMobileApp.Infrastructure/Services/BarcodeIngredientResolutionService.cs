@@ -14,6 +14,19 @@ public sealed class BarcodeIngredientResolutionService : IBarcodeIngredientResol
 {
     private static readonly ConcurrentDictionary<string, (DateTimeOffset ExpiresAt, BarcodeProductContext Context)> OpenFoodFactsCache = new(StringComparer.Ordinal);
 
+    private static readonly IReadOnlyDictionary<string, BarcodeProductContext> KnownBarcodeFallbacks =
+        new Dictionary<string, BarcodeProductContext>(StringComparer.Ordinal)
+        {
+            ["8695077001450"] = new()
+            {
+                Barcode = "8695077001450",
+                ProductName = "Derya Ton Balığı",
+                Brand = "Derya",
+                CategoriesText = "ton balığı, konserve balık",
+                SourceProvider = "known_barcode"
+            }
+        };
+
     private static readonly (string CanonicalQuery, string[] Tokens)[] FamilyRules =
     [
         ("ton baligi", ["ton baligi", "tonbaligi", "ton balik", "ton baligi konservesi", "tuna", "tuna fish", "canned tuna", "en:tuna", "en:tunas", "en:canned-tuna"]),
@@ -116,7 +129,10 @@ public sealed class BarcodeIngredientResolutionService : IBarcodeIngredientResol
         var externalProduct = await LookupOpenFoodFactsAsync(cleanedBarcode, cancellationToken);
         if (externalProduct is null)
         {
-            return CreateUnresolved(sessionId, cleanedBarcode, "not_found");
+            if (!KnownBarcodeFallbacks.TryGetValue(cleanedBarcode, out externalProduct))
+            {
+                return CreateUnresolved(sessionId, cleanedBarcode, "not_found");
+            }
         }
 
         var resolved = await ResolveProductAsync(externalProduct, cancellationToken);
@@ -623,7 +639,9 @@ public sealed class BarcodeIngredientResolutionService : IBarcodeIngredientResol
             return MappingType.CompositeProduct;
         }
 
-        if (normalizedTokens.Any(token => normalizedName.Equals(token, StringComparison.Ordinal)))
+        if (normalizedTokens.Any(token =>
+                normalizedName.Equals(token, StringComparison.Ordinal) ||
+                IsBrandPrefixedExactIngredient(normalizedName, token)))
         {
             return MappingType.ExactIngredient;
         }
@@ -781,6 +799,11 @@ public sealed class BarcodeIngredientResolutionService : IBarcodeIngredientResol
             return 0.94d;
         }
 
+        if (familyTokens.Any(token => IsBrandPrefixedExactIngredient(normalizedName, token)))
+        {
+            return 0.98d;
+        }
+
         if (familyTokens.Any(token => normalizedName.StartsWith(token, StringComparison.Ordinal) ||
                                       normalizedName.EndsWith(token, StringComparison.Ordinal)))
         {
@@ -788,6 +811,20 @@ public sealed class BarcodeIngredientResolutionService : IBarcodeIngredientResol
         }
 
         return 0.84d;
+    }
+
+    private static bool IsBrandPrefixedExactIngredient(string normalizedName, string normalizedToken)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedName) ||
+            string.IsNullOrWhiteSpace(normalizedToken) ||
+            !normalizedName.EndsWith(normalizedToken, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var brandPrefix = normalizedName[..^normalizedToken.Length].Trim();
+        return !string.IsNullOrWhiteSpace(brandPrefix) &&
+               !brandPrefix.Contains(' ', StringComparison.Ordinal);
     }
 
     private static BarcodeResolutionResult CreateUnresolved(

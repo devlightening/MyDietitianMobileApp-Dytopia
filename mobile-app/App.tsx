@@ -12,6 +12,7 @@ import { NotificationProvider } from "./src/context/NotificationContext";
 import RootNavigator from "./src/navigation/RootNavigator";
 import WidgetSyncBootstrap from "./src/widgets/WidgetSyncBootstrap";
 import OfflineBanner from "./src/components/OfflineBanner";
+import { preloadBrandAssets } from "./src/assets/brandAssets";
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 // Prevents the entire app from crashing to a white screen on JS errors.
@@ -81,6 +82,10 @@ const eb = StyleSheet.create({
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  React.useEffect(() => {
+    void preloadBrandAssets();
+  }, []);
+
   return (
     <AppErrorBoundary>
       <SafeAreaProvider>

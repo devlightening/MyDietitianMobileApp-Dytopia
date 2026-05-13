@@ -6,15 +6,16 @@ import {
   StyleSheet,
   Animated,
   StatusBar,
-  SafeAreaView,
   ScrollView,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from '../context/I18nContext';
 import { radii, spacing } from '../theme/tokens';
+import { BRAND_LOGO } from '../assets/brandAssets';
 import ProduceBubble from '../components/decor/ProduceBubble';
 
 const JOURNEY_STEPS = [
@@ -22,7 +23,6 @@ const JOURNEY_STEPS = [
   { icon: 'restaurant-outline', title: 'Malzeme seç', text: 'Elindekilerle sana uygun tarifleri bul.' },
   { icon: 'analytics-outline', title: 'Takip et', text: 'Ölçüm ve uyum görünümüyle motivasyonunu koru.' },
 ] as const;
-const BRAND_LOGO = require('../../assets/dytopia-logo.png');
 
 export default function WelcomeScreen() {
   const navigation = useNavigation();
@@ -83,7 +83,7 @@ export default function WelcomeScreen() {
             <View style={s.heroTop}>
               <View style={[s.logoWrap, { backgroundColor: theme.surface, borderColor: theme.borderEmerald }]}>
                 <View style={[s.logoGlow, { backgroundColor: theme.primaryLight }]} />
-                <Image source={BRAND_LOGO} style={s.logoImage} resizeMode="contain" />
+                <Image source={BRAND_LOGO} style={s.logoImage} resizeMode="contain" fadeDuration={0} />
               </View>
               <Text style={[s.brandWord, { color: theme.primaryDark }]}>Dytopia</Text>
 

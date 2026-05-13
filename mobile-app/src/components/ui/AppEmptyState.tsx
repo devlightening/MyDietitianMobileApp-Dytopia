@@ -3,8 +3,7 @@ import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { useTheme } from '../../context/ThemeContext';
 import { radii, spacing } from '../../theme/tokens';
 import { typography } from '../../theme/typography';
-
-const BRAND_LOGO = require('../../../assets/dytopia-logo.png');
+import { BRAND_LOGO } from '../../assets/brandAssets';
 
 interface AppEmptyStateProps {
   icon: string;
@@ -86,7 +85,7 @@ export default function AppEmptyState({
       )}
 
       <View style={[s.brandPill, { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight }]}>
-        <Image source={BRAND_LOGO} style={s.brandLogo} resizeMode="contain" />
+        <Image source={BRAND_LOGO} style={s.brandLogo} resizeMode="contain" fadeDuration={0} />
         <Text style={[s.brandText, { color: theme.textMuted }]}>Dytopia</Text>
       </View>
     </Animated.View>

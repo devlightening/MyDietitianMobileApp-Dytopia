@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
@@ -20,13 +20,13 @@ import { useTranslation } from '../context/I18nContext';
 import { logIngredientAcquisition } from '../api/acquisition';
 import { confirmBarcodeMapping, resolveBarcode, type BarcodeResolveResponse } from '../api/barcodes';
 import { radii, spacing } from '../theme/tokens';
+import { clearScanResultHandler, resolveScanResult, resolveScanSearchTerm } from '../utils/scanResultStore';
 import type { Ingredient } from '../types/alternative';
 
 type BarcodeScanParams = {
   BarcodeScan: {
     usageContext?: 'kitchen' | 'pantry';
-    onConfirm: (ingredients: Ingredient[]) => void;
-    onUseSearchTerm?: (term: string) => void;
+    scanResultId?: string;
   };
 };
 
@@ -122,12 +122,13 @@ export default function BarcodeScanScreen() {
       return;
     }
 
-    route.params.onConfirm([
+    resolveScanResult(route.params?.scanResultId, [
       {
         id: response.canonicalIngredientId,
         canonicalName: response.canonicalIngredientName,
       },
     ]);
+    clearScanResultHandler(route.params?.scanResultId);
 
     void logIngredientAcquisition({
       source: 'Barcode',
@@ -179,9 +180,10 @@ export default function BarcodeScanScreen() {
   function handleSearchFallback() {
     const fallbackText = result?.productName || result?.barcode;
     if (fallbackText) {
-      route.params.onUseSearchTerm?.(fallbackText);
+      resolveScanSearchTerm(route.params?.scanResultId, fallbackText);
     }
 
+    clearScanResultHandler(route.params?.scanResultId);
     navigation.goBack();
   }
 

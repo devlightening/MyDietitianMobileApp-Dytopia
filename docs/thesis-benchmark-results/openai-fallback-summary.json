@@ -1,0 +1,9 @@
+{
+  "openAiConfigured": false,
+  "status": "OpenAI key not configured; OpenAI fallback tests skipped.",
+  "fallbackCalls": 0,
+  "correct": 0,
+  "unresolved": 0,
+  "averageLatencyMs": null,
+  "tokenOrCost": "not measured"
+}

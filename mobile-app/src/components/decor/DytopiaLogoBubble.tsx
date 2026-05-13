@@ -1,8 +1,7 @@
 import React from "react";
 import { Image, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { useTheme } from "../../context/ThemeContext";
-
-const BRAND_LOGO = require("../../../assets/dytopia-logo.png");
+import { BRAND_LOGO } from "../../assets/brandAssets";
 
 type Props = {
   size?: number;
@@ -18,7 +17,8 @@ export default function DytopiaLogoBubble({
   style,
 }: Props) {
   const { theme, isDark } = useTheme();
-  const finalOpacity = isDark ? Math.min(opacity, 0.22) : opacity;
+  const finalOpacity = isDark ? Math.min(Math.max(opacity * 0.92, 0.14), 0.26) : opacity;
+  const finalLogoOpacity = isDark ? Math.min(Math.max(logoOpacity * 1.08, 0.28), 0.46) : logoOpacity;
 
   return (
     <View
@@ -30,7 +30,7 @@ export default function DytopiaLogoBubble({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: theme.primaryGlow,
+          backgroundColor: isDark ? theme.primaryLight : theme.primaryGlow,
           borderColor: theme.borderEmerald,
           opacity: finalOpacity,
         },
@@ -39,12 +39,13 @@ export default function DytopiaLogoBubble({
       <Image
         source={BRAND_LOGO}
         resizeMode="contain"
+        fadeDuration={0}
         style={[
           s.logo,
           {
             width: size * 0.52,
             height: size * 0.52,
-            opacity: logoOpacity,
+            opacity: finalLogoOpacity,
             borderRadius: size * 0.16,
           },
         ]}
