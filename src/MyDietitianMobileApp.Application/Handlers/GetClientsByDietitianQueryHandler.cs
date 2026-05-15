@@ -24,6 +24,9 @@ public class GetClientsByDietitianQueryHandler
         GetClientsByDietitianQuery request,
         CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
+        var sevenDaysFromNow = now.AddDays(7);
+
         // Start with base query: all active links for this dietitian
         var query = _appContext.DietitianClientLinks
             .Where(l => l.DietitianId == request.DietitianId && l.IsActive)
@@ -44,23 +47,26 @@ public class GetClientsByDietitianQueryHandler
         {
             if (request.Status.ToLower() == "premium")
             {
-                query = query.Where(l => l.Client.IsPremium);
+                query = query.Where(l =>
+                    l.Client.ActiveDietitianId != null &&
+                    (l.Client.ProgramEndDate == null || l.Client.ProgramEndDate > now));
             }
             else if (request.Status.ToLower() == "free")
             {
-                query = query.Where(l => !l.Client.IsPremium);
+                query = query.Where(l =>
+                    l.Client.ActiveDietitianId == null ||
+                    (l.Client.ProgramEndDate != null && l.Client.ProgramEndDate <= now));
             }
         }
 
         // Apply expiring soon filter (premium expiring within 7 days)
         if (request.ExpiringSoon == true)
         {
-            var sevenDaysFromNow = DateTime.UtcNow.AddDays(7);
             query = query.Where(l => 
-                l.Client.IsPremium && 
+                l.Client.ActiveDietitianId != null && 
                 l.Client.ProgramEndDate != null &&
                 l.Client.ProgramEndDate <= sevenDaysFromNow &&
-                l.Client.ProgramEndDate > DateTime.UtcNow);
+                l.Client.ProgramEndDate > now);
         }
 
         // Get total count before pagination
@@ -106,7 +112,6 @@ public class GetClientsByDietitianQueryHandler
             .ToDictionaryAsync(x => x.ClientId, x => x.LastActivity, cancellationToken);
         
         // Batch query: Check for active meal plans
-        var now = DateTime.UtcNow;
         var activePlans = await _appContext.ClientMealPlans
             .Where(p => clientIds.Contains(p.ClientId) && 
                        p.StartDate <= now && 
@@ -169,6 +174,8 @@ public class GetClientsByDietitianQueryHandler
         foreach (var link in uniqueLinks)
         {
             var client = link.Client;
+            var isPremiumActive = client.ActiveDietitianId.HasValue &&
+                (!client.ProgramEndDate.HasValue || client.ProgramEndDate.Value > now);
             
             // Calculate compliance: prefer DailyComplianceSnapshot, fall back to MealCompletion
             decimal compliancePercent = 0;
@@ -189,9 +196,9 @@ public class GetClientsByDietitianQueryHandler
             
             // Calculate days remaining
             int? daysRemaining = null;
-            if (client.IsPremium && client.ProgramEndDate.HasValue)
+            if (isPremiumActive && client.ProgramEndDate.HasValue)
             {
-                var timeSpan = client.ProgramEndDate.Value - DateTime.UtcNow;
+                var timeSpan = client.ProgramEndDate.Value - now;
                 daysRemaining = Math.Max(0, (int)Math.Ceiling(timeSpan.TotalDays));
             }
             
@@ -209,7 +216,7 @@ public class GetClientsByDietitianQueryHandler
                 PublicUserId = publicUserIds.TryGetValue(client.Id, out var pId) ? pId : "MD-UNKNOWN",
                 FullName = client.FullName,
                 Email = client.Email,
-                IsPremium = client.IsPremium,
+                IsPremium = isPremiumActive,
                 PremiumEndDate = client.ProgramEndDate,
                 DaysRemaining = daysRemaining,
                 CompliancePercent = compliancePercent,

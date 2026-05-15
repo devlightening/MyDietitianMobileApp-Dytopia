@@ -23,6 +23,39 @@ interface MenuState {
   left: number
 }
 
+function getPremiumEndState(client: ClientRow): 'none' | 'active' | 'expired' {
+  if (!client.premiumEndDate) return 'none'
+  if (!client.isPremium) return 'expired'
+
+  const endTime = new Date(client.premiumEndDate).getTime()
+  return Number.isFinite(endTime) && endTime <= Date.now() ? 'expired' : 'active'
+}
+
+function getPremiumEndLabel(client: ClientRow): { text: string; tone: string } | null {
+  const state = getPremiumEndState(client)
+  if (state === 'none') return null
+
+  if (state === 'expired') {
+    return { text: 'Süresi bitti', tone: 'text-red-600' }
+  }
+
+  if (typeof client.daysRemaining !== 'number') return null
+
+  if (client.daysRemaining <= 0) {
+    return { text: 'Bugün sona eriyor', tone: 'text-red-600' }
+  }
+
+  if (client.daysRemaining <= 7) {
+    return { text: `${client.daysRemaining} gün kaldı`, tone: 'text-red-600' }
+  }
+
+  if (client.daysRemaining <= 30) {
+    return { text: `${client.daysRemaining} gün kaldı`, tone: 'text-amber-600' }
+  }
+
+  return { text: `${client.daysRemaining} gün kaldı`, tone: 'text-green-600' }
+}
+
 export function ClientsTable({ clients, isLoading, onGenerateKey }: ClientsTableProps) {
   const router = useRouter()
   const [menuState, setMenuState] = useState<MenuState | null>(null)
@@ -171,7 +204,11 @@ export function ClientsTable({ clients, isLoading, onGenerateKey }: ClientsTable
             </tr>
           </thead>
           <tbody className="divide-y divide-border bg-background">
-            {clients.map((client, index) => (
+            {clients.map((client, index) => {
+              const premiumEndState = getPremiumEndState(client)
+              const premiumEndLabel = getPremiumEndLabel(client)
+
+              return (
               <tr
                 key={`${client.clientId}-${client.linkedAt || index}`}
                 data-testid={`client-row-${client.clientId}`}
@@ -189,6 +226,8 @@ export function ClientsTable({ clients, isLoading, onGenerateKey }: ClientsTable
                   <div className="flex flex-col gap-1">
                     {client.isPremium ? (
                       <Badge variant="primary">Premium</Badge>
+                    ) : premiumEndState === 'expired' ? (
+                      <Badge variant="danger">Süresi bitti</Badge>
                     ) : (
                       <Badge variant="secondary">Ücretsiz</Badge>
                     )}
@@ -201,7 +240,7 @@ export function ClientsTable({ clients, isLoading, onGenerateKey }: ClientsTable
                 </td>
 
                 <td className="px-6 py-4">
-                  {client.isPremium ? (
+                  {client.isPremium && premiumEndState === 'active' ? (
                     <Badge
                       variant={
                         client.compliancePercent >= 80
@@ -224,19 +263,9 @@ export function ClientsTable({ clients, isLoading, onGenerateKey }: ClientsTable
                       <span className="text-sm text-foreground">
                         {new Date(client.premiumEndDate).toLocaleDateString('tr-TR')}
                       </span>
-                      {client.daysRemaining !== undefined && (
-                        <span
-                          className={`text-xs font-medium ${
-                            client.daysRemaining <= 7
-                              ? 'text-red-600'
-                              : client.daysRemaining <= 30
-                                ? 'text-amber-600'
-                                : 'text-green-600'
-                          }`}
-                        >
-                          {client.daysRemaining === 0
-                            ? 'Bugün sona eriyor'
-                            : `${client.daysRemaining} gün kaldı`}
+                      {premiumEndLabel && (
+                        <span className={`text-xs font-medium ${premiumEndLabel.tone}`}>
+                          {premiumEndLabel.text}
                         </span>
                       )}
                     </div>
@@ -280,7 +309,8 @@ export function ClientsTable({ clients, isLoading, onGenerateKey }: ClientsTable
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

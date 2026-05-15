@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import {
   getActivityCategory,
   getActivityDescription as formatActivityDescription,
@@ -88,6 +89,7 @@ export default function ClientDetailPage() {
   const [mChestCm, setMChestCm] = useState('');
   const [mNotes, setMNotes] = useState('');
   const [mRecordedAt, setMRecordedAt] = useState('');
+  const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
 
   useEffect(() => {
     const requestedTab = searchParams.get('tab');
@@ -197,9 +199,11 @@ export default function ClientDetailPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-measurements', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['client-detail', clientId] });
       setMWeightKg(''); setMHeightCm(''); setMBodyFat(''); setMMuscle('');
       setMWater(''); setMWaistCm(''); setMHipCm(''); setMChestCm('');
       setMNotes(''); setMRecordedAt('');
+      setIsMeasurementModalOpen(false);
     },
   });
 
@@ -678,8 +682,27 @@ export default function ClientDetailPage() {
 
         {activeTab === 'measurements' && (
           <div className="space-y-6">
-            {/* Clinical measurement entry form */}
-            <Card className="p-6">
+            <Card className="p-5 sm:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                    <Scale className="h-3.5 w-3.5" />
+                    Klinik ölçümler
+                  </div>
+                  <h2 className="mt-3 text-xl font-semibold text-foreground">Vücut kompozisyon paneli</h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    Kilo, çevre ölçüleri ve BIA uyumlu kompozisyon verilerini tek klinik ekranda izleyin.
+                  </p>
+                </div>
+                <Button variant="action" onClick={() => setIsMeasurementModalOpen(true)} className="shrink-0">
+                  <PlusCircle className="h-4 w-4" />
+                  Yeni ölçüm ekle
+                </Button>
+              </div>
+            </Card>
+
+            {false && (
+            <Card className="hidden p-6">
               <h3 className="text-base font-semibold text-foreground mb-4">Yeni klinik ölçüm ekle</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Input
@@ -766,6 +789,7 @@ export default function ClientDetailPage() {
                 </Button>
               </div>
             </Card>
+            )}
 
             <MeasurementsChart measurements={measurements} />
           </div>
@@ -1084,6 +1108,128 @@ export default function ClientDetailPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={isMeasurementModalOpen}
+        onClose={() => setIsMeasurementModalOpen(false)}
+        title="Yeni klinik ölçüm"
+      >
+        <div className="max-h-[82vh] w-[min(920px,calc(100vw-32px))] overflow-y-auto pr-1">
+          <div className="space-y-6">
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <Scale className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Temel ölçüm</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Input
+                  label="Kilo (kg)"
+                  type="number"
+                  placeholder="70.5"
+                  value={mWeightKg}
+                  onChange={(e) => setMWeightKg(e.target.value)}
+                />
+                <Input
+                  label="Boy (cm)"
+                  type="number"
+                  placeholder="170"
+                  value={mHeightCm}
+                  onChange={(e) => setMHeightCm(e.target.value)}
+                />
+                <Input
+                  label="Ölçüm tarihi"
+                  type="datetime-local"
+                  value={mRecordedAt}
+                  onChange={(e) => setMRecordedAt(e.target.value)}
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <Ruler className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Çevre ölçüleri</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Input
+                  label="Bel (cm)"
+                  type="number"
+                  placeholder="80"
+                  value={mWaistCm}
+                  onChange={(e) => setMWaistCm(e.target.value)}
+                />
+                <Input
+                  label="Kalça (cm)"
+                  type="number"
+                  placeholder="95"
+                  value={mHipCm}
+                  onChange={(e) => setMHipCm(e.target.value)}
+                />
+                <Input
+                  label="Göğüs (cm)"
+                  type="number"
+                  placeholder="90"
+                  value={mChestCm}
+                  onChange={(e) => setMChestCm(e.target.value)}
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Kompozisyon</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Input
+                  label="Yağ oranı (%)"
+                  type="number"
+                  placeholder="22"
+                  value={mBodyFat}
+                  onChange={(e) => setMBodyFat(e.target.value)}
+                />
+                <Input
+                  label="Kas oranı (%)"
+                  type="number"
+                  placeholder="38"
+                  value={mMuscle}
+                  onChange={(e) => setMMuscle(e.target.value)}
+                />
+                <Input
+                  label="Su oranı (%)"
+                  type="number"
+                  placeholder="55"
+                  value={mWater}
+                  onChange={(e) => setMWater(e.target.value)}
+                />
+              </div>
+            </section>
+
+            <Input
+              label="Klinik not"
+              placeholder="Görüşme notu, cihaz notu veya ölçüm koşulu..."
+              value={mNotes}
+              onChange={(e) => setMNotes(e.target.value)}
+            />
+
+            <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+              <Button variant="ghost" onClick={() => setIsMeasurementModalOpen(false)}>
+                Vazgeç
+              </Button>
+              <Button
+                variant="action"
+                onClick={() => addMeasurementMutation.mutate()}
+                disabled={
+                  addMeasurementMutation.isPending ||
+                  (!mWeightKg && !mWaistCm && !mHeightCm)
+                }
+              >
+                {addMeasurementMutation.isPending ? 'Kaydediliyor...' : 'Ölçümü kaydet'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

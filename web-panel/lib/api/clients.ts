@@ -182,7 +182,7 @@ export interface ClientRow {
   email: string;
   isPremium: boolean;
   premiumEndDate?: string;
-  daysRemaining?: number; // Days until premium expires
+  daysRemaining?: number | null; // Days until premium expires
   compliancePercent: number;
   lastActivityAt?: string;
   hasActivePlan: boolean; // Has an active meal plan assigned
