@@ -15,6 +15,7 @@ import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { InAppNotificationProvider } from "../context/InAppNotificationContext";
 import { FeedbackProvider } from "../context/FeedbackContext";
 import { BRAND_LOGO } from "../assets/brandAssets";
+import GlobalCelebrationHost from "../components/gamification/GlobalCelebrationHost";
 
 import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
@@ -170,12 +171,13 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      theme={navTheme}
-      onReady={flushPendingWidgetTarget}
-    >
-      <Root.Navigator screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}>
+    <>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={navTheme}
+        onReady={flushPendingWidgetTarget}
+      >
+        <Root.Navigator screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}>
         {!isAuthenticated ? (
           /* â”€â”€ Unauthenticated: Auth stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
           <Root.Screen name="Auth">
@@ -269,8 +271,10 @@ function AppNavigator() {
         <Root.Group screenOptions={{ presentation: "modal", headerShown: false, animation: 'slide_from_bottom', animationDuration: modalDuration }}>
           <Root.Screen name={Routes.Modal.ActivatePremium} component={PremiumActivationScreen} />
         </Root.Group>
-      </Root.Navigator>
-    </NavigationContainer>
+        </Root.Navigator>
+      </NavigationContainer>
+      {ready && isAuthenticated ? <GlobalCelebrationHost /> : null}
+    </>
   );
 }
 

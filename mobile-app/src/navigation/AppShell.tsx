@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import * as SecureStore from "expo-secure-store";
 import { useNavigation } from "@react-navigation/native";
 import {
   View,
@@ -8,7 +9,6 @@ import {
   StatusBar,
   Easing,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "../context/I18nContext";
@@ -35,7 +35,6 @@ import {
   getToneColor,
   mapGamificationToMotivation,
 } from "../motivation/streaks";
-
 import BadgeUnlockOverlay, { type BadgeInfo } from "../components/ui/BadgeUnlockOverlay";
 import StreakMilestoneToast, { STREAK_MILESTONES } from "../components/ui/StreakMilestoneToast";
 import { buildBadgeUnlockedBanner, buildStreakMilestoneBanner } from "../notifications/notificationEvents";
@@ -66,18 +65,14 @@ type SceneAnimationMap = Record<TabKey, SceneAnimationState>;
 type QueuedBadgeInfo = BadgeInfo & { celebrationKey: string };
 
 function getBadgeCelebrationKey(badge: ReturnType<typeof buildBadgeCollection>[number]): string {
-  if (!badge.isDailyReset) {
-    return badge.id;
-  }
-
+  if (!badge.isDailyReset) return badge.id;
   const unlockedDate = badge.unlockedAtUtc
     ? new Date(badge.unlockedAtUtc).toISOString().slice(0, 10)
     : "daily";
-
   return `${badge.id}:${unlockedDate}`;
 }
-
 export default function AppShell() {
+  const localCelebrationsEnabled = false;
   const { user } = useAuth();
   const isPremium = user?.isPremium === true;
   const { theme, isDark } = useTheme();
@@ -148,6 +143,7 @@ export default function AppShell() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = subscribeToGamificationChanges(() => {
+      if (!localCelebrationsEnabled) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void refetchGamification();
@@ -167,6 +163,7 @@ export default function AppShell() {
   }, [badgeQueue, pendingBadge]);
 
   useEffect(() => {
+    if (!localCelebrationsEnabled) return;
     if (!gamification) return;
 
     const motivation = mapGamificationToMotivation(gamification);
@@ -537,15 +534,12 @@ export default function AppShell() {
       />
 
       {/* ── Celebrations ── */}
-      <StreakMilestoneToast
-        streak={pendingStreak}
-        onDismiss={() => setPendingStreak(null)}
-      />
-
-      <BadgeUnlockOverlay
-        badge={pendingBadge}
-        onDismiss={() => setPendingBadge(null)}
-      />
+      {localCelebrationsEnabled ? (
+        <>
+          <StreakMilestoneToast streak={pendingStreak} onDismiss={() => setPendingStreak(null)} />
+          <BadgeUnlockOverlay badge={pendingBadge} onDismiss={() => setPendingBadge(null)} />
+        </>
+      ) : null}
     </View>
   );
 }

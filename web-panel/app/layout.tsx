@@ -6,8 +6,8 @@ import Providers from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MyDietitian Panel",
-  description: "Clinic-oriented SaaS panel for dietitians",
+  title: "Dytopia | Diyetisyenler için dijital klinik işletim sistemi",
+  description: "Diyetisyen web paneli ve danışan mobil uygulamasını tek premium SaaS platformunda birleştirin.",
 };
 
 export default async function RootLayout({

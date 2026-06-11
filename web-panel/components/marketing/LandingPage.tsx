@@ -1,0 +1,104 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { AlertCircle, ArrowRight, BarChart3, Check, CheckCircle2, ChefHat, Flame, Gift, HelpCircle, KeyRound, Layers3, Mail, MessageCircle, PackageOpen, Phone, Salad, Send, ShieldCheck, Sparkles, Trophy, Wand2, Zap } from "lucide-react";
+import { mobileShots, webShots } from "./MarketingAssets";
+import { BrowserFrame, PageShell, PhoneFrame, SectionIntro, Tag } from "./MarketingSite";
+
+const problems = [
+  [HelpCircle, "Karar yorgunluğu", "Danışan ne yiyeceğini bilemediğinde plana bağlılık düşer."],
+  [AlertCircle, "Malzeme eksikliği", "Evde olmayan malzemeler diyeti bozmak için bahaneye dönüşür."],
+  [MessageCircle, "Operasyon yükü", "Diyetisyen sürekli “bunun yerine ne yiyebilirim?” sorularıyla uğraşır."],
+] as const;
+const flow = [
+  ["01", "Panelde kurgula", "Tarif, plan ve klinik kurallarını oluştur.", Layers3],
+  ["02", "Access Key bağla", "Danışanı Premium klinik deneyimine geçir.", KeyRound],
+  ["03", "Malzemeyi seç", "Danışan evindeki gerçek seçenekleri işaretlesin.", Salad],
+  ["04", "Birleştir", "Motor en güvenli ve uygulanabilir öğünü bulsun.", Wand2],
+  ["05", "Uyumu izle", "Tamamlama verisi web panele geri aksın.", BarChart3],
+] as const;
+const prices = [
+  ["Başlangıç", "3 ay", "Kontrollü bir danışan grubuyla dijital kliniğe başlayın."],
+  ["Büyüme", "6 ay", "Düzenli danışan operasyonunu güçlü bir sisteme taşıyın."],
+  ["Klinik", "12 ay", "Dytopia’yı kliniğinizin ana dijital altyapısı yapın."],
+  ["Uzun dönem", "24 ay", "Sürdürülebilir dijital klinik operasyonu için uzun vadeli lisans."],
+] as const;
+const faqs = [
+  ["Dytopia kimler için?", "Danışan uyumunu artırmak ve operasyonunu tek panelde yönetmek isteyen diyetisyenler ve klinikler için tasarlanmıştır."],
+  ["Danışan uygulamayı nasıl Premium yapar?", "Diyetisyenin oluşturduğu süreli Access Key’i mobil uygulamaya girerek kliniğe bağlanır."],
+  ["Access Key nasıl çalışır?", "Anahtar doğru danışanı doğru klinik, marka ve plan deneyimiyle güvenli biçimde eşleştirir."],
+  ["Diyetisyen kendi tariflerini girebilir mi?", "Evet. Tarifler, içerikler ve klinik kuralları web panelden yönetilebilir."],
+  ["Mobil uygulama ve web panel birlikte mi çalışır?", "Evet. Plan, mutfak, iletişim ve uyum verileri iki deneyim arasında senkron çalışır."],
+  ["Premium süresi bitince ne olur?", "Klinik bağlantısı sona erer; danışan temel uygulama deneyimini kullanmaya devam edebilir."],
+] as const;
+
+export default function LandingPage() {
+  return <PageShell>
+    <HeroSection/><ProblemSection/><ProductFlowSection/><KitchenShowcase/><MobileShowcase/><WebPanelShowcase/><AccessKeySection/><GamificationSection/><PricingSection/><FAQSection/><ContactSection/><FinalCTA/>
+  </PageShell>;
+}
+
+function HeroSection() {
+  return <section id="platform" className="relative min-h-[820px] overflow-hidden border-b border-[#4A7C59]/10 px-5 pb-24 pt-16 lg:px-8 lg:pt-24">
+    <div className="marketing-orb absolute -left-24 top-24 h-80 w-80 rounded-full bg-[#F4D35E]/15 blur-2xl"/><div className="marketing-orb absolute -right-20 top-10 h-[30rem] w-[30rem] rounded-full bg-[#4A7C59]/15 blur-2xl [animation-delay:-4s]"/>
+    <div data-reveal className="relative mx-auto grid max-w-[1380px] gap-16 lg:grid-cols-[.82fr_1.18fr] lg:items-center">
+      <div><Tag>Premium dijital klinik sistemi</Tag><h1 className="mt-7 text-[3.35rem] font-black leading-[.93] tracking-[-.07em] sm:text-7xl lg:text-[5.5rem]">Kliniğiniz büyürken, <span className="text-[#4A7C59]">danışan uyumu</span> da büyüsün.</h1><p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#65736d]">Dytopia; diyetisyen paneli, mobil danışan uygulaması ve akıllı mutfak eşleştirme motorunu tek SaaS deneyiminde birleştirir.</p><div className="mt-9 flex flex-wrap gap-3"><Link href="#iletisim" className="marketing-button inline-flex items-center gap-2 rounded-full bg-[#2F5233] px-7 py-4 text-sm font-black text-white">Demo al <ArrowRight size={16}/></Link><Link href="#ozellikler" className="rounded-full border border-[#4A7C59]/15 bg-white px-7 py-4 text-sm font-black">Platformu keşfet</Link></div><div className="mt-9 grid gap-3 text-xs font-bold text-[#5f7168] sm:grid-cols-2">{["Web panel + Mobil uygulama","Access Key ile Premium deneyim","Akıllı tarif eşleştirme","Uyum skoru ve danışan takibi"].map(item => <span key={item} className="flex items-center gap-2"><CheckCircle2 size={15} className="text-[#4A7C59]"/>{item}</span>)}</div></div>
+      <div className="relative min-h-[600px]"><div className="absolute inset-10 rounded-full bg-[#4A7C59]/10 blur-3xl"/><BrowserFrame src={webShots[5]} className="marketing-float-b relative ml-auto w-[94%]"/><div className="absolute bottom-0 left-0 z-10 flex items-end gap-2"><PhoneFrame src={mobileShots[3]} className="marketing-float-a w-[145px] -rotate-6 sm:w-[190px]"/><PhoneFrame src={mobileShots[19]} className="marketing-float-b mb-7 w-[155px] sm:w-[205px]"/><PhoneFrame src={mobileShots[24]} className="marketing-float-c hidden w-[145px] rotate-6 sm:block sm:w-[190px]"/></div></div>
+    </div>
+  </section>;
+}
+
+function ProblemSection() {
+  return <section id="ozellikler" className="px-5 py-24 lg:px-8"><div className="mx-auto max-w-[1380px]"><SectionIntro eyebrow="Gerçek problem" title="En iyi diyet planı bile mutfakta yarıda kalabilir." text="Uyum kaybı çoğu zaman plandan değil, günlük karar yükünden başlar."/><div className="mt-12 grid gap-5 md:grid-cols-3">{problems.map(([Icon,title,text], i) => <article data-reveal style={{transitionDelay:`${i*90}ms`}} key={title} className="premium-card rounded-[2rem] border border-[#E3E8E5] bg-white p-7"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#FF8C61]/12 text-[#e56d42]"><Icon size={23}/></span><h3 className="mt-7 text-xl font-black">{title}</h3><p className="mt-3 text-sm font-medium leading-7 text-[#65736d]">{text}</p></article>)}</div></div></section>;
+}
+
+function ProductFlowSection() {
+  return <section id="nasil-calisir" className="relative overflow-hidden bg-[#2F5233] px-5 py-24 text-white lg:px-8"><div className="mx-auto max-w-[1380px]"><SectionIntro dark eyebrow="Bağlantılı ürün hikâyesi" title="Diyetisyenin aklı, danışanın cebinde." text="Bir klinik kararı, danışanın günlük aksiyonuna; günlük aksiyon ise ölçülebilir uyum sinyaline dönüşür."/><div className="relative mt-14 grid gap-4 lg:grid-cols-5"><div className="marketing-signal-line absolute left-[8%] right-[8%] top-8 hidden lg:block"/>{flow.map(([n,title,text,Icon],i) => <article data-reveal key={n} style={{transitionDelay:`${i*80}ms`}} className="relative rounded-[1.7rem] border border-white/10 bg-white/[.07] p-6 backdrop-blur"><span className="relative z-10 grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-[#F9F7F2] text-[#2F5233] shadow-xl"><Icon size={22}/></span><p className="mt-8 text-[10px] font-black uppercase tracking-[.2em] text-[#F4D35E]">{n}</p><h3 className="mt-3 text-lg font-black !text-white">{title}</h3><p className="mt-2 text-xs font-medium leading-6 text-white/55">{text}</p></article>)}</div></div></section>;
+}
+
+function KitchenShowcase() {
+  return <section id="mutfak" className="relative overflow-hidden px-5 py-24 lg:px-8"><div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_40%,rgba(244,211,94,.18),transparent_32%)]"/><div className="relative mx-auto grid max-w-[1380px] gap-14 lg:grid-cols-[.82fr_1.18fr] lg:items-center"><div><SectionIntro eyebrow="Ürünün kalbi" title="Uygulamanın kalbi: Mutfak." text="Danışan evindeki malzemeleri seçer, Dytopia diyetisyenin kurallarıyla güvenli ve uygulanabilir öğünleri bulur."/><div className="mt-8 flex flex-wrap gap-2">{["Kahvaltı","Salata","Pratik","Tatlı Krizi"].map(x => <span key={x} className="rounded-full border border-[#4A7C59]/15 bg-white px-4 py-2 text-xs font-black">{x}</span>)}</div><div className="mt-7 rounded-2xl border border-[#E3E8E5] bg-white p-5 text-sm font-semibold text-[#65736d]"><b className="text-[#2D3436]">Malzeme sözlüğü:</b> domates / çeri domates / salkım domates <ArrowRight className="mx-2 inline" size={14}/> standart ID</div></div><div data-reveal className="kitchen-stage relative rounded-[2.5rem] border border-[#E3E8E5] bg-white/75 p-5 shadow-[0_35px_90px_rgba(47,82,51,.13)] backdrop-blur sm:p-9"><div className="grid gap-4 sm:grid-cols-3">{[["Tam Uyum","%100","#4A7C59"],["1 Eksikle Olur","Hazırlanabilir","#F4D35E"],["Uygun Değil","Alternatif bul","#FF8C61"]].map(([a,b,c],i) => <div key={a} className="kitchen-result rounded-2xl border border-[#E3E8E5] bg-[#F9F7F2] p-4" style={{animationDelay:`${i*.6}s`}}><span className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{background:c}}>{i===0?<Check size={17}/>:i===1?<Sparkles size={17}/>:<AlertCircle size={17}/>}</span><h3 className="mt-5 text-sm font-black">{a}</h3><p className="mt-1 text-[10px] font-bold text-[#65736d]">{b}</p></div>)}</div><div className="relative mx-auto mt-9 grid h-40 max-w-sm place-items-center"><div className="unbox-glow absolute h-32 w-32 rounded-full bg-[#F4D35E]/30 blur-2xl"/><PackageOpen className="unbox-icon relative text-[#4A7C59]" size={82}/><Sparkles className="unbox-spark absolute right-[25%] top-4 text-[#F4D35E]" size={28}/></div><button type="button" className="marketing-button mx-auto flex w-full max-w-md items-center justify-center gap-3 rounded-full bg-[#2F5233] px-6 py-4 text-sm font-black text-white"><ChefHat size={18}/> Lezzetleri Birleştir</button></div></div></section>;
+}
+
+function MobileShowcase() {
+  return <section className="overflow-hidden border-y border-[#4A7C59]/10 bg-[#edf4ed] py-24"><div className="px-5 lg:px-8"><div className="mx-auto max-w-[1380px]"><SectionIntro eyebrow="Danışan deneyimi" title="Danışan uygulaması sadece takip etmez, uygulatır." text="Free keşiften Premium klinik moduna, mutfaktan tarife kadar her ekran günlük aksiyon için tasarlandı."/></div></div><div className="marketing-screen-stream mt-14 flex w-max gap-5 px-5">{[3,8,11,18,24,29,35,39,3,8,11,18,24,29,35,39].map((index,i) => <div key={`${index}-${i}`} className="w-[205px] shrink-0"><PhoneFrame src={mobileShots[index]}/><p className="mt-4 text-center text-xs font-black">{["Free Home","Premium Home","Mutfak","Tarif sonucu","Profil"][i%5]}</p></div>)}</div></section>;
+}
+
+function WebPanelShowcase() {
+  const features = ["KPI ve risk görünürlüğü","Danışan ve plan yönetimi","Access Key üretimi","Akıllı tarif editörü","Raporlama ve uyum skoru"];
+  return <section id="web-panel" className="px-5 py-24 lg:px-8"><div className="mx-auto grid max-w-[1380px] gap-14 lg:grid-cols-[1.2fr_.8fr] lg:items-center"><div data-reveal className="relative"><BrowserFrame src={webShots[5]} className="marketing-float-b"/><div className="absolute -bottom-6 right-5 rounded-2xl border border-white bg-[#F4D35E] px-5 py-4 shadow-xl"><p className="text-[9px] font-black uppercase tracking-[.16em]">Ortalama uyum</p><b className="mt-1 block text-2xl">%85</b></div></div><div><SectionIntro eyebrow="Diyetisyen web paneli" title="Diyetisyen için dijital operasyon merkezi." text="Klinik operasyonunun tamamı, anlaşılır sinyaller ve hızlı aksiyonlarla tek çalışma alanında."/><div className="mt-8 grid gap-3">{features.map((x,i) => <div data-reveal style={{transitionDelay:`${i*60}ms`}} key={x} className="flex items-center gap-3 rounded-2xl border border-[#E3E8E5] bg-white p-4 text-sm font-black"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#4A7C59]/10 text-[#4A7C59]"><Check size={15}/></span>{x}</div>)}</div></div></div></section>;
+}
+
+function AccessKeySection() {
+  return <section className="relative overflow-hidden bg-[#fff8e5] px-5 py-24 lg:px-8"><div className="mx-auto max-w-[1380px] text-center"><div className="mx-auto"><SectionIntro eyebrow="Free → Premium" title="Tek anahtar ile Free deneyimden klinik Premium moda." text="Danışan kodu girer, uygulama diyetisyenin dijital kliniğine dönüşür."/></div><div data-reveal className="mt-14 grid items-center gap-8 lg:grid-cols-[1fr_.55fr_1fr]"><PhoneFrame src={mobileShots[27]} className="mx-auto w-[220px]"/><div className="access-key-flow relative mx-auto grid h-48 w-48 place-items-center rounded-full border border-[#4A7C59]/20 bg-white shadow-[0_25px_70px_rgba(47,82,51,.15)]"><div className="access-ring absolute inset-3 rounded-full border border-dashed border-[#4A7C59]/30"/><KeyRound size={52} className="relative text-[#4A7C59]"/><span className="absolute bottom-7 rounded-full bg-[#2F5233] px-3 py-1 text-[9px] font-black tracking-[.16em] text-white">ACCESS KEY</span></div><PhoneFrame src={mobileShots[35]} className="mx-auto w-[220px]"/></div><div className="mt-10 flex flex-wrap justify-center gap-2">{["Diyetisyen adı","Marka rengi","İmza tarifler","Kişisel plan","Uyum takibi"].map(x => <span key={x} className="rounded-full border border-[#4A7C59]/15 bg-white px-4 py-2 text-xs font-black">{x}</span>)}</div></div></section>;
+}
+
+function GamificationSection() {
+  const items = [[Gift,"Kutu açılışı","Bugünün en uygun öğünü bulundu"],[Flame,"Streak","3 günlük seri"],[Trophy,"Rozetler","Protein Canavarı · 5 Dakikacı"],[BarChart3,"Uyum skoru","%85"],[Zap,"Panel sinyali","Tamamlandığında diyetisyen görür"]] as const;
+  return <section className="px-5 py-24 lg:px-8"><div className="mx-auto max-w-[1380px]"><SectionIntro eyebrow="Sürdürülebilir uyum" title="Diyet takibini oyunlaştır, uyumu sürdürülebilir hale getir." text="Küçük başarılar görünür olur, danışan devam etmek için yeni bir neden bulur."/><div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-5">{items.map(([Icon,title,text],i) => <article data-reveal style={{transitionDelay:`${i*70}ms`}} key={title} className={`premium-card rounded-[1.8rem] border p-6 ${i%2 ? "border-[#F4D35E]/50 bg-[#fff8dd]" : "border-[#FF8C61]/25 bg-[#fff3ee]"}`}><Icon className={i%2 ? "text-[#ba951b]" : "text-[#e66f44]"} size={25}/><h3 className="mt-8 font-black">{title}</h3><p className="mt-2 text-xs font-semibold leading-5 text-[#65736d]">{text}</p></article>)}</div></div></section>;
+}
+
+function PricingSection() {
+  return <section id="fiyatlandirma" className="bg-[#edf4ed] px-5 py-24 lg:px-8"><div className="mx-auto max-w-[1380px]"><SectionIntro eyebrow="Premium lisans" title="Her pakette eksiksiz Dytopia deneyimi." text="Fiyatı değil, kliniğiniz için doğru başlangıç dönemini seçin. Tüm paketler web panel ve mobil uygulamayı birlikte içerir."/><div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{prices.map(([name,time,text],i) => <article data-reveal style={{transitionDelay:`${i*70}ms`}} key={time} className={`pricing-card relative rounded-[2rem] border p-7 ${i===2 ? "featured-price border-[#F4D35E] bg-[#2F5233] text-white" : "border-[#E3E8E5] bg-white"}`}>{i===2&&<span className="absolute right-5 top-5 rounded-full bg-[#F4D35E] px-3 py-1 text-[9px] font-black uppercase tracking-[.15em] text-[#2D3436]">Önerilen</span>}<p className={`text-[10px] font-black uppercase tracking-[.18em] ${i===2?"text-[#F4D35E]":"text-[#4A7C59]"}`}>{name}</p><h3 className={`mt-5 text-5xl font-black ${i===2?"!text-white":""}`}>{time}</h3><p className={`mt-5 min-h-20 text-sm font-medium leading-6 ${i===2?"text-white/60":"text-[#65736d]"}`}>{text}</p><ul className="mt-6 grid gap-3 text-xs font-bold">{["Web panel + mobil","Access Key","Kurulum desteği","Tüm güncellemeler"].map(x=><li key={x} className="flex gap-2"><Check size={15}/>{x}</li>)}</ul><Link href="#iletisim" className={`mt-8 block rounded-full py-3.5 text-center text-sm font-black ${i===2?"bg-white text-[#2F5233]":"bg-[#2F5233] text-white"}`}>Teklif al</Link></article>)}</div></div></section>;
+}
+
+function FAQSection() {
+  return <section id="sss" className="px-5 py-24 lg:px-8"><div className="mx-auto max-w-4xl"><SectionIntro eyebrow="SSS" title="Karar vermeden önce bilmeniz gerekenler."/><div className="mt-10 grid gap-3">{faqs.map(([q,a]) => <details data-reveal key={q} className="faq-item group rounded-2xl border border-[#E3E8E5] bg-white p-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-black">{q}<span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#4A7C59]/10 text-[#4A7C59] transition group-open:rotate-45">+</span></summary><p className="mt-4 max-w-3xl text-sm font-medium leading-7 text-[#65736d]">{a}</p></details>)}</div></div></section>;
+}
+
+function ContactSection() {
+  const [form,setForm]=useState({name:"",clinic:"",email:"",phone:"",message:""});
+  const [state,setState]=useState<"idle"|"loading"|"success"|"error">("idle");
+  const submit=async(e:React.FormEvent)=>{e.preventDefault();setState("loading");try{const response=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:form.name,email:form.email,phone:form.phone,subject:`Demo talebi · ${form.clinic}`,message:form.message})});setState(response.ok?"success":"error")}catch{setState("error")}};
+  const field=(key:keyof typeof form)=>(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>)=>setForm({...form,[key]:e.target.value});
+  return <section id="iletisim" className="bg-[#2F5233] px-5 py-24 text-white lg:px-8"><div className="mx-auto grid max-w-[1380px] gap-14 lg:grid-cols-[.8fr_1.2fr]"><div><SectionIntro dark eyebrow="Demo görüşmesi" title="Kliniğiniz için doğru Dytopia akışını birlikte kuralım." text="İhtiyacınızı dinleyelim, panel ve mobil deneyimi gerçek ürün ekranları üzerinden gösterelim."/><div className="mt-9 grid gap-3 text-sm font-bold text-white/70"><span className="flex gap-3"><Mail size={18} className="text-[#F4D35E]"/> info@mydietitian.com</span><span className="flex gap-3"><Phone size={18} className="text-[#F4D35E]"/> Hafta içi 09:00–18:00</span><span className="flex gap-3"><ShieldCheck size={18} className="text-[#F4D35E]"/> Bilgileriniz yalnızca demo süreci için kullanılır.</span></div></div><form onSubmit={submit} data-reveal className="rounded-[2.2rem] border border-white/15 bg-white/10 p-6 backdrop-blur-xl sm:p-9"><div className="grid gap-4 sm:grid-cols-2"><ContactInput label="Ad soyad" value={form.name} onChange={field("name")} required/><ContactInput label="Klinik / marka adı" value={form.clinic} onChange={field("clinic")} required/><ContactInput label="E-posta" type="email" value={form.email} onChange={field("email")} required/><ContactInput label="Telefon" type="tel" value={form.phone} onChange={field("phone")}/></div><label className="mt-4 block text-xs font-black uppercase tracking-[.14em] text-white/60">Mesaj<textarea required value={form.message} onChange={field("message")} className="mt-2 min-h-32 w-full rounded-2xl border border-white/15 bg-white/10 p-4 text-sm font-semibold normal-case tracking-normal text-white outline-none transition placeholder:text-white/30 focus:border-[#F4D35E]" placeholder="Kliniğiniz ve hedefiniz hakkında kısaca bilgi verin."/></label>{state==="success"&&<p className="mt-4 rounded-xl bg-white/10 p-3 text-sm font-bold text-[#F4D35E]">Demo talebiniz alındı.</p>}{state==="error"&&<p className="mt-4 rounded-xl bg-[#FF8C61]/20 p-3 text-sm font-bold">Talep gönderilemedi. Lütfen tekrar deneyin.</p>}<button disabled={state==="loading"} className="marketing-button mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#F4D35E] px-6 py-4 text-sm font-black text-[#2D3436] disabled:opacity-60">{state==="loading"?"Gönderiliyor...":"Demo talebi gönder"} <Send size={16}/></button></form></div></section>;
+}
+
+function ContactInput(props: React.InputHTMLAttributes<HTMLInputElement> & {label:string}) {
+  const {label,...input}=props; return <label className="block text-xs font-black uppercase tracking-[.14em] text-white/60">{label}<input {...input} className="mt-2 h-12 w-full rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-semibold normal-case tracking-normal text-white outline-none transition placeholder:text-white/30 focus:border-[#F4D35E]"/></label>;
+}
+
+function FinalCTA() {
+  return <section className="bg-[#F9F7F2] px-5 py-20 lg:px-8"><div data-reveal className="marketing-cta relative mx-auto max-w-[1380px] overflow-hidden rounded-[2.5rem] bg-[#233d29] px-7 py-14 text-white shadow-[0_35px_90px_rgba(47,82,51,.22)] sm:px-12 lg:flex lg:items-center lg:justify-between lg:px-16"><div><p className="text-xs font-black uppercase tracking-[.2em] text-[#F4D35E]">Dijital kliniğinizi büyütün</p><h2 className="mt-5 max-w-3xl text-4xl font-black leading-[1] tracking-[-.05em] !text-white sm:text-6xl">Danışanlarınız mutfakta yalnız kalmasın.</h2></div><div className="mt-8 flex shrink-0 flex-wrap gap-3 lg:mt-0"><Link href="#iletisim" className="rounded-full bg-[#F4D35E] px-6 py-4 text-sm font-black text-[#2D3436]">Demo al</Link><Link href="/auth/login" className="rounded-full border border-white/20 px-6 py-4 text-sm font-black text-white">Panel girişine git</Link></div></div></section>;
+}

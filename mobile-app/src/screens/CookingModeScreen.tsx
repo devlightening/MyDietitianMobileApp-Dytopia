@@ -108,6 +108,7 @@ export default function CookingModeScreen() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [note, setNote] = useState("");
   const [cinemaMode, setCinemaMode] = useState(false);
+  const finishingRef = useRef(false);
   const pulse = useRef(new RNAnimated.Value(0)).current;
 
   const copy = language === "en"
@@ -238,20 +239,14 @@ export default function CookingModeScreen() {
   }
 
   function finishCooking() {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+
+    setTimerRunning(false);
     void saveNote().catch(() => undefined);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     clearTimerBanner();
-    showDialog({
-      variant: "success",
-      icon: "sparkles-outline",
-      eyebrow: language === "tr" ? "Afiyet olsun" : "Bon appétit",
-      title: copy.finished,
-      message: copy.saved,
-      primaryAction: {
-        label: language === "tr" ? "Tarife dön" : "Back to recipe",
-        onPress: () => (navigation as any).goBack(),
-      },
-    });
+    (navigation as any).goBack();
   }
 
   function toggleStepTimer() {

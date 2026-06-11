@@ -61,6 +61,7 @@ export default function BadgeUnlockOverlay({ badge, onDismiss }: Props) {
   const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const ringLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const secondBurstTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const confettiRef = useRef<ConfettiRef>(null);
 
   function resetAll() {
@@ -117,6 +118,7 @@ export default function BadgeUnlockOverlay({ badge, onDismiss }: Props) {
 
   function dismiss() {
     if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    if (secondBurstTimer.current) clearTimeout(secondBurstTimer.current);
     glowLoopRef.current?.stop();
     ringLoopRef.current?.stop();
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -164,6 +166,10 @@ export default function BadgeUnlockOverlay({ badge, onDismiss }: Props) {
       fireSparkles();
       confettiRef.current?.trigger();
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      secondBurstTimer.current = setTimeout(() => {
+        confettiRef.current?.trigger();
+        fireSparkles();
+      }, 1100);
     });
 
     startGlowLoop(badge.color);
@@ -190,11 +196,12 @@ export default function BadgeUnlockOverlay({ badge, onDismiss }: Props) {
     ];
     Animated.sequence(textReveal).start();
 
-    // Phase 5: auto-dismiss after 3.4s
-    dismissTimer.current = setTimeout(dismiss, 3400);
+    // Keep the reward visible long enough to read without blocking the user indefinitely.
+    dismissTimer.current = setTimeout(dismiss, 6200);
 
     return () => {
       if (dismissTimer.current) clearTimeout(dismissTimer.current);
+      if (secondBurstTimer.current) clearTimeout(secondBurstTimer.current);
       glowLoopRef.current?.stop();
       ringLoopRef.current?.stop();
     };
@@ -271,7 +278,7 @@ export default function BadgeUnlockOverlay({ badge, onDismiss }: Props) {
           {/* Button */}
           <Animated.View style={[s.btnWrap, { opacity: btnO, transform: [{ translateY: btnTY }] }]}>
             <Pressable style={[s.btn, { backgroundColor: badge.color }]} onPress={dismiss}>
-              <Text style={s.btnTxt}>Harika! ğŸ‰</Text>
+              <Text style={s.btnTxt}>Rozeti aldım</Text>
             </Pressable>
           </Animated.View>
         </View>
