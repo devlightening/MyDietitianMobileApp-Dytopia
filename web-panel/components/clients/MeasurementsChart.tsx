@@ -4,7 +4,6 @@ import { type ReactNode, useMemo, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
-  Eye,
   Flame,
   Scale,
   ShieldCheck,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ClientMeasurement } from '@/lib/api/clients';
 import { Card } from '@/components/ui/Card';
+import { BodyCompositionClinicalPanel } from '@/components/clients/BodyCompositionClinicalPanel';
 import { cn } from '@/lib/utils';
 
 interface MeasurementsChartProps {
@@ -231,145 +231,6 @@ function TrendChart({
   );
 }
 
-function BodyPanel({ latest }: { latest: ClientMeasurement | null }) {
-  const waistTone = metricTone(latest?.waistCm, undefined, 90);
-  const fatTone = metricTone(latest?.bodyFatPercent, undefined, 35);
-  const waterTone = metricTone(latest?.waterPercent, 45, 65);
-
-  return (
-    <Card className="overflow-hidden p-0">
-      <div className="grid gap-0 lg:grid-cols-[360px_1fr]">
-        <div className="border-b border-border/60 bg-gradient-to-br from-primary/10 to-background p-6 lg:border-b-0 lg:border-r">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/80">Vücut modeli</p>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">Klinik görünüm</h3>
-            </div>
-            <QualityPill label={latest ? 'Aktif ölçüm' : 'Veri yok'} tone={latest ? 'good' : 'empty'} />
-          </div>
-
-          <div className="relative mx-auto flex h-[390px] max-w-[270px] items-center justify-center">
-            <svg viewBox="0 0 260 390" className="h-full w-full drop-shadow-sm" role="img" aria-label="Vücut ölçüm modeli">
-              <defs>
-                <linearGradient id="bodyFill" x1="0" x2="1" y1="0" y2="1">
-                  <stop offset="0%" stopColor="rgb(231 244 237)" />
-                  <stop offset="58%" stopColor="rgb(182 219 197)" />
-                  <stop offset="100%" stopColor="rgb(118 172 141)" />
-                </linearGradient>
-                <linearGradient id="bodyShade" x1="0" x2="1" y1="0" y2="1">
-                  <stop offset="0%" stopColor="rgb(255 255 255)" stopOpacity="0.42" />
-                  <stop offset="100%" stopColor="rgb(255 255 255)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <ellipse cx="130" cy="34" rx="21" ry="24" fill="url(#bodyFill)" stroke="rgb(65 123 84)" strokeWidth="2.2" />
-              <path d="M111 57 C119 64 141 64 149 57 L156 75 C145 84 115 84 104 75 Z" fill="url(#bodyFill)" stroke="rgb(65 123 84)" strokeWidth="2" />
-              <path
-                d="M94 75
-                   C105 66 155 66 166 75
-                   C177 87 183 112 187 142
-                   C193 188 203 221 218 257
-                   L238 306
-                   C243 318 238 329 228 332
-                   C218 335 211 328 207 318
-                   L184 262
-                   C172 233 164 204 158 176
-                   C155 199 151 219 147 238
-                   L152 348
-                   C153 363 144 374 131 374
-                   C119 374 113 364 114 350
-                   L118 244
-                   L111 244
-                   L107 350
-                   C106 364 100 374 88 374
-                   C75 374 66 363 67 348
-                   L72 238
-                   C68 219 65 199 62 176
-                   C56 204 48 233 36 262
-                   L13 318
-                   C9 328 2 335 -8 332
-                   C-18 329 -23 318 -18 306
-                   L2 257
-                   C17 221 27 188 33 142
-                   C37 112 43 87 54 75
-                   C62 68 78 68 94 75 Z"
-                fill="url(#bodyFill)"
-                stroke="rgb(65 123 84)"
-                strokeWidth="2.3"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M96 82 C106 93 154 93 164 82 C158 116 159 148 158 176 C149 185 111 185 102 176 C101 148 102 116 96 82 Z"
-                fill="url(#bodyShade)"
-                opacity="0.72"
-              />
-              <path
-                d="M129 82 C128 126 127 179 126 237"
-                fill="none"
-                stroke="rgb(65 123 84)"
-                strokeOpacity="0.38"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-              <path d="M66 151 C86 157 174 157 194 151" fill="none" stroke="rgb(234 179 8)" strokeWidth="4.5" strokeLinecap="round" />
-              <path d="M76 190 C99 197 161 197 184 190" fill="none" stroke="rgb(20 184 166)" strokeWidth="4.5" strokeLinecap="round" />
-              <path d="M84 225 C104 232 156 232 176 225" fill="none" stroke="rgb(59 130 246)" strokeWidth="4.5" strokeLinecap="round" />
-              <circle cx="194" cy="151" r="6.5" fill="rgb(234 179 8)" stroke="white" strokeWidth="2" />
-              <circle cx="184" cy="190" r="6.5" fill="rgb(20 184 166)" stroke="white" strokeWidth="2" />
-              <circle cx="176" cy="225" r="6.5" fill="rgb(59 130 246)" stroke="white" strokeWidth="2" />
-            </svg>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Bel çevresi</span>
-                <QualityPill label={waistTone === 'watch' ? 'Takip' : waistTone === 'good' ? 'Normal' : 'Veri yok'} tone={waistTone} />
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">
-                {latest?.waistCm != null ? `${latest.waistCm.toFixed(0)} cm` : 'Veri yok'}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Bel/kalça {latest?.waistHipRatio != null ? latest.waistHipRatio.toFixed(2) : '-'}</p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Yağ oranı</span>
-                <QualityPill label={fatTone === 'watch' ? 'Takip' : fatTone === 'good' ? 'Normal' : 'Veri yok'} tone={fatTone} />
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">
-                {latest?.bodyFatPercent != null ? `%${latest.bodyFatPercent.toFixed(1)}` : 'Veri yok'}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">BIA veya klinik giriş</p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Su oranı</span>
-                <QualityPill label={waterTone === 'watch' ? 'Takip' : waterTone === 'good' ? 'Normal' : 'Veri yok'} tone={waterTone} />
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">
-                {latest?.waterPercent != null ? `%${latest.waterPercent.toFixed(1)}` : 'Veri yok'}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Hidrasyon görünümü</p>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-border/70 bg-muted/20 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Eye className="h-4 w-4 text-primary" />
-              Ölçüm okuması
-            </div>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Bu panel mevcut klinik ölçüm kayıtlarını görselleştirir. Youjiu gibi cihazlardan gelecek
-              BIA verileri ileride aynı alanlara aktarıldığında bu görünüm otomatik olarak zenginleşir.
-            </p>
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 function CompositionBar({
   label,
   value,
@@ -434,7 +295,7 @@ export function MeasurementsChart({ measurements }: MeasurementsChartProps) {
   if (!latest) {
     return (
       <div className="space-y-6">
-        <BodyPanel latest={null} />
+        <BodyCompositionClinicalPanel measurement={null} />
         <Card className="p-10 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <Scale className="h-7 w-7" />
@@ -481,7 +342,7 @@ export function MeasurementsChart({ measurements }: MeasurementsChartProps) {
         />
       </div>
 
-      <BodyPanel latest={latest} />
+      <BodyCompositionClinicalPanel measurement={latest} />
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="p-6">

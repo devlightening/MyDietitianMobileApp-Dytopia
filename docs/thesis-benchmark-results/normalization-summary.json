@@ -7,9 +7,9 @@
   "AccuracyPct": 98.6301,
   "UnresolvedRatePct": 15.0685,
   "FalseMatchRatePct": 0,
-  "AverageLatencyMs": 2.6948,
-  "MedianLatencyMs": 1.7405,
-  "P95LatencyMs": 8.9968,
+  "AverageLatencyMs": 3.9154,
+  "MedianLatencyMs": 2.0789,
+  "P95LatencyMs": 10.0071,
   "ResolverLayerDistribution": {
     "Alias": {
       "Count": 23,

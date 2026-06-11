@@ -1,6 +1,6 @@
 mode,totalCases,accuracyPct,coveragePct,unresolvedRatePct,falseMatchRatePct,averageLatencyMs,notes
-"Canonical only","73","49.3151","35.6164","64.3836","0","0.026",""
-"Canonical + Alias","73","80.8219","67.1233","32.8767","0","0.0668",""
-"Canonical + Alias + Fuzzy","73","98.6301","84.9315","15.0685","0","0.3772",""
-"Full pipeline","73","98.6301","84.9315","15.0685","0","2.6948",""
+"Canonical only","73","49.3151","35.6164","64.3836","0","0.0264",""
+"Canonical + Alias","73","80.8219","67.1233","32.8767","0","0.0616",""
+"Canonical + Alias + Fuzzy","73","98.6301","84.9315","15.0685","0","0.4749",""
+"Full pipeline","73","98.6301","84.9315","15.0685","0","3.9154",""
 "Full pipeline + LLM fallback","73","","","","","","skipped: OpenAI key not configured"

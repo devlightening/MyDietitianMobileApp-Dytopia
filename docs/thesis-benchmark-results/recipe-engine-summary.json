@@ -5,7 +5,7 @@
   "ProhibitedFilterSuccessPct": 100,
   "SubstituteHandlingSuccessPct": 100,
   "CondimentOnlyGuardSuccessPct": 100,
-  "AverageLatencyMs": 0.0143,
-  "MedianLatencyMs": 0.0109,
-  "P95LatencyMs": 0.0461
+  "AverageLatencyMs": 0.0246,
+  "MedianLatencyMs": 0.0148,
+  "P95LatencyMs": 0.0706
 }

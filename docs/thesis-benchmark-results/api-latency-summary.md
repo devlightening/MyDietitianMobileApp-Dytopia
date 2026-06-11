@@ -4,7 +4,7 @@ Measurements were executed through ASP.NET Core test-server HTTP requests. They 
 
 | Endpoint | Count | Min | Max | Average | Median | P95 | Errors |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| GET /api/dev/benchmark/acquisition | 30 | 588,3143 | 3265,1798 | 738,3293 | 619,0012 | 936,6138 | 0 |
-| GET /api/dev/benchmark/hybrid-recipe | 30 | 1,7192 | 3,7918 | 2,3160 | 2,2848 | 3,5945 | 0 |
-| GET /api/dev/benchmark/normalization | 30 | 68,1741 | 742,6409 | 120,7076 | 99,8828 | 137,8748 | 0 |
-| GET /api/dev/benchmark/recommendation | 30 | 2,2669 | 13,4221 | 4,1603 | 3,4633 | 12,0954 | 0 |
+| GET /api/dev/benchmark/acquisition | 30 | 425,3103 | 1445,0287 | 698,6758 | 707,0584 | 954,7615 | 0 |
+| GET /api/dev/benchmark/hybrid-recipe | 30 | 1,3371 | 3,0296 | 1,8080 | 1,7334 | 2,5794 | 0 |
+| GET /api/dev/benchmark/normalization | 30 | 37,7783 | 115,4517 | 63,6999 | 59,9132 | 97,6730 | 0 |
+| GET /api/dev/benchmark/recommendation | 30 | 2,0824 | 10,2011 | 3,6471 | 3,2249 | 6,0163 | 0 |

@@ -9,7 +9,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4767,
+    "LatencyMs": 1.5178,
     "Group": "canonical",
     "Notes": ""
   },
@@ -23,7 +23,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4031,
+    "LatencyMs": 1.1649,
     "Group": "canonical",
     "Notes": ""
   },
@@ -37,7 +37,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.3339,
+    "LatencyMs": 1.1754,
     "Group": "canonical",
     "Notes": ""
   },
@@ -51,7 +51,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.3709,
+    "LatencyMs": 3.0402,
     "Group": "canonical",
     "Notes": ""
   },
@@ -65,7 +65,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5035,
+    "LatencyMs": 1.4483,
     "Group": "canonical",
     "Notes": ""
   },
@@ -79,7 +79,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 13.8881,
+    "LatencyMs": 1.0681,
     "Group": "canonical",
     "Notes": ""
   },
@@ -93,7 +93,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 9.8738,
+    "LatencyMs": 1.0722,
     "Group": "canonical",
     "Notes": ""
   },
@@ -107,7 +107,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.3722,
+    "LatencyMs": 1.1235,
     "Group": "canonical",
     "Notes": ""
   },
@@ -121,7 +121,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.9147,
+    "LatencyMs": 1.3904,
     "Group": "canonical",
     "Notes": ""
   },
@@ -135,7 +135,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.2775,
+    "LatencyMs": 1.7558,
     "Group": "canonical",
     "Notes": ""
   },
@@ -149,7 +149,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.3866,
+    "LatencyMs": 1.3779,
     "Group": "canonical",
     "Notes": ""
   },
@@ -163,7 +163,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.2606,
+    "LatencyMs": 1.0987,
     "Group": "canonical",
     "Notes": ""
   },
@@ -177,7 +177,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.3431,
+    "LatencyMs": 1.1351,
     "Group": "canonical",
     "Notes": ""
   },
@@ -191,7 +191,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.1908,
+    "LatencyMs": 1.1443,
     "Group": "canonical",
     "Notes": ""
   },
@@ -205,7 +205,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.2367,
+    "LatencyMs": 1.3776,
     "Group": "canonical",
     "Notes": ""
   },
@@ -219,7 +219,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4216,
+    "LatencyMs": 1.3975,
     "Group": "canonical",
     "Notes": ""
   },
@@ -233,7 +233,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.7369,
+    "LatencyMs": 1.3399,
     "Group": "canonical",
     "Notes": ""
   },
@@ -247,7 +247,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5956,
+    "LatencyMs": 1.393,
     "Group": "canonical",
     "Notes": ""
   },
@@ -261,7 +261,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.7316,
+    "LatencyMs": 1.5602,
     "Group": "canonical",
     "Notes": ""
   },
@@ -275,7 +275,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.7868,
+    "LatencyMs": 6.7125,
     "Group": "canonical",
     "Notes": ""
   },
@@ -289,7 +289,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.438,
+    "LatencyMs": 3.1348,
     "Group": "canonical",
     "Notes": ""
   },
@@ -303,7 +303,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4441,
+    "LatencyMs": 1.693,
     "Group": "canonical",
     "Notes": ""
   },
@@ -317,7 +317,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5704,
+    "LatencyMs": 4.282,
     "Group": "canonical",
     "Notes": ""
   },
@@ -331,7 +331,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.3268,
+    "LatencyMs": 42.4884,
     "Group": "canonical",
     "Notes": ""
   },
@@ -345,7 +345,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5386,
+    "LatencyMs": 1.2881,
     "Group": "canonical",
     "Notes": ""
   },
@@ -359,7 +359,7 @@
     "Confidence": 1,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 3.8335,
+    "LatencyMs": 1.228,
     "Group": "canonical",
     "Notes": ""
   },
@@ -373,7 +373,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.8789,
+    "LatencyMs": 2.5803,
     "Group": "alias",
     "Notes": ""
   },
@@ -387,7 +387,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 13.4324,
+    "LatencyMs": 1.8849,
     "Group": "alias",
     "Notes": ""
   },
@@ -401,7 +401,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.7013,
+    "LatencyMs": 2.0164,
     "Group": "alias",
     "Notes": ""
   },
@@ -415,7 +415,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.99,
+    "LatencyMs": 2.023,
     "Group": "alias",
     "Notes": ""
   },
@@ -429,7 +429,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.0701,
+    "LatencyMs": 3.6681,
     "Group": "alias",
     "Notes": ""
   },
@@ -443,7 +443,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4734,
+    "LatencyMs": 1.544,
     "Group": "alias",
     "Notes": ""
   },
@@ -457,7 +457,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4784,
+    "LatencyMs": 1.5641,
     "Group": "alias",
     "Notes": ""
   },
@@ -471,7 +471,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5801,
+    "LatencyMs": 3.6358,
     "Group": "alias",
     "Notes": ""
   },
@@ -485,7 +485,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.585,
+    "LatencyMs": 2.0754,
     "Group": "alias",
     "Notes": ""
   },
@@ -499,7 +499,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.444,
+    "LatencyMs": 2.9211,
     "Group": "alias",
     "Notes": ""
   },
@@ -513,7 +513,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5286,
+    "LatencyMs": 2.0789,
     "Group": "alias",
     "Notes": ""
   },
@@ -527,7 +527,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.4998,
+    "LatencyMs": 1.5814,
     "Group": "alias",
     "Notes": ""
   },
@@ -541,7 +541,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5577,
+    "LatencyMs": 1.8458,
     "Group": "alias",
     "Notes": ""
   },
@@ -555,7 +555,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.7405,
+    "LatencyMs": 3.0144,
     "Group": "alias",
     "Notes": ""
   },
@@ -569,7 +569,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.5938,
+    "LatencyMs": 7.1509,
     "Group": "alias",
     "Notes": ""
   },
@@ -583,7 +583,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.7169,
+    "LatencyMs": 1.5553,
     "Group": "alias",
     "Notes": ""
   },
@@ -597,7 +597,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.6842,
+    "LatencyMs": 1.5593,
     "Group": "alias",
     "Notes": ""
   },
@@ -611,7 +611,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.6479,
+    "LatencyMs": 1.6708,
     "Group": "alias",
     "Notes": ""
   },
@@ -625,7 +625,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.6577,
+    "LatencyMs": 1.6149,
     "Group": "alias",
     "Notes": ""
   },
@@ -639,7 +639,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 8.7625,
+    "LatencyMs": 1.5417,
     "Group": "alias",
     "Notes": ""
   },
@@ -653,7 +653,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.7507,
+    "LatencyMs": 1.5772,
     "Group": "alias",
     "Notes": ""
   },
@@ -667,7 +667,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.6235,
+    "LatencyMs": 1.6959,
     "Group": "alias",
     "Notes": ""
   },
@@ -681,7 +681,7 @@
     "Confidence": 0.7676,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.3108,
+    "LatencyMs": 2.2532,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -695,7 +695,7 @@
     "Confidence": 0.7948,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.3096,
+    "LatencyMs": 20.5126,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -709,7 +709,7 @@
     "Confidence": 0.7614,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.89,
+    "LatencyMs": 14.3507,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -723,7 +723,7 @@
     "Confidence": 0.7471,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.4336,
+    "LatencyMs": 3.0132,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -737,7 +737,7 @@
     "Confidence": 0.95,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 1.8318,
+    "LatencyMs": 4.4782,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -751,7 +751,7 @@
     "Confidence": 0.7471,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.2794,
+    "LatencyMs": 4.9806,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -765,7 +765,7 @@
     "Confidence": 0.7676,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.3118,
+    "LatencyMs": 3.4651,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -779,7 +779,7 @@
     "Confidence": 0.8331,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.8012,
+    "LatencyMs": 5.0613,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -793,7 +793,7 @@
     "Confidence": 0.7186,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.2978,
+    "LatencyMs": 9.4038,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -807,7 +807,7 @@
     "Confidence": 0.7948,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.2832,
+    "LatencyMs": 5.7649,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -821,7 +821,7 @@
     "Confidence": 0,
     "IsCorrect": false,
     "IsUnresolved": true,
-    "LatencyMs": 8.9968,
+    "LatencyMs": 8.0609,
     "Group": "fuzzy",
     "Notes": "No match found via canonical, alias, fuzzy, or LLM layers."
   },
@@ -835,7 +835,7 @@
     "Confidence": 0.7829,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.4286,
+    "LatencyMs": 4.6581,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -849,7 +849,7 @@
     "Confidence": 0.7471,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.4436,
+    "LatencyMs": 4.5279,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -863,7 +863,7 @@
     "Confidence": 0.7471,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.2592,
+    "LatencyMs": 3.5992,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -877,7 +877,7 @@
     "Confidence": 0.7471,
     "IsCorrect": true,
     "IsUnresolved": false,
-    "LatencyMs": 2.5154,
+    "LatencyMs": 10.0071,
     "Group": "fuzzy",
     "Notes": ""
   },
@@ -891,7 +891,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 2.4871,
+    "LatencyMs": 3.6442,
     "Group": "negative",
     "Notes": ""
   },
@@ -905,7 +905,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 3.2758,
+    "LatencyMs": 5.2328,
     "Group": "negative",
     "Notes": ""
   },
@@ -919,7 +919,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 3.2641,
+    "LatencyMs": 5.6864,
     "Group": "negative",
     "Notes": ""
   },
@@ -933,7 +933,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 3.8266,
+    "LatencyMs": 4.3943,
     "Group": "negative",
     "Notes": ""
   },
@@ -947,7 +947,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 7.9939,
+    "LatencyMs": 3.5616,
     "Group": "negative",
     "Notes": ""
   },
@@ -961,7 +961,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 2.6228,
+    "LatencyMs": 2.8529,
     "Group": "negative",
     "Notes": ""
   },
@@ -975,7 +975,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 3.2477,
+    "LatencyMs": 3.6135,
     "Group": "negative",
     "Notes": ""
   },
@@ -989,7 +989,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 2.9448,
+    "LatencyMs": 3.1623,
     "Group": "negative",
     "Notes": ""
   },
@@ -1003,7 +1003,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 2.575,
+    "LatencyMs": 6.3747,
     "Group": "negative",
     "Notes": ""
   },
@@ -1017,7 +1017,7 @@
     "Confidence": 0,
     "IsCorrect": true,
     "IsUnresolved": true,
-    "LatencyMs": 4.4352,
+    "LatencyMs": 4.9569,
     "Group": "negative",
     "Notes": ""
   }

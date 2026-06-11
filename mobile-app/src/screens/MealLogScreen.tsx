@@ -326,7 +326,7 @@ export default function MealLogScreen() {
         {analysis && (
           <View style={[s.analysisCard, { backgroundColor: theme.surface, borderColor: theme.primary + '35' }]}>
             <View style={s.analysisTop}>
-              <View>
+              <View style={s.analysisHeading}>
                 <Text style={[s.eyebrow, { color: theme.primary }]}>{copy.estimateReady}</Text>
                 <Text style={[s.analysisTitle, { color: theme.text }]}>{analysis.foodName}</Text>
               </View>
@@ -477,9 +477,10 @@ const s = StyleSheet.create({
   analyzingSub: { fontSize: 13, fontWeight: '600', lineHeight: 19, marginTop: 3 },
   analysisCard: { borderRadius: 30, borderWidth: 1, padding: 18, gap: 12 },
   analysisTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  analysisHeading: { flex: 1, minWidth: 0 },
   analysisTitle: { fontSize: 24, fontWeight: '900', flexShrink: 1 },
-  portionPill: { marginLeft: 'auto', borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  portionText: { fontSize: 12, fontWeight: '900' },
+  portionPill: { flexShrink: 0, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  portionText: { fontSize: 12, fontWeight: '900', textAlign: 'center' },
   estimateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metricPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'baseline', gap: 4 },
   metricValue: { fontSize: 14, fontWeight: '900' },

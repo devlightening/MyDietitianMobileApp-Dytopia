@@ -22,7 +22,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.056,
+    "LatencyMs": 0.0706,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -49,7 +49,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0461,
+    "LatencyMs": 0.2437,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -75,7 +75,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0337,
+    "LatencyMs": 0.0552,
     "Type": "substitute",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
   },
@@ -101,7 +101,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0224,
+    "LatencyMs": 0.0234,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -127,7 +127,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0173,
+    "LatencyMs": 0.0317,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -153,7 +153,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0176,
+    "LatencyMs": 0.0624,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -205,7 +205,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0187,
+    "LatencyMs": 0.0149,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -232,7 +232,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0177,
+    "LatencyMs": 0.0146,
     "Type": "full",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -258,7 +258,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0223,
+    "LatencyMs": 0.0226,
     "Type": "substitute",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
   },
@@ -284,7 +284,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0084,
+    "LatencyMs": 0.0087,
     "Type": "one_missing",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -308,7 +308,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0059,
+    "LatencyMs": 0.0143,
     "Type": "one_missing",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -334,7 +334,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0077,
+    "LatencyMs": 0.0185,
     "Type": "one_missing",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -357,7 +357,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0059,
+    "LatencyMs": 0.0353,
     "Type": "one_missing",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -380,7 +380,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0055,
+    "LatencyMs": 0.0104,
     "Type": "one_missing",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -405,7 +405,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": true,
-    "LatencyMs": 0.0138,
+    "LatencyMs": 0.0167,
     "Type": "prohibited",
     "Notes": "Recipe contains ingredients prohibited for the client."
   },
@@ -429,7 +429,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": true,
-    "LatencyMs": 0.006,
+    "LatencyMs": 0.0055,
     "Type": "prohibited",
     "Notes": "Recipe contains ingredients prohibited for the client."
   },
@@ -453,7 +453,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": true,
-    "LatencyMs": 0.005,
+    "LatencyMs": 0.0045,
     "Type": "prohibited",
     "Notes": "Recipe contains ingredients prohibited for the client."
   },
@@ -477,7 +477,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": true,
-    "LatencyMs": 0.0049,
+    "LatencyMs": 0.0057,
     "Type": "prohibited",
     "Notes": "Recipe contains ingredients prohibited for the client."
   },
@@ -501,7 +501,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": true,
-    "LatencyMs": 0.0046,
+    "LatencyMs": 0.0038,
     "Type": "prohibited",
     "Notes": "Recipe contains ingredients prohibited for the client."
   },
@@ -525,7 +525,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.009,
+    "LatencyMs": 0.0104,
     "Type": "not_eligible",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
   },
@@ -549,7 +549,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0067,
+    "LatencyMs": 0.0071,
     "Type": "not_eligible",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
   },
@@ -572,7 +572,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0057,
+    "LatencyMs": 0.0061,
     "Type": "not_eligible",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
   },
@@ -595,7 +595,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0067,
+    "LatencyMs": 0.0061,
     "Type": "not_eligible",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
   },
@@ -618,7 +618,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": true,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0051,
+    "LatencyMs": 0.006,
     "Type": "not_eligible",
     "Notes": "Recipe is missing mandatory ingredients. Exact coverage=0, substitute coverage=0."
   },
@@ -640,7 +640,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.008,
+    "LatencyMs": 0.0091,
     "Type": "condiment_guard",
     "Notes": "CONDIMENT_ONLY_MATCH: All matched mandatory ingredients are condiments/pantry helpers — not a meaningful recipe match."
   },
@@ -662,7 +662,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0076,
+    "LatencyMs": 0.0066,
     "Type": "condiment_guard",
     "Notes": "CONDIMENT_ONLY_MATCH: All matched mandatory ingredients are condiments/pantry helpers — not a meaningful recipe match."
   },
@@ -684,7 +684,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0067,
+    "LatencyMs": 0.0046,
     "Type": "condiment_guard",
     "Notes": "CONDIMENT_ONLY_MATCH: All matched mandatory ingredients are condiments/pantry helpers — not a meaningful recipe match."
   },
@@ -706,7 +706,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0045,
+    "LatencyMs": 0.003,
     "Type": "quality_guard",
     "Notes": "QUALITY_INVALID: Recipe has no mandatory ingredients — excluded from recommendation pool."
   },
@@ -732,7 +732,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0237,
+    "LatencyMs": 0.0343,
     "Type": "substitute",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
   },
@@ -758,7 +758,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0188,
+    "LatencyMs": 0.0229,
     "Type": "substitute",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
   },
@@ -784,7 +784,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0202,
+    "LatencyMs": 0.0237,
     "Type": "substitute",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=1."
   },
@@ -809,7 +809,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0147,
+    "LatencyMs": 0.0192,
     "Type": "optional_missing",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -835,7 +835,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.014,
+    "LatencyMs": 0.0177,
     "Type": "optional_missing",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=2, substitute coverage=0."
   },
@@ -860,7 +860,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0151,
+    "LatencyMs": 0.0165,
     "Type": "optional_missing",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
   },
@@ -884,7 +884,7 @@
     "IsCorrect": true,
     "ExplanationContainsMissingIngredient": false,
     "ExplanationContainsProhibitedReason": false,
-    "LatencyMs": 0.0128,
+    "LatencyMs": 0.0143,
     "Type": "optional_missing",
     "Notes": "Recipe is cookable with available ingredients. Exact coverage=1, substitute coverage=0."
   }

@@ -1,38 +1,38 @@
 {
   "GET /api/dev/benchmark/normalization": {
     "Count": 30,
-    "MinMs": 68.1741,
-    "MaxMs": 742.6409,
-    "AverageMs": 120.7076,
-    "MedianMs": 99.8828,
-    "P95Ms": 137.8748,
+    "MinMs": 37.7783,
+    "MaxMs": 115.4517,
+    "AverageMs": 63.6999,
+    "MedianMs": 59.9132,
+    "P95Ms": 97.673,
     "ErrorCount": 0
   },
   "GET /api/dev/benchmark/recommendation": {
     "Count": 30,
-    "MinMs": 2.2669,
-    "MaxMs": 13.4221,
-    "AverageMs": 4.1603,
-    "MedianMs": 3.4633,
-    "P95Ms": 12.0954,
+    "MinMs": 2.0824,
+    "MaxMs": 10.2011,
+    "AverageMs": 3.6471,
+    "MedianMs": 3.2249,
+    "P95Ms": 6.0163,
     "ErrorCount": 0
   },
   "GET /api/dev/benchmark/acquisition": {
     "Count": 30,
-    "MinMs": 588.3143,
-    "MaxMs": 3265.1798,
-    "AverageMs": 738.3293,
-    "MedianMs": 619.0012,
-    "P95Ms": 936.6138,
+    "MinMs": 425.3103,
+    "MaxMs": 1445.0287,
+    "AverageMs": 698.6758,
+    "MedianMs": 707.0584,
+    "P95Ms": 954.7615,
     "ErrorCount": 0
   },
   "GET /api/dev/benchmark/hybrid-recipe": {
     "Count": 30,
-    "MinMs": 1.7192,
-    "MaxMs": 3.7918,
-    "AverageMs": 2.316,
-    "MedianMs": 2.2848,
-    "P95Ms": 3.5945,
+    "MinMs": 1.3371,
+    "MaxMs": 3.0296,
+    "AverageMs": 1.808,
+    "MedianMs": 1.7334,
+    "P95Ms": 2.5794,
     "ErrorCount": 0
   }
 }

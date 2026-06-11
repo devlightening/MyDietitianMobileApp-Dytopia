@@ -8,9 +8,9 @@
 - Accuracy: 98,63%
 - Unresolved rate: 15,07%
 - False match rate: 0,00%
-- Average latency: 2,6948 ms
-- Median latency: 1,7405 ms
-- P95 latency: 8,9968 ms
+- Average latency: 3,9154 ms
+- Median latency: 2,0789 ms
+- P95 latency: 10,0071 ms
 
 | Layer | Count | Percent |
 |---|---:|---:|
